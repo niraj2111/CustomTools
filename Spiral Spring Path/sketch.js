@@ -1,5 +1,14 @@
 const MM_PER_INCH = 25.4;
 const TWO_PI_VALUE = Math.PI * 2;
+const PAPER_PRESETS_MM = {
+  Custom: null,
+  "A3 Portrait": { w: 297, h: 420 },
+  "A3 Landscape": { w: 420, h: 297 },
+  "A4 Portrait": { w: 210, h: 297 },
+  "A4 Landscape": { w: 297, h: 210 },
+  "A5 Portrait": { w: 148, h: 210 },
+  "A5 Landscape": { w: 210, h: 148 },
+};
 
 let pane;
 let cnv;
@@ -13,10 +22,12 @@ let geometryDirty = true;
 let cachedRenderSpinePaths = [];
 let cachedArcLengthSampleGroups = [];
 let cachedSpringPaths = [];
+let currentDisplayScale = 1;
 
 const P = {
   canvasWMM: 270,
   canvasHMM: 400,
+  paperPreset: "Custom",
   dpi: 96,
   previewScale: 1,
   fitToViewport: true,
@@ -63,6 +74,7 @@ function setup() {
   const size = getCanvasPixelSize();
   cnv = createCanvas(size.width, size.height);
   cnv.parent("wrap");
+  cnv.style("display", "block");
   pixelDensity(1);
   noLoop();
 
@@ -73,28 +85,32 @@ function setup() {
 }
 
 function draw() {
-  background(P.bg);
+  background("#101114");
   updateHoveredAnchor();
   ensureGeometryCache();
+  const paper = getPaperSizeMM();
 
   push();
   scale(getPxPerMM());
 
-  if (P.showGrid) {
-    drawGrid();
-  }
+  drawPaper(paper.width, paper.height);
+  withPaperClip(paper.width, paper.height, () => {
+    if (P.showGrid) {
+      drawGrid(paper.width, paper.height);
+    }
 
-  if (P.showSpine) {
-    drawSpine();
-  }
+    if (P.showSpine) {
+      drawSpine();
+    }
 
-  if (P.showSpring) {
-    drawSpring();
-  }
+    if (P.showSpring) {
+      drawSpring();
+    }
 
-  if (P.showAnchors) {
-    drawAnchors();
-  }
+    if (P.showAnchors) {
+      drawAnchors();
+    }
+  });
 
   drawSelectionOverlay();
 
@@ -233,19 +249,43 @@ function windowResized() {
   updateCanvasDisplaySize();
 }
 
-function drawGrid() {
+function drawGrid(paperWMM, paperHMM) {
   const spacing = Math.max(0.5, P.gridSpacingMM);
+  const effectivePxPerMM = Math.max(0.0001, getPxPerMM() * Math.max(0.01, currentDisplayScale));
+  const thinStrokeMM = Math.max(0.08, 1 / effectivePxPerMM);
+  const majorStrokeMM = Math.max(0.12, 1.5 / effectivePxPerMM);
   stroke(P.gridColor);
-  strokeWeight(0.2);
   noFill();
 
-  for (let x = 0; x <= P.canvasWMM + 0.001; x += spacing) {
-    line(x, 0, x, P.canvasHMM);
+  let index = 0;
+  for (let x = 0; x <= paperWMM + 0.001; x += spacing) {
+    strokeWeight(index % 5 === 0 ? majorStrokeMM : thinStrokeMM);
+    line(x, 0, x, paperHMM);
+    index += 1;
   }
 
-  for (let y = 0; y <= P.canvasHMM + 0.001; y += spacing) {
-    line(0, y, P.canvasWMM, y);
+  index = 0;
+  for (let y = 0; y <= paperHMM + 0.001; y += spacing) {
+    strokeWeight(index % 5 === 0 ? majorStrokeMM : thinStrokeMM);
+    line(0, y, paperWMM, y);
+    index += 1;
   }
+}
+
+function drawPaper(widthMM, heightMM) {
+  noStroke();
+  fill(P.bg);
+  rect(0, 0, widthMM, heightMM);
+}
+
+function withPaperClip(widthMM, heightMM, fn) {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, widthMM, heightMM);
+  ctx.clip();
+  fn();
+  ctx.restore();
 }
 
 function drawSpine() {
@@ -1252,6 +1292,20 @@ function buildPane() {
   });
 
   const canvasFolder = pane.addFolder({ title: "Canvas (mm)" });
+  canvasFolder
+    .addInput(P, "paperPreset", {
+      options: Object.keys(PAPER_PRESETS_MM).reduce((acc, label) => {
+        acc[label] = label;
+        return acc;
+      }, {}),
+      label: "Paper",
+    })
+    .on("change", (ev) => {
+      applyPaperPreset(ev.value);
+      pane.refresh();
+      syncCanvasSize();
+      redraw();
+    });
   canvasFolder.addInput(P, "canvasWMM", { min: 20, max: 2000, step: 1, label: "W mm" });
   canvasFolder.addInput(P, "canvasHMM", { min: 20, max: 2000, step: 1, label: "H mm" });
   canvasFolder.addInput(P, "dpi", { min: 36, max: 600, step: 1, label: "DPI" });
@@ -1425,6 +1479,7 @@ function buildPane() {
   refreshAnchorMonitor();
 
   pane.on("change", () => {
+    syncPaperPresetFromSize();
     invalidateGeometry();
     syncCanvasSize();
     redraw();
@@ -1738,7 +1793,10 @@ function updateCanvasDisplaySize() {
   const availableW = Math.max(1, rect.width - padding);
   const availableH = Math.max(1, rect.height - padding);
   const fitScale = Math.min(availableW / pxSize.width, availableH / pxSize.height, 1);
-  const scale = P.fitToViewport ? fitScale * P.previewScale : P.previewScale;
+  const zoomScale = Math.max(0.05, P.previewScale);
+  const unclampedScale = P.fitToViewport ? fitScale * zoomScale : zoomScale;
+  const scale = P.fitToViewport ? Math.min(fitScale, unclampedScale) : unclampedScale;
+  currentDisplayScale = Math.max(0.01, scale);
   const displayW = Math.max(1, Math.round(pxSize.width * scale));
   const displayH = Math.max(1, Math.round(pxSize.height * scale));
 
@@ -1748,6 +1806,37 @@ function updateCanvasDisplaySize() {
 
 function getPxPerMM() {
   return P.dpi / MM_PER_INCH;
+}
+
+function getPaperSizeMM() {
+  const pxPerMM = Math.max(0.0001, getPxPerMM());
+  return {
+    width: width / pxPerMM,
+    height: height / pxPerMM,
+  };
+}
+
+function applyPaperPreset(presetName) {
+  const preset = PAPER_PRESETS_MM[presetName];
+  if (!preset) {
+    return;
+  }
+
+  P.canvasWMM = preset.w;
+  P.canvasHMM = preset.h;
+}
+
+function syncPaperPresetFromSize() {
+  for (const [name, preset] of Object.entries(PAPER_PRESETS_MM)) {
+    if (!preset) {
+      continue;
+    }
+    if (nearlyEqual(P.canvasWMM, preset.w) && nearlyEqual(P.canvasHMM, preset.h)) {
+      P.paperPreset = name;
+      return;
+    }
+  }
+  P.paperPreset = "Custom";
 }
 
 function mmToPx(mm) {

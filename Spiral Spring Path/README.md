@@ -3,6 +3,7 @@
 Interactive spring-path sketch with:
 
 - millimeter-based canvas controls
+- paper size presets (A5/A4/A3 portrait + landscape)
 - grid snapping for spine anchors
 - click-to-place polyline spine editing
 - offset-path spring mode with rounded arc turns
@@ -24,6 +25,7 @@ Interactive spring-path sketch with:
 ## Notes
 
 - `DPI` only affects raster preview density.
+- `Paper` presets set `W mm` and `H mm` instantly; manual size edits switch preset to `Custom`.
 - SVG output is exported in `mm`.
 - `Export Spine SVG` downloads just the spine as an SVG path.
 - `N` starts a new spine while keeping the existing spines on the canvas.
@@ -31,4 +33,5 @@ Interactive spring-path sketch with:
 - `offsetPaths` draws multiple continuous offset lines along the spine using `Num Lines`, `Gap`, and `Arc Radius`.
 - `arcTurns` keeps the single spring path and rounds its corners with sampled circular arcs.
 - `blackLetter` stamps fixed-angle nib lines along the path; `Pitch` controls spacing, and corners do not rotate the nib.
+- Zoomed-in previews can be panned by scrolling inside the canvas area.
 - The current version supports point creation, undo, and clear.
