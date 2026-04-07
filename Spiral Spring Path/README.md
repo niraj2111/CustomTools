@@ -4,7 +4,8 @@ Interactive spring-path sketch with:
 
 - millimeter-based canvas controls
 - paper size presets (A5/A4/A3 portrait + landscape)
-- grid snapping for spine anchors
+- base grid types: square, hexagonal, slanted cursive
+- grid snapping for spine anchors (based on selected grid type)
 - click-to-place polyline spine editing
 - offset-path spring mode with rounded arc turns
 - blackletter brush mode with fixed-angle nib strokes
@@ -26,6 +27,10 @@ Interactive spring-path sketch with:
 
 - `DPI` only affects raster preview density.
 - `Paper` presets set `W mm` and `H mm` instantly; manual size edits switch preset to `Custom`.
+- `Base Grid` exposes controls per type:
+  - `square`: `Grid`
+  - `hexagonal`: `Hex Size`
+  - `slanted cursive`: `Spacing`, `Slant`, `Major Every`
 - SVG output is exported in `mm`.
 - `Export Spine SVG` downloads just the spine as an SVG path.
 - `N` starts a new spine while keeping the existing spines on the canvas.

@@ -13,6 +13,8 @@ const PAPER_PRESETS_MM = {
 let pane;
 let cnv;
 let anchorFolder;
+let gridFolder;
+let gridTypeControlBlades = [];
 let hoveredAnchorIndex = -1;
 let draggedAnchorIndex = -1;
 let selectionMode = false;
@@ -25,9 +27,9 @@ let cachedSpringPaths = [];
 let currentDisplayScale = 1;
 
 const P = {
-  canvasWMM: 270,
-  canvasHMM: 400,
-  paperPreset: "Custom",
+  canvasWMM: 148,
+  canvasHMM: 210,
+  paperPreset: "A5 Portrait",
   dpi: 96,
   previewScale: 1,
   fitToViewport: true,
@@ -36,7 +38,12 @@ const P = {
   spineColor: "#3f7cff",
   anchorColor: "#ff6b6b",
   gridColor: "#d6dae3",
-  gridSpacingMM: 10,
+  gridType: "square",
+  gridSpacingMM: 5,
+  hexGridSizeMM: 5,
+  cursiveSpacingMM: 5,
+  cursiveSlantDeg: 70,
+  cursiveMajorEvery: 4,
   snapToGrid: true,
   showGrid: true,
   showSpine: true,
@@ -48,15 +55,15 @@ const P = {
   hoverColor: "#ffd166",
   selectionColor: "#22c55e",
   coilAmplitudeMM: 6,
-  coilPitchMM: 12,
+  coilPitchMM: 2,
   samplesPerTurn: 48,
-  orbitMode: "sine",
-  spineSmoothing: 2,
+  orbitMode: "blackLetter",
+  spineSmoothing: 4,
   spineSampleStepMM: 2,
   offsetLineCount: 5,
   offsetGapMM: 3,
-  blackLetterAngleDeg: 45,
-  blackLetterNibWidthMM: 8,
+  blackLetterAngleDeg: -45,
+  blackLetterNibWidthMM: 3,
   presetMode: "none",
   presetInsetMM: 20,
   presetCols: 8,
@@ -250,25 +257,107 @@ function windowResized() {
 }
 
 function drawGrid(paperWMM, paperHMM) {
-  const spacing = Math.max(0.5, P.gridSpacingMM);
   const effectivePxPerMM = Math.max(0.0001, getPxPerMM() * Math.max(0.01, currentDisplayScale));
   const thinStrokeMM = Math.max(0.08, 1 / effectivePxPerMM);
   const majorStrokeMM = Math.max(0.12, 1.5 / effectivePxPerMM);
   stroke(P.gridColor);
   noFill();
 
+  forEachGridLine(paperWMM, paperHMM, (lineDef) => {
+    strokeWeight(lineDef.major ? majorStrokeMM : thinStrokeMM);
+    line(lineDef.x1, lineDef.y1, lineDef.x2, lineDef.y2);
+  });
+}
+
+function forEachGridLine(paperWMM, paperHMM, callback) {
+  if (P.gridType === "hexagonal") {
+    appendHexGridLines(paperWMM, paperHMM, callback);
+    return;
+  }
+  if (P.gridType === "slantedCursive") {
+    appendCursiveGridLines(paperWMM, paperHMM, callback);
+    return;
+  }
+  appendSquareGridLines(paperWMM, paperHMM, callback);
+}
+
+function appendSquareGridLines(paperWMM, paperHMM, callback) {
+  const spacing = Math.max(0.5, P.gridSpacingMM);
   let index = 0;
   for (let x = 0; x <= paperWMM + 0.001; x += spacing) {
-    strokeWeight(index % 5 === 0 ? majorStrokeMM : thinStrokeMM);
-    line(x, 0, x, paperHMM);
+    callback({ x1: x, y1: 0, x2: x, y2: paperHMM, major: index % 5 === 0 });
     index += 1;
   }
 
   index = 0;
   for (let y = 0; y <= paperHMM + 0.001; y += spacing) {
-    strokeWeight(index % 5 === 0 ? majorStrokeMM : thinStrokeMM);
-    line(0, y, paperWMM, y);
+    callback({ x1: 0, y1: y, x2: paperWMM, y2: y, major: index % 5 === 0 });
     index += 1;
+  }
+}
+
+function appendHexGridLines(paperWMM, paperHMM, callback) {
+  const size = Math.max(0.5, P.hexGridSizeMM);
+  const sqrt3 = Math.sqrt(3);
+  const dx = sqrt3 * size;
+  const dy = 1.5 * size;
+  const maxRow = Math.ceil((paperHMM + size) / dy);
+  const maxCol = Math.ceil((paperWMM + dx) / dx);
+
+  for (let row = -1; row <= maxRow + 1; row += 1) {
+    const cy = row * dy;
+    const rowOffset = row % 2 === 0 ? 0 : dx / 2;
+    for (let col = -1; col <= maxCol + 1; col += 1) {
+      const cx = col * dx + rowOffset;
+      const points = [];
+      for (let i = 0; i < 6; i += 1) {
+        const angle = (Math.PI / 3) * i + Math.PI / 6;
+        points.push({
+          x: cx + size * Math.cos(angle),
+          y: cy + size * Math.sin(angle),
+        });
+      }
+      for (let i = 0; i < 6; i += 1) {
+        const a = points[i];
+        const b = points[(i + 1) % 6];
+        callback({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, major: false });
+      }
+    }
+  }
+}
+
+function appendCursiveGridLines(paperWMM, paperHMM, callback) {
+  const spacing = Math.max(0.5, P.cursiveSpacingMM);
+  const slantDeg = constrain(P.cursiveSlantDeg, 10, 140);
+  const slantRad = (slantDeg * Math.PI) / 180;
+  const sinA = Math.sin(slantRad);
+  const cosA = Math.cos(slantRad);
+  if (Math.abs(sinA) < 1e-6) {
+    return;
+  }
+  const majorEvery = Math.max(1, Math.floor(P.cursiveMajorEvery));
+
+  let rowIndex = 0;
+  for (let y = 0; y <= paperHMM + 0.001; y += spacing) {
+    callback({ x1: 0, y1: y, x2: paperWMM, y2: y, major: rowIndex % majorEvery === 0 });
+    rowIndex += 1;
+  }
+
+  // Slanted family: -sin(a)*x + cos(a)*y = c, where c is quantized by spacing.
+  const c0 = 0;
+  const c1 = -sinA * paperWMM;
+  const c2 = cosA * paperHMM;
+  const c3 = -sinA * paperWMM + cosA * paperHMM;
+  const minC = Math.min(c0, c1, c2, c3) - spacing;
+  const maxC = Math.max(c0, c1, c2, c3) + spacing;
+  const startK = Math.floor(minC / spacing);
+  const endK = Math.ceil(maxC / spacing);
+
+  for (let k = startK; k <= endK; k += 1) {
+    const c = k * spacing;
+    const xTop = (0 * cosA - c) / sinA;
+    const xBottom = (paperHMM * cosA - c) / sinA;
+    callback({ x1: xTop, y1: 0, x2: xBottom, y2: paperHMM, major: false });
   }
 }
 
@@ -855,10 +944,9 @@ function snapPresetPoints(points) {
     return points.map(copyPoint);
   }
 
-  const spacing = Math.max(0.5, P.gridSpacingMM);
   return points.map((point) => ({
-    x: constrain(Math.round(point.x / spacing) * spacing, 0, P.canvasWMM),
-    y: constrain(Math.round(point.y / spacing) * spacing, 0, P.canvasHMM),
+    x: constrain(snapPointToActiveGrid(point).x, 0, P.canvasWMM),
+    y: constrain(snapPointToActiveGrid(point).y, 0, P.canvasHMM),
   }));
 }
 
@@ -1178,7 +1266,7 @@ function toggleAnchorSelection(index) {
 }
 
 function handleArrowKeyMove() {
-  const step = Math.max(0.5, P.gridSpacingMM);
+  const step = getActiveGridStepMM();
   let dx = 0;
   let dy = 0;
 
@@ -1312,10 +1400,24 @@ function buildPane() {
   canvasFolder.addInput(P, "previewScale", { min: 0.1, max: 8, step: 0.1, label: "Zoom" });
   canvasFolder.addInput(P, "fitToViewport", { label: "Fit View" });
 
-  const gridFolder = pane.addFolder({ title: "Grid / Snapping" });
-  gridFolder.addInput(P, "gridSpacingMM", { min: 1, max: 100, step: 0.5, label: "Grid" });
+  gridFolder = pane.addFolder({ title: "Base Grid" });
+  gridFolder
+    .addInput(P, "gridType", {
+      options: {
+        square: "square",
+        hexagonal: "hexagonal",
+        "slanted cursive": "slantedCursive",
+      },
+      label: "Type",
+    })
+    .on("change", () => {
+      rebuildGridTypeControls();
+      pane.refresh();
+      redraw();
+    });
   gridFolder.addInput(P, "snapToGrid", { label: "Snap" });
   gridFolder.addInput(P, "showGrid", { label: "Show Grid" });
+  rebuildGridTypeControls();
 
   const presetFolder = pane.addFolder({ title: "Spine Presets" });
   presetFolder.addInput(P, "presetMode", {
@@ -1562,16 +1664,16 @@ function exportSVG() {
   );
 
   if (P.showGrid) {
-    const spacing = Math.max(0.5, P.gridSpacingMM);
     svg.push(
       `<g stroke="${escapeXML(P.gridColor)}" stroke-width="0.2" fill="none" opacity="0.85">`
     );
-    for (let x = 0; x <= P.canvasWMM + 0.001; x += spacing) {
-      svg.push(`<line x1="${fmt(x)}" y1="0" x2="${fmt(x)}" y2="${fmt(P.canvasHMM)}"/>`);
-    }
-    for (let y = 0; y <= P.canvasHMM + 0.001; y += spacing) {
-      svg.push(`<line x1="0" y1="${fmt(y)}" x2="${fmt(P.canvasWMM)}" y2="${fmt(y)}"/>`);
-    }
+    forEachGridLine(P.canvasWMM, P.canvasHMM, (lineDef) => {
+      svg.push(
+        `<line x1="${fmt(lineDef.x1)}" y1="${fmt(lineDef.y1)}" x2="${fmt(lineDef.x2)}" y2="${fmt(
+          lineDef.y2
+        )}"/>`
+      );
+    });
     svg.push("</g>");
   }
 
@@ -1764,9 +1866,9 @@ function getSnappedMousePointMM() {
   let yMM = point.y;
 
   if (P.snapToGrid) {
-    const spacing = Math.max(0.5, P.gridSpacingMM);
-    xMM = Math.round(xMM / spacing) * spacing;
-    yMM = Math.round(yMM / spacing) * spacing;
+    const snapped = snapPointToActiveGrid({ x: xMM, y: yMM });
+    xMM = snapped.x;
+    yMM = snapped.y;
   }
 
   return {
@@ -1806,6 +1908,146 @@ function updateCanvasDisplaySize() {
 
 function getPxPerMM() {
   return P.dpi / MM_PER_INCH;
+}
+
+function rebuildGridTypeControls() {
+  if (!gridFolder) {
+    return;
+  }
+  normalizeGridTypeValue();
+  for (const blade of gridTypeControlBlades) {
+    blade.dispose();
+  }
+  gridTypeControlBlades = [];
+
+  if (P.gridType === "hexagonal") {
+    gridTypeControlBlades.push(
+      gridFolder.addInput(P, "hexGridSizeMM", { min: 1, max: 60, step: 0.5, label: "Hex Size" })
+    );
+    return;
+  }
+
+  if (P.gridType === "slantedCursive") {
+    gridTypeControlBlades.push(
+      gridFolder.addInput(P, "cursiveSpacingMM", {
+        min: 1,
+        max: 60,
+        step: 0.5,
+        label: "Spacing",
+      })
+    );
+    gridTypeControlBlades.push(
+      gridFolder.addInput(P, "cursiveSlantDeg", { min: 10, max: 140, step: 1, label: "Slant" })
+    );
+    gridTypeControlBlades.push(
+      gridFolder.addInput(P, "cursiveMajorEvery", {
+        min: 1,
+        max: 12,
+        step: 1,
+        label: "Major Every",
+      })
+    );
+    return;
+  }
+
+  gridTypeControlBlades.push(
+    gridFolder.addInput(P, "gridSpacingMM", { min: 1, max: 100, step: 0.5, label: "Grid" })
+  );
+}
+
+function normalizeGridTypeValue() {
+  if (P.gridType === "slanted cursive") {
+    P.gridType = "slantedCursive";
+    return;
+  }
+  if (P.gridType === "hex") {
+    P.gridType = "hexagonal";
+    return;
+  }
+  if (P.gridType !== "square" && P.gridType !== "hexagonal" && P.gridType !== "slantedCursive") {
+    P.gridType = "square";
+  }
+}
+
+function getActiveGridStepMM() {
+  if (P.gridType === "hexagonal") {
+    return Math.max(0.5, P.hexGridSizeMM);
+  }
+  if (P.gridType === "slantedCursive") {
+    return Math.max(0.5, P.cursiveSpacingMM);
+  }
+  return Math.max(0.5, P.gridSpacingMM);
+}
+
+function snapPointToActiveGrid(point) {
+  if (P.gridType === "hexagonal") {
+    return snapPointToHexGrid(point);
+  }
+  if (P.gridType === "slantedCursive") {
+    return snapPointToCursiveGrid(point);
+  }
+  const spacing = Math.max(0.5, P.gridSpacingMM);
+  return {
+    x: Math.round(point.x / spacing) * spacing,
+    y: Math.round(point.y / spacing) * spacing,
+  };
+}
+
+function snapPointToHexGrid(point) {
+  const size = Math.max(0.5, P.hexGridSizeMM);
+  const sqrt3 = Math.sqrt(3);
+  const q = (sqrt3 / 3 / size) * point.x - (1 / 3 / size) * point.y;
+  const r = (2 / 3 / size) * point.y;
+  const rounded = roundAxialHex(q, r);
+  return {
+    x: size * sqrt3 * (rounded.q + rounded.r / 2),
+    y: size * 1.5 * rounded.r,
+  };
+}
+
+function roundAxialHex(q, r) {
+  let x = q;
+  let z = r;
+  let y = -x - z;
+
+  let rx = Math.round(x);
+  let ry = Math.round(y);
+  let rz = Math.round(z);
+
+  const xDiff = Math.abs(rx - x);
+  const yDiff = Math.abs(ry - y);
+  const zDiff = Math.abs(rz - z);
+
+  if (xDiff > yDiff && xDiff > zDiff) {
+    rx = -ry - rz;
+  } else if (yDiff > zDiff) {
+    ry = -rx - rz;
+  } else {
+    rz = -rx - ry;
+  }
+
+  return { q: rx, r: rz };
+}
+
+function snapPointToCursiveGrid(point) {
+  const spacing = Math.max(0.5, P.cursiveSpacingMM);
+  const slantDeg = constrain(P.cursiveSlantDeg, 10, 140);
+  const slantRad = (slantDeg * Math.PI) / 180;
+  const sinA = Math.sin(slantRad);
+  const cosA = Math.cos(slantRad);
+
+  const y = Math.round(point.y / spacing) * spacing;
+  if (Math.abs(sinA) < 1e-6) {
+    return { x: point.x, y };
+  }
+
+  const nX = -sinA;
+  const nY = cosA;
+  const normalDistance = point.x * nX + point.y * nY;
+  const snappedNormal = Math.round(normalDistance / spacing) * spacing;
+  const x = (cosA * y - snappedNormal) / sinA;
+
+  return { x, y };
 }
 
 function getPaperSizeMM() {
