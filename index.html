@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>P5 Sketches</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f4f7fb;
+        color: #152238;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 48px auto;
+        padding: 0 20px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 32px;
+      }
+      p {
+        margin: 0 0 24px;
+        color: #40506b;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      a.card {
+        display: block;
+        padding: 14px 16px;
+        border-radius: 12px;
+        text-decoration: none;
+        background: #ffffff;
+        border: 1px solid #dbe4f3;
+        color: #12233f;
+        font-weight: 600;
+      }
+      a.card:hover {
+        border-color: #4c83ff;
+        transform: translateY(-1px);
+      }
+      .hint {
+        margin-top: 20px;
+        font-size: 14px;
+        color: #5a6d8d;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>P5 Sketches</h1>
+      <p>Open any sketch below. This page is deployable to GitHub Pages.</p>
+      <section class="grid">
+        <a class="card" href="./ClothSimulation/">ClothSimulation</a>
+        <a class="card" href="./CustomGraphics%20BP/">CustomGraphics BP</a>
+        <a class="card" href="./Globe%20Texture/">Globe Texture</a>
+        <a class="card" href="./Spiral%20Spring%20Path/">Spiral Spring Path</a>
+        <a class="card" href="./Strata/">Strata</a>
+        <a class="card" href="./Test/">Test</a>
+        <a class="card" href="./Vector%20Drawing%20Tool/">Vector Drawing Tool</a>
+        <a class="card" href="./Zigzag/">Zigzag</a>
+      </section>
+      <p class="hint">Note: folders without an index file are intentionally not listed.</p>
+    </main>
+  </body>
+</html>
