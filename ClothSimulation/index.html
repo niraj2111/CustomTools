@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloth Simulation – p5 + Tweakpane</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #f6f7fb; color: #111; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji; }
+      #app { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: 100vh; }
+      #pane { padding: 12px; border-right: 1px solid #e5e7eb; background: #fff; }
+      #canvas-wrap { display: grid; place-items: center; }
+      canvas { display: block; box-shadow: 0 10px 25px rgba(0,0,0,0.07); background: transparent; }
+      .note { font-size: 12px; color: #666; margin-top: 8px; }
+    </style>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+    <script src="https://unpkg.com/p5.js-svg@1.5.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+   
+   </head>
+  <body>
+    <div id="app">
+      <div id="pane"></div>
+      <div id="canvas-wrap"></div>
+    </div>
+
+    <script src="./sketch.js"></script>
+  </body>
+</html> 
