@@ -7,9 +7,10 @@ Interactive spring-path sketch with:
 - base grid types: square, hexagonal, slanted cursive
 - grid snapping for spine anchors (based on selected grid type)
 - click-to-place polyline spine editing
+- Hamiltonian spine preset with turn/straight bias tuning
 - offset-path spring mode with rounded arc turns
 - blackletter brush mode with fixed-angle nib strokes
-- preview zoom / fit controls
+- preview zoom / fit controls, including trackpad/wheel zoom and pinch-to-zoom
 - manual SVG export
 
 ## Use

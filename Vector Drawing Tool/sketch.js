@@ -18,19 +18,23 @@ const BRUSH_PRESETS = {
     brushStyle: "flatNib",
     brushWidthMM: 1.2,
     flatNibWidthMM: 8,
-    flatNibAngleDeg: 45,
+    flatNibAngleDeg: -45,
   },
 };
 
 let pane;
 let cnv;
 let strokeFolder;
+let gridFolder;
+let gridTypeControlBlades = [];
 let geometryDirty = true;
 let hoveredAnchor = null;
 let draggedAnchor = null;
 let activeStrokeIndex = -1;
 let drawingStrokeIndex = -1;
 let cachedRenderStrokes = [];
+let currentDisplayScale = 1;
+let pinchGestureState = null;
 
 const P = {
   canvasPreset: "A4Portrait",
@@ -41,21 +45,28 @@ const P = {
   fitToViewport: true,
   bg: "#ffffff",
   gridColor: "#dde3ee",
+  majorGridColor: "#d9485f",
   strokeColor: "#0b1220",
   activeStrokeColor: "#2563eb",
   anchorColor: "#e11d48",
   hoverColor: "#f59e0b",
   showGrid: true,
+  snapToGrid: true,
+  gridType: "square",
   gridSpacingMM: 10,
+  cursiveSpacingMM: 10,
+  cursiveSlantDeg: 70,
+  cursiveMajorEvery: 4,
   showAnchors: true,
   showStrokeOutlines: true,
   brushPreset: "Medium",
   brushStyle: "round",
   brushWidthMM: BRUSH_PRESETS.Medium.brushWidthMM,
   flatNibWidthMM: 8,
-  flatNibAngleDeg: 45,
+  flatNibAngleDeg: -45,
   minPointSpacingMM: 2,
   turnThresholdDeg: 18,
+  simplifyToleranceMM: 4,
   smoothingMode: "chaikin1",
   chaikinCornerCut: 0.25,
   anchorRadiusMM: 1.25,
@@ -85,16 +96,18 @@ function draw() {
 
   push();
   scale(getPxPerMM());
+  drawPaper();
+  withCanvasClip(() => {
+    if (P.showGrid) {
+      drawGrid(P.canvasWMM, P.canvasHMM);
+    }
 
-  if (P.showGrid) {
-    drawGrid();
-  }
+    drawStrokes();
 
-  drawStrokes();
-
-  if (P.showAnchors) {
-    drawAnchors();
-  }
+    if (P.showAnchors) {
+      drawAnchors();
+    }
+  });
 
   pop();
 }
@@ -108,6 +121,7 @@ function mousePressed() {
   if (hoveredAnchor) {
     draggedAnchor = { strokeIndex: hoveredAnchor.strokeIndex, pointIndex: hoveredAnchor.pointIndex };
     activeStrokeIndex = hoveredAnchor.strokeIndex;
+    refreshStrokeMonitor();
     redraw();
     return;
   }
@@ -139,7 +153,7 @@ function mouseDragged() {
     if (!stroke) {
       return;
     }
-    stroke.points[draggedAnchor.pointIndex] = point;
+    stroke.points[draggedAnchor.pointIndex] = P.snapToGrid ? snapPointToActiveGrid(point) : point;
     invalidateGeometry();
     refreshStrokeMonitor();
     redraw();
@@ -213,6 +227,11 @@ function windowResized() {
 function createStroke() {
   return {
     points: [],
+    label: `Object ${strokes.length + 1}`,
+    kind: "calligraphy",
+    visible: true,
+    exportEnabled: true,
+    exportMode: "preview",
     brushStyle: P.brushStyle,
     brushWidthMM: P.brushWidthMM,
     flatNibWidthMM: P.flatNibWidthMM,
@@ -224,23 +243,27 @@ function createStroke() {
 }
 
 function appendPointToStroke(stroke, point, force) {
+  const nextPoint = P.snapToGrid ? snapPointToActiveGrid(point) : point;
   const points = stroke.points;
   const last = points[points.length - 1];
-  if (!force && last && distanceBetween(last, point) < Math.max(0.1, P.minPointSpacingMM)) {
-    points[points.length - 1] = point;
+  if (!force && last && distanceBetween(last, nextPoint) < Math.max(0.1, P.minPointSpacingMM)) {
+    points[points.length - 1] = nextPoint;
     return;
   }
 
   if (!force && points.length >= 2) {
     const prev = points[points.length - 2];
-    const angle = getCornerAngleDeg(prev, last, point);
-    if (angle < Math.max(1, P.turnThresholdDeg) && distanceBetween(last, point) < P.minPointSpacingMM * 1.75) {
-      points[points.length - 1] = point;
+    const angle = getCornerAngleDeg(prev, last, nextPoint);
+    if (
+      angle < Math.max(1, P.turnThresholdDeg) &&
+      distanceBetween(last, nextPoint) < P.minPointSpacingMM * 1.75
+    ) {
+      points[points.length - 1] = nextPoint;
       return;
     }
   }
 
-  points.push(point);
+  points.push(nextPoint);
 }
 
 function finalizeStroke(stroke) {
@@ -271,24 +294,96 @@ function simplifyStrokePoints(points) {
   return removeSequentialDuplicates(result);
 }
 
-function drawGrid() {
-  stroke(P.gridColor);
-  strokeWeight(0.2);
-  noFill();
-  const spacing = Math.max(0.5, P.gridSpacingMM);
+function drawPaper() {
+  noStroke();
+  fill(P.bg);
+  rect(0, 0, P.canvasWMM, P.canvasHMM);
+}
 
-  for (let x = 0; x <= P.canvasWMM + 0.001; x += spacing) {
-    line(x, 0, x, P.canvasHMM);
+function withCanvasClip(fn) {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, P.canvasWMM, P.canvasHMM);
+  ctx.clip();
+  fn();
+  ctx.restore();
+}
+
+function drawGrid(paperWMM, paperHMM) {
+  const effectivePxPerMM = Math.max(0.0001, getPxPerMM() * Math.max(0.01, currentDisplayScale));
+  const thinStrokeMM = Math.max(0.08, 1 / effectivePxPerMM);
+  const majorStrokeMM = Math.max(0.12, 1.5 / effectivePxPerMM);
+  noFill();
+
+  forEachGridLine(paperWMM, paperHMM, (lineDef) => {
+    stroke(lineDef.major ? P.majorGridColor : P.gridColor);
+    strokeWeight(lineDef.major ? majorStrokeMM : thinStrokeMM);
+    line(lineDef.x1, lineDef.y1, lineDef.x2, lineDef.y2);
+  });
+}
+
+function forEachGridLine(paperWMM, paperHMM, callback) {
+  if (P.gridType === "slantedCursive") {
+    appendCursiveGridLines(paperWMM, paperHMM, callback);
+    return;
   }
-  for (let y = 0; y <= P.canvasHMM + 0.001; y += spacing) {
-    line(0, y, P.canvasWMM, y);
+  appendSquareGridLines(paperWMM, paperHMM, callback);
+}
+
+function appendSquareGridLines(paperWMM, paperHMM, callback) {
+  const spacing = Math.max(0.5, P.gridSpacingMM);
+  let index = 0;
+  for (let x = 0; x <= paperWMM + 0.001; x += spacing) {
+    callback({ x1: x, y1: 0, x2: x, y2: paperHMM, major: index % 5 === 0 });
+    index += 1;
+  }
+
+  index = 0;
+  for (let y = 0; y <= paperHMM + 0.001; y += spacing) {
+    callback({ x1: 0, y1: y, x2: paperWMM, y2: y, major: index % 5 === 0 });
+    index += 1;
+  }
+}
+
+function appendCursiveGridLines(paperWMM, paperHMM, callback) {
+  const spacing = Math.max(0.5, P.cursiveSpacingMM);
+  const slantDeg = constrain(P.cursiveSlantDeg, 10, 140);
+  const slantRad = (slantDeg * Math.PI) / 180;
+  const sinA = Math.sin(slantRad);
+  const cosA = Math.cos(slantRad);
+  if (Math.abs(sinA) < 1e-6) {
+    return;
+  }
+  const majorEvery = Math.max(1, Math.floor(P.cursiveMajorEvery));
+
+  let rowIndex = 0;
+  for (let y = 0; y <= paperHMM + 0.001; y += spacing) {
+    callback({ x1: 0, y1: y, x2: paperWMM, y2: y, major: rowIndex % majorEvery === 0 });
+    rowIndex += 1;
+  }
+
+  const c0 = 0;
+  const c1 = -sinA * paperWMM;
+  const c2 = cosA * paperHMM;
+  const c3 = -sinA * paperWMM + cosA * paperHMM;
+  const minC = Math.min(c0, c1, c2, c3) - spacing;
+  const maxC = Math.max(c0, c1, c2, c3) + spacing;
+  const startK = Math.floor(minC / spacing);
+  const endK = Math.ceil(maxC / spacing);
+
+  for (let k = startK; k <= endK; k += 1) {
+    const c = k * spacing;
+    const xTop = (0 * cosA - c) / sinA;
+    const xBottom = (paperHMM * cosA - c) / sinA;
+    callback({ x1: xTop, y1: 0, x2: xBottom, y2: paperHMM, major: false });
   }
 }
 
 function drawStrokes() {
   for (let i = 0; i < cachedRenderStrokes.length; i += 1) {
     const renderStroke = cachedRenderStrokes[i];
-    if (!renderStroke) {
+    if (!renderStroke || renderStroke.visible === false) {
       continue;
     }
 
@@ -402,6 +497,10 @@ function ensureGeometryCache() {
     const points = getRenderPointsForStroke(strokeData);
     if (strokeData.brushStyle === "flatNib") {
       return {
+        kind: strokeData.kind,
+        visible: strokeData.visible,
+        exportEnabled: strokeData.exportEnabled,
+        exportMode: strokeData.exportMode,
         brushStyle: strokeData.brushStyle,
         color: strokeData.color,
         brushWidthMM: strokeData.brushWidthMM,
@@ -411,6 +510,10 @@ function ensureGeometryCache() {
     }
 
     return {
+      kind: strokeData.kind,
+      visible: strokeData.visible,
+      exportEnabled: strokeData.exportEnabled,
+      exportMode: strokeData.exportMode,
       brushStyle: strokeData.brushStyle,
       color: strokeData.color,
       brushWidthMM: strokeData.brushWidthMM,
@@ -431,13 +534,16 @@ function getRenderPointsForStroke(strokeData) {
     return points;
   }
 
-  switch (P.smoothingMode) {
+  const smoothingMode = typeof strokeData.smoothingMode === "string" ? strokeData.smoothingMode : "off";
+  const cornerCut = sanitizeNumber(strokeData.chaikinCornerCut, P.chaikinCornerCut);
+
+  switch (smoothingMode) {
     case "chaikin2":
-      points = chaikin(points, P.chaikinCornerCut);
-      points = chaikin(points, P.chaikinCornerCut);
+      points = chaikin(points, cornerCut);
+      points = chaikin(points, cornerCut);
       break;
     case "chaikin1":
-      points = chaikin(points, P.chaikinCornerCut);
+      points = chaikin(points, cornerCut);
       break;
     case "off":
     default:
@@ -452,7 +558,7 @@ function chaikin(points, cutRatio) {
     return points.map(copyPoint);
   }
 
-  const ratio = constrain(cutRatio, 0.01, 0.49);
+  const ratio = constrain(sanitizeNumber(cutRatio, 0.25), 0.01, 0.49);
   const next = [copyPoint(points[0])];
   for (let i = 0; i < points.length - 1; i += 1) {
     const a = points[i];
@@ -469,11 +575,14 @@ function buildFlatNibSegments(points, strokeData) {
     return [];
   }
 
-  const spacing = Math.max(0.4, strokeData.brushWidthMM * 0.9);
+  const brushWidth = Math.max(0.1, sanitizeNumber(strokeData.brushWidthMM, P.brushWidthMM));
+  const nibWidth = Math.max(0.1, sanitizeNumber(strokeData.flatNibWidthMM, P.flatNibWidthMM));
+  const nibAngle = sanitizeNumber(strokeData.flatNibAngleDeg, P.flatNibAngleDeg);
+  const spacing = Math.max(0.4, brushWidth * 0.9);
   const centers = getSampledCenters(points, spacing);
-  const angle = radians(strokeData.flatNibAngleDeg);
-  const halfWidthX = Math.cos(angle) * strokeData.flatNibWidthMM * 0.5;
-  const halfWidthY = Math.sin(angle) * strokeData.flatNibWidthMM * 0.5;
+  const angle = radians(nibAngle);
+  const halfWidthX = Math.cos(angle) * nibWidth * 0.5;
+  const halfWidthY = Math.sin(angle) * nibWidth * 0.5;
 
   return centers.map((center) => ({
     a: {
@@ -527,7 +636,27 @@ function buildPane() {
   canvasFolder.addInput(P, "previewScale", { min: 0.1, max: 8, step: 0.1, label: "Zoom" });
   canvasFolder.addInput(P, "fitToViewport", { label: "Fit View" });
 
-  const brushFolder = pane.addFolder({ title: "Brush" });
+  gridFolder = pane.addFolder({ title: "Grid" });
+  gridFolder.addInput(P, "showGrid", { label: "Show Grid" });
+  gridFolder.addInput(P, "snapToGrid", { label: "Snap" });
+  gridFolder
+    .addInput(P, "gridType", {
+      options: {
+        Square: "square",
+        "Slanted Cursive": "slantedCursive",
+      },
+      label: "Type",
+    })
+    .on("change", () => {
+      rebuildGridTypeControls();
+      pane.refresh();
+      redraw();
+    });
+  gridFolder.addInput(P, "gridColor", { label: "Grid" });
+  gridFolder.addInput(P, "majorGridColor", { label: "Major" });
+  rebuildGridTypeControls();
+
+  const brushFolder = pane.addFolder({ title: "New Object Defaults" });
   brushFolder.addInput(P, "brushPreset", {
     options: Object.fromEntries(Object.keys(BRUSH_PRESETS).map((key) => [key, key])),
     label: "Preset",
@@ -567,8 +696,14 @@ function buildPane() {
     step: 1,
     label: "Turn Threshold",
   });
+  captureFolder.addInput(P, "simplifyToleranceMM", {
+    min: 0.1,
+    max: 40,
+    step: 0.1,
+    label: "Simplify Tol",
+  });
 
-  const smoothingFolder = pane.addFolder({ title: "Smoothing" });
+  const smoothingFolder = pane.addFolder({ title: "New Object Smoothing" });
   smoothingFolder.addInput(P, "smoothingMode", {
     options: {
       Off: "off",
@@ -585,12 +720,9 @@ function buildPane() {
   });
 
   const viewFolder = pane.addFolder({ title: "View" });
-  viewFolder.addInput(P, "showGrid", { label: "Show Grid" });
-  viewFolder.addInput(P, "gridSpacingMM", { min: 1, max: 100, step: 0.5, label: "Grid" });
   viewFolder.addInput(P, "showAnchors", { label: "Show Anchors" });
   viewFolder.addInput(P, "showStrokeOutlines", { label: "Show Active" });
   viewFolder.addInput(P, "bg", { label: "BG" });
-  viewFolder.addInput(P, "gridColor", { label: "Grid Color" });
   viewFolder.addInput(P, "activeStrokeColor", { label: "Active Color" });
   viewFolder.addInput(P, "anchorColor", { label: "Anchor Color" });
   viewFolder.addInput(P, "hoverColor", { label: "Hover Color" });
@@ -612,16 +744,17 @@ function buildPane() {
   refreshStrokeMonitor();
 
   pane.on("change", (event) => {
-    if (event.presetKey === "canvasPreset" || event.target.key === "canvasPreset") {
+    const key = event?.presetKey || event?.target?.key || "";
+    if (key === "canvasPreset") {
       applyCanvasPreset(P.canvasPreset);
     }
-    if (event.presetKey === "brushPreset" || event.target.key === "brushPreset") {
+    if (key === "brushPreset") {
       applyBrushPreset(P.brushPreset);
     }
     updateStrokeDefaults();
+    sanitizeProjectState();
     invalidateGeometry();
     syncCanvasSize();
-    refreshStrokeMonitor();
     redraw();
   });
 }
@@ -641,6 +774,59 @@ function hookUI() {
   });
   document.getElementById("svgBtn").addEventListener("click", exportSVG);
   document.getElementById("spineSvgBtn").addEventListener("click", exportSpineSVG);
+  const wrap = document.getElementById("wrap");
+  wrap.addEventListener(
+    "wheel",
+    (event) => {
+      if (!event.altKey && !event.ctrlKey && !event.metaKey) {
+        return;
+      }
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? 0.9 : 1.1;
+      applyPreviewZoom(delta, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+    },
+    { passive: false }
+  );
+  wrap.addEventListener(
+    "touchstart",
+    (event) => {
+      if (event.touches.length !== 2) {
+        pinchGestureState = null;
+        return;
+      }
+      event.preventDefault();
+      pinchGestureState = getPinchGestureSnapshot(event.touches);
+    },
+    { passive: false }
+  );
+  wrap.addEventListener(
+    "touchmove",
+    (event) => {
+      if (event.touches.length !== 2) {
+        pinchGestureState = null;
+        return;
+      }
+      event.preventDefault();
+      const nextGesture = getPinchGestureSnapshot(event.touches);
+      if (!pinchGestureState || pinchGestureState.distance <= 0 || nextGesture.distance <= 0) {
+        pinchGestureState = nextGesture;
+        return;
+      }
+      const zoomFactor = nextGesture.distance / pinchGestureState.distance;
+      applyPreviewZoom(zoomFactor, nextGesture.center);
+      pinchGestureState = nextGesture;
+    },
+    { passive: false }
+  );
+  wrap.addEventListener("touchend", () => {
+    pinchGestureState = null;
+  });
+  wrap.addEventListener("touchcancel", () => {
+    pinchGestureState = null;
+  });
   window.addEventListener("resize", updateCanvasDisplaySize);
 }
 
@@ -678,21 +864,119 @@ function refreshStrokeMonitor() {
   }
 
   strokeFolder.dispose();
-  strokeFolder = pane.addFolder({ title: `Strokes (${strokes.length})` });
+  strokeFolder = pane.addFolder({ title: `Objects (${strokes.length})` });
   strokeFolder.addMonitor({ count: strokes.length }, "count", { label: "Count" });
   const pointCount = strokes.reduce((sum, strokeData) => sum + strokeData.points.length, 0);
   strokeFolder.addMonitor({ pointCount }, "pointCount", { label: "Points" });
-  const preview = strokes
-    .slice(0, 5)
-    .map((strokeData, index) => `${index + 1}: ${strokeData.points.length} pts`)
+
+  const layersFolder = strokeFolder.addFolder({ title: "Layers" });
+  if (strokes.length === 0) {
+    layersFolder.addMonitor({ empty: "Drag on the canvas to create an object" }, "empty", {
+      label: "State",
+    });
+    return;
+  }
+
+  strokes.forEach((strokeData, index) => {
+    const marker = index === activeStrokeIndex ? "●" : "○";
+    const visibility = strokeData.visible ? "" : " [hidden]";
+    const label = `${marker} ${strokeData.label || `Object ${index + 1}`} (${strokeData.points.length} pts)${visibility}`;
+    layersFolder.addButton({ title: label }).on("click", () => {
+      setActiveStroke(index);
+    });
+  });
+
+  const activeStroke = getActiveStroke();
+  if (!activeStroke) {
+    return;
+  }
+
+  const objectFolder = strokeFolder.addFolder({ title: "Active Object" });
+  objectFolder.addInput(activeStroke, "label", { label: "Name" });
+  objectFolder.addInput(activeStroke, "kind", {
+    options: {
+      Calligraphy: "calligraphy",
+      Spine: "spine",
+      Guide: "guide",
+    },
+    label: "Kind",
+  });
+  objectFolder.addInput(activeStroke, "visible", { label: "Visible" });
+  objectFolder.addInput(activeStroke, "exportEnabled", { label: "Export" });
+  objectFolder.addInput(activeStroke, "exportMode", {
+    options: {
+      Preview: "preview",
+      Spine: "spine",
+    },
+    label: "SVG Mode",
+  });
+
+  const styleFolder = objectFolder.addFolder({ title: "Style" });
+  styleFolder.addInput(activeStroke, "brushStyle", {
+    options: {
+      Round: "round",
+      FlatNib: "flatNib",
+    },
+    label: "Style",
+  });
+  styleFolder.addInput(activeStroke, "brushWidthMM", {
+    min: 0.1,
+    max: 40,
+    step: 0.1,
+    label: "Width",
+  });
+  styleFolder.addInput(activeStroke, "flatNibWidthMM", {
+    min: 0.1,
+    max: 80,
+    step: 0.1,
+    label: "Nib Width",
+  });
+  styleFolder.addInput(activeStroke, "flatNibAngleDeg", {
+    min: -180,
+    max: 180,
+    step: 1,
+    label: "Nib Angle",
+  });
+  styleFolder.addInput(activeStroke, "color", { label: "Color" });
+
+  const smoothingFolder = objectFolder.addFolder({ title: "Smoothing" });
+  smoothingFolder.addInput(activeStroke, "smoothingMode", {
+    options: {
+      Off: "off",
+      "Chaikin 1": "chaikin1",
+      "Chaikin 2": "chaikin2",
+    },
+    label: "Mode",
+  });
+  smoothingFolder.addInput(activeStroke, "chaikinCornerCut", {
+    min: 0.05,
+    max: 0.45,
+    step: 0.01,
+    label: "Corner Cut",
+  });
+
+  const spineFolder = objectFolder.addFolder({ title: "Spine Ops" });
+  spineFolder.addButton({ title: "Simplify" }).on("click", () => {
+    simplifyActiveStroke(false);
+  });
+  spineFolder.addButton({ title: "Simplify + Snap" }).on("click", () => {
+    simplifyActiveStroke(true);
+  });
+  spineFolder.addButton({ title: "Snap Anchors" }).on("click", () => {
+    snapActiveStrokeToGrid();
+  });
+
+  const preview = activeStroke.points
+    .slice(0, 8)
+    .map((point, index) => `${index + 1}: ${fmt(point.x)}, ${fmt(point.y)}`)
     .join(" | ");
-  strokeFolder.addMonitor(
-    { preview: preview || "Drag on the canvas to create a stroke" },
+  objectFolder.addMonitor(
+    { preview: preview || "Drag to draw this object" },
     "preview",
     {
-      label: "Preview",
+      label: "Spine",
       multiline: true,
-      lineCount: 3,
+      lineCount: 4,
     }
   );
 }
@@ -710,6 +994,188 @@ function updateStrokeDefaults() {
   }
 }
 
+function getActiveStroke() {
+  if (activeStrokeIndex < 0 || activeStrokeIndex >= strokes.length) {
+    return null;
+  }
+  return strokes[activeStrokeIndex];
+}
+
+function setActiveStroke(index) {
+  activeStrokeIndex = constrain(index, 0, Math.max(0, strokes.length - 1));
+  hoveredAnchor = null;
+  draggedAnchor = null;
+  refreshStrokeMonitor();
+  redraw();
+}
+
+function getPinchGestureSnapshot(touches) {
+  const first = touches[0];
+  const second = touches[1];
+  return {
+    distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY),
+    center: {
+      clientX: (first.clientX + second.clientX) * 0.5,
+      clientY: (first.clientY + second.clientY) * 0.5,
+    },
+  };
+}
+
+function applyPreviewZoom(multiplier, pointer) {
+  if (!cnv || !pointer || !Number.isFinite(multiplier) || multiplier <= 0) {
+    return;
+  }
+
+  const wrap = document.getElementById("wrap");
+  const previousRect = cnv.elt.getBoundingClientRect();
+  const previousScale = P.previewScale;
+  const nextScale = constrain(previousScale * multiplier, 0.1, 10);
+  if (Math.abs(nextScale - previousScale) < 0.0001) {
+    return;
+  }
+
+  const relativeX =
+    previousRect.width > 0 ? (pointer.clientX - previousRect.left) / previousRect.width : 0.5;
+  const relativeY =
+    previousRect.height > 0 ? (pointer.clientY - previousRect.top) / previousRect.height : 0.5;
+
+  P.previewScale = nextScale;
+  P.fitToViewport = false;
+  pane.refresh();
+  updateCanvasDisplaySize();
+
+  const nextRect = cnv.elt.getBoundingClientRect();
+  wrap.scrollLeft += (nextRect.width - previousRect.width) * relativeX;
+  wrap.scrollTop += (nextRect.height - previousRect.height) * relativeY;
+  redraw();
+}
+
+function simplifyActiveStroke(shouldSnapToGrid) {
+  const activeStroke = getActiveStroke();
+  if (!activeStroke || activeStroke.points.length < 3) {
+    return;
+  }
+
+  let nextPoints = simplifyPolylineRDP(
+    activeStroke.points,
+    Math.max(0.1, P.simplifyToleranceMM)
+  );
+  if (shouldSnapToGrid) {
+    nextPoints = snapPointsToGrid(nextPoints);
+  }
+
+  activeStroke.points = ensureValidAnchorSet(nextPoints);
+  hoveredAnchor = null;
+  draggedAnchor = null;
+  invalidateGeometry();
+  refreshStrokeMonitor();
+  redraw();
+}
+
+function snapActiveStrokeToGrid() {
+  const activeStroke = getActiveStroke();
+  if (!activeStroke || activeStroke.points.length === 0) {
+    return;
+  }
+
+  activeStroke.points = ensureValidAnchorSet(snapPointsToGrid(activeStroke.points));
+  hoveredAnchor = null;
+  draggedAnchor = null;
+  invalidateGeometry();
+  refreshStrokeMonitor();
+  redraw();
+}
+
+function snapPointsToGrid(points) {
+  const spacing = Math.max(0.5, P.gridSpacingMM);
+  return points.map((point) => ({
+    x: constrain(Math.round(point.x / spacing) * spacing, 0, P.canvasWMM),
+    y: constrain(Math.round(point.y / spacing) * spacing, 0, P.canvasHMM),
+  }));
+}
+
+function ensureValidAnchorSet(points) {
+  const deduped = removeSequentialDuplicates(points);
+  if (deduped.length <= 2) {
+    return deduped.map(copyPoint);
+  }
+
+  const result = [copyPoint(deduped[0])];
+  for (let i = 1; i < deduped.length - 1; i += 1) {
+    const point = deduped[i];
+    if (distanceBetween(result[result.length - 1], point) > 0.0001) {
+      result.push(copyPoint(point));
+    }
+  }
+  result.push(copyPoint(deduped[deduped.length - 1]));
+  return result;
+}
+
+function simplifyPolylineRDP(points, tolerance) {
+  if (!Array.isArray(points) || points.length <= 2) {
+    return points.map(copyPoint);
+  }
+
+  const epsilon = Math.max(0.01, tolerance);
+  const keep = new Array(points.length).fill(false);
+  keep[0] = true;
+  keep[points.length - 1] = true;
+
+  function recurse(startIndex, endIndex) {
+    if (endIndex <= startIndex + 1) {
+      return;
+    }
+
+    let bestIndex = -1;
+    let bestDistance = -1;
+    const start = points[startIndex];
+    const end = points[endIndex];
+
+    for (let i = startIndex + 1; i < endIndex; i += 1) {
+      const distance = perpendicularDistanceToSegment(points[i], start, end);
+      if (distance > bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+
+    if (bestDistance > epsilon && bestIndex >= 0) {
+      keep[bestIndex] = true;
+      recurse(startIndex, bestIndex);
+      recurse(bestIndex, endIndex);
+    }
+  }
+
+  recurse(0, points.length - 1);
+  const result = [];
+  for (let i = 0; i < points.length; i += 1) {
+    if (keep[i]) {
+      result.push(copyPoint(points[i]));
+    }
+  }
+  return result;
+}
+
+function perpendicularDistanceToSegment(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq <= 0.000001) {
+    return distanceBetween(point, start);
+  }
+
+  const t = constrain(
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq,
+    0,
+    1
+  );
+  const proj = {
+    x: start.x + dx * t,
+    y: start.y + dy * t,
+  };
+  return distanceBetween(point, proj);
+}
+
 function applyCanvasPreset(key) {
   const preset = CANVAS_PRESETS[key];
   if (!preset) {
@@ -718,6 +1184,97 @@ function applyCanvasPreset(key) {
   P.canvasWMM = preset.widthMM;
   P.canvasHMM = preset.heightMM;
   pane.refresh();
+}
+
+function rebuildGridTypeControls() {
+  if (!gridFolder) {
+    return;
+  }
+  normalizeGridTypeValue();
+  for (const blade of gridTypeControlBlades) {
+    blade.dispose();
+  }
+  gridTypeControlBlades = [];
+
+  if (P.gridType === "slantedCursive") {
+    gridTypeControlBlades.push(
+      gridFolder.addInput(P, "cursiveSpacingMM", {
+        min: 1,
+        max: 60,
+        step: 0.5,
+        label: "Spacing",
+      })
+    );
+    gridTypeControlBlades.push(
+      gridFolder.addInput(P, "cursiveSlantDeg", {
+        min: 10,
+        max: 140,
+        step: 1,
+        label: "Slant",
+      })
+    );
+    gridTypeControlBlades.push(
+      gridFolder.addInput(P, "cursiveMajorEvery", {
+        min: 1,
+        max: 12,
+        step: 1,
+        label: "Major Every",
+      })
+    );
+    return;
+  }
+
+  gridTypeControlBlades.push(
+    gridFolder.addInput(P, "gridSpacingMM", { min: 1, max: 100, step: 0.5, label: "Grid" })
+  );
+}
+
+function normalizeGridTypeValue() {
+  if (P.gridType === "slanted cursive") {
+    P.gridType = "slantedCursive";
+    return;
+  }
+  if (P.gridType !== "square" && P.gridType !== "slantedCursive") {
+    P.gridType = "square";
+  }
+}
+
+function getActiveGridStepMM() {
+  if (P.gridType === "slantedCursive") {
+    return Math.max(0.5, P.cursiveSpacingMM);
+  }
+  return Math.max(0.5, P.gridSpacingMM);
+}
+
+function snapPointToActiveGrid(point) {
+  if (P.gridType === "slantedCursive") {
+    return snapPointToCursiveGrid(point);
+  }
+  const spacing = Math.max(0.5, P.gridSpacingMM);
+  return {
+    x: Math.round(point.x / spacing) * spacing,
+    y: Math.round(point.y / spacing) * spacing,
+  };
+}
+
+function snapPointToCursiveGrid(point) {
+  const spacing = Math.max(0.5, P.cursiveSpacingMM);
+  const slantDeg = constrain(P.cursiveSlantDeg, 10, 140);
+  const slantRad = (slantDeg * Math.PI) / 180;
+  const sinA = Math.sin(slantRad);
+  const cosA = Math.cos(slantRad);
+  if (Math.abs(sinA) < 1e-6) {
+    return copyPoint(point);
+  }
+
+  const snappedY = Math.round(point.y / spacing) * spacing;
+  const c = -sinA * point.x + cosA * point.y;
+  const snappedC = Math.round(c / spacing) * spacing;
+  const snappedX = (cosA * snappedY - snappedC) / sinA;
+  return {
+    x: snappedX,
+    y: snappedY,
+  };
 }
 
 function applyBrushPreset(key) {
@@ -752,7 +1309,19 @@ function exportSVG() {
   );
 
   for (const renderStroke of cachedRenderStrokes) {
-    if (!renderStroke) {
+    if (!renderStroke || renderStroke.exportEnabled === false) {
+      continue;
+    }
+
+    if (renderStroke.exportMode === "spine") {
+      if (renderStroke.points.length < 2) {
+        continue;
+      }
+      svg.push(
+        `<path d="${polylineToPath(renderStroke.points)}" fill="none" stroke="${escapeXML(
+          renderStroke.color
+        )}" stroke-width="${fmt(0.35)}" stroke-linecap="round" stroke-linejoin="round"/>`
+      );
       continue;
     }
 
@@ -794,7 +1363,7 @@ function exportSpineSVG() {
   );
 
   for (const renderStroke of cachedRenderStrokes) {
-    if (!renderStroke || renderStroke.points.length < 2) {
+    if (!renderStroke || renderStroke.exportEnabled === false || renderStroke.points.length < 2) {
       continue;
     }
     svg.push(
@@ -899,9 +1468,12 @@ function updateCanvasDisplaySize() {
   const availableW = Math.max(1, rect.width - padding);
   const availableH = Math.max(1, rect.height - padding);
   const fitScale = Math.min(availableW / pxSize.width, availableH / pxSize.height, 1);
-  const scale = P.fitToViewport ? fitScale * P.previewScale : P.previewScale;
+  const zoomScale = Math.max(0.05, sanitizeNumber(P.previewScale, 1));
+  const scale = P.fitToViewport ? fitScale * zoomScale : zoomScale;
+  currentDisplayScale = Math.max(0.01, scale);
   cnv.style("width", `${Math.max(1, Math.round(pxSize.width * scale))}px`);
   cnv.style("height", `${Math.max(1, Math.round(pxSize.height * scale))}px`);
+  wrap.style.overflow = P.fitToViewport ? "hidden" : "auto";
 }
 
 function getCanvasPixelSize() {
@@ -959,6 +1531,39 @@ function copyPoint(point) {
 
 function nearlyEqual(a, b) {
   return Math.abs(a - b) < 0.0001;
+}
+
+function sanitizeNumber(value, fallback) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function sanitizeProjectState() {
+  normalizeGridTypeValue();
+  P.gridSpacingMM = Math.max(0.5, sanitizeNumber(P.gridSpacingMM, 10));
+  P.cursiveSpacingMM = Math.max(0.5, sanitizeNumber(P.cursiveSpacingMM, 10));
+  P.cursiveSlantDeg = constrain(sanitizeNumber(P.cursiveSlantDeg, 70), 10, 140);
+  P.cursiveMajorEvery = Math.max(1, Math.floor(sanitizeNumber(P.cursiveMajorEvery, 4)));
+  P.previewScale = Math.max(0.1, sanitizeNumber(P.previewScale, 1));
+  P.chaikinCornerCut = constrain(sanitizeNumber(P.chaikinCornerCut, 0.25), 0.05, 0.45);
+  P.anchorRadiusMM = Math.max(0.2, sanitizeNumber(P.anchorRadiusMM, 1.25));
+  P.hoverRadiusMM = Math.max(P.anchorRadiusMM, sanitizeNumber(P.hoverRadiusMM, 2.8));
+
+  for (const strokeData of strokes) {
+    strokeData.brushWidthMM = Math.max(0.1, sanitizeNumber(strokeData.brushWidthMM, P.brushWidthMM));
+    strokeData.flatNibWidthMM = Math.max(
+      0.1,
+      sanitizeNumber(strokeData.flatNibWidthMM, P.flatNibWidthMM)
+    );
+    strokeData.flatNibAngleDeg = sanitizeNumber(strokeData.flatNibAngleDeg, P.flatNibAngleDeg);
+    strokeData.chaikinCornerCut = constrain(
+      sanitizeNumber(strokeData.chaikinCornerCut, P.chaikinCornerCut),
+      0.05,
+      0.45
+    );
+    if (typeof strokeData.smoothingMode !== "string") {
+      strokeData.smoothingMode = P.smoothingMode;
+    }
+  }
 }
 
 function fmt(value) {

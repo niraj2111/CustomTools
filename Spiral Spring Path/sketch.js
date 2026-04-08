@@ -15,8 +15,12 @@ let cnv;
 let anchorFolder;
 let gridFolder;
 let gridTypeControlBlades = [];
+let spineStyles = [];
+let activeSpineIdx = 0;
 let hoveredAnchorIndex = -1;
 let draggedAnchorIndex = -1;
+let hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+let draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
 let selectionMode = false;
 let selectedAnchorIndices = new Set();
 let marqueeSelection = null;
@@ -25,6 +29,7 @@ let cachedRenderSpinePaths = [];
 let cachedArcLengthSampleGroups = [];
 let cachedSpringPaths = [];
 let currentDisplayScale = 1;
+let pinchGestureState = null;
 
 const P = {
   canvasWMM: 148,
@@ -55,8 +60,8 @@ const P = {
   hoverColor: "#ffd166",
   selectionColor: "#22c55e",
   coilAmplitudeMM: 6,
-  coilPitchMM: 2,
-  samplesPerTurn: 48,
+  coilPitchMM: 5,
+  samplesPerTurn: 18,
   orbitMode: "blackLetter",
   spineSmoothing: 4,
   spineSampleStepMM: 2,
@@ -70,6 +75,8 @@ const P = {
   presetRows: 10,
   presetSeed: 42,
   presetPointCount: 64,
+  presetTurnBias: 1.35,
+  presetStraightPenalty: 2.4,
   springArcRadiusMM: 8,
   showSpring: true,
   svgFilename: "Spiral-Spring-Path.svg",
@@ -78,6 +85,8 @@ const P = {
 const spinePoints = [];
 
 function setup() {
+  spineStyles = [createSpineStyle()];
+  activeSpineIdx = 0;
   const size = getCanvasPixelSize();
   cnv = createCanvas(size.width, size.height);
   cnv.parent("wrap");
@@ -110,7 +119,7 @@ function draw() {
       drawSpine();
     }
 
-    if (P.showSpring) {
+    if (spineStyles.some((style) => (style || createSpineStyle()).showSpring)) {
       drawSpring();
     }
 
@@ -136,7 +145,13 @@ function mousePressed() {
   }
 
   if (hoveredAnchorIndex >= 0) {
+    if (hoveredAnchorMeta.spineIdx !== activeSpineIdx) {
+      selectedAnchorIndices = new Set();
+    }
+    activeSpineIdx = hoveredAnchorMeta.spineIdx;
     draggedAnchorIndex = hoveredAnchorIndex;
+    draggedAnchorMeta = { ...hoveredAnchorMeta };
+    refreshAnchorMonitor();
     return;
   }
 
@@ -172,6 +187,7 @@ function mouseDragged() {
   }
 
   spinePoints[draggedAnchorIndex] = point;
+  draggedAnchorMeta.flatIdx = draggedAnchorIndex;
   updateHoveredAnchor();
   invalidateGeometry();
   redraw();
@@ -187,6 +203,7 @@ function mouseReleased() {
     refreshAnchorMonitor();
   }
   draggedAnchorIndex = -1;
+  draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
 }
 
 function mouseMoved() {
@@ -203,6 +220,8 @@ function keyPressed() {
     marqueeSelection = null;
     hoveredAnchorIndex = -1;
     draggedAnchorIndex = -1;
+    hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+    draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
     redraw();
     return;
   }
@@ -226,6 +245,9 @@ function keyPressed() {
   spinePoints.splice(hoveredAnchorIndex, 1);
   hoveredAnchorIndex = -1;
   draggedAnchorIndex = -1;
+  hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  syncSpineStylesWithSegments();
   invalidateGeometry();
   refreshAnchorMonitor();
   redraw();
@@ -237,14 +259,14 @@ function applyPreset() {
     return;
   }
 
-  spinePoints.length = 0;
+  replaceActiveSpinePoints(nextPoints);
   selectedAnchorIndices = new Set();
   marqueeSelection = null;
-  for (const point of nextPoints) {
-    spinePoints.push(point);
-  }
   hoveredAnchorIndex = -1;
   draggedAnchorIndex = -1;
+  hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  syncSpineStylesWithSegments();
   selectedAnchorIndices = new Set();
   marqueeSelection = null;
   invalidateGeometry();
@@ -379,15 +401,20 @@ function withPaperClip(widthMM, heightMM, fn) {
 
 function drawSpine() {
   const renderPaths = cachedRenderSpinePaths;
-  if (renderPaths.length === 0) {
+  const segments = getSpineSegments();
+  if (renderPaths.length === 0 || segments.length === 0) {
     return;
   }
 
-  stroke(P.spineColor);
-  strokeWeight(P.spineStrokeMM);
   noFill();
 
-  for (const renderPoints of renderPaths) {
+  for (let segmentIndex = 0; segmentIndex < renderPaths.length; segmentIndex += 1) {
+    const renderPoints = renderPaths[segmentIndex];
+    const style = spineStyles[segmentIndex] || createSpineStyle();
+    stroke(style.spineColor);
+    strokeWeight(P.spineStrokeMM);
+    drawingContext.lineCap = "round";
+    drawingContext.lineJoin = "round";
     if (renderPoints.length === 1) {
       point(renderPoints[0].x, renderPoints[0].y);
       continue;
@@ -402,30 +429,36 @@ function drawSpine() {
 }
 
 function drawAnchors() {
+  let spineIdx = 0;
+  let anchorIdx = 0;
   for (let i = 0; i < spinePoints.length; i += 1) {
     const point = spinePoints[i];
     if (!point) {
+      spineIdx += 1;
+      anchorIdx = 0;
       continue;
     }
+    const style = spineStyles[spineIdx] || createSpineStyle();
     const isHovered = i === hoveredAnchorIndex;
     const isDragged = i === draggedAnchorIndex;
-    const isSelected = selectedAnchorIndices.has(i);
+    const isSelected = spineIdx === activeSpineIdx && selectedAnchorIndices.has(i);
 
     if (isHovered || isDragged) {
       stroke(P.hoverColor);
       strokeWeight(0.35);
-      fill(P.anchorColor);
+      fill(style.anchorColor);
       circle(point.x, point.y, P.hoverRadiusMM * 2);
     } else if (isSelected) {
       stroke(P.selectionColor);
       strokeWeight(0.35);
-      fill(P.anchorColor);
+      fill(style.anchorColor);
       circle(point.x, point.y, P.hoverRadiusMM * 2);
     } else {
       noStroke();
-      fill(P.anchorColor);
+      fill(style.anchorColor);
     }
     circle(point.x, point.y, P.anchorRadiusMM * 2);
+    anchorIdx += 1;
   }
 }
 
@@ -451,19 +484,30 @@ function drawSpring() {
     return;
   }
 
-  stroke(P.springColor);
-  strokeWeight(P.springStrokeMM);
   noFill();
-  for (const springPath of springPaths) {
-    if (springPath.length < 2) {
+  drawingContext.globalCompositeOperation = "multiply";
+  for (let segmentIndex = 0; segmentIndex < springPaths.length; segmentIndex += 1) {
+    const style = spineStyles[segmentIndex] || createSpineStyle();
+    if (!style.showSpring) {
       continue;
     }
-    beginShape();
-    for (const point of springPath) {
-      vertex(point.x, point.y);
+    const springGroup = springPaths[segmentIndex];
+    stroke(style.springColor);
+    strokeWeight(P.springStrokeMM);
+    drawingContext.lineCap = "round";
+    drawingContext.lineJoin = "round";
+    for (const springPath of springGroup) {
+      if (springPath.length < 2) {
+        continue;
+      }
+      beginShape();
+      for (const point of springPath) {
+        vertex(point.x, point.y);
+      }
+      endShape();
     }
-    endShape();
   }
+  drawingContext.globalCompositeOperation = "source-over";
 }
 
 function generateSpringPaths() {
@@ -472,19 +516,25 @@ function generateSpringPaths() {
   for (let i = 0; i < cachedRenderSpinePaths.length; i += 1) {
     const renderPath = cachedRenderSpinePaths[i];
     const spineSamples = cachedArcLengthSampleGroups[i] || [];
+    const springSettings = spineStyles[i] || createSpineStyle();
     if (renderPath.length < 2 || spineSamples.length < 2) {
       continue;
     }
 
-    if (P.orbitMode === "blackLetter") {
-      paths.push(...generateBlackLetterPaths(renderPath));
+    if (!springSettings.showSpring) {
+      paths.push([]);
       continue;
     }
 
-    const pitch = Math.max(0.5, P.coilPitchMM);
-    const amplitude = Math.max(0, P.coilAmplitudeMM);
-    if (P.orbitMode === "offsetPaths") {
-      paths.push(...generateOffsetSpringPaths(spineSamples));
+    if (springSettings.orbitMode === "blackLetter") {
+      paths.push(generateBlackLetterPaths(renderPath, springSettings));
+      continue;
+    }
+
+    const pitch = Math.max(0.5, springSettings.coilPitchMM);
+    const amplitude = Math.max(0, springSettings.coilAmplitudeMM);
+    if (springSettings.orbitMode === "offsetPaths") {
+      paths.push(generateOffsetSpringPaths(spineSamples, springSettings));
       continue;
     }
 
@@ -493,25 +543,31 @@ function generateSpringPaths() {
     for (let sampleIndex = 0; sampleIndex < spineSamples.length; sampleIndex += 1) {
       const sample = spineSamples[sampleIndex];
       const phase = (sample.distance / pitch) * TWO_PI_VALUE;
-      const offset = getOrbitOffset(phase, amplitude, sample.distance, pitch);
+      const offset = getOrbitOffset(
+        phase,
+        amplitude,
+        sample.distance,
+        pitch,
+        springSettings.orbitMode
+      );
       points.push({
         x: sample.x + sample.normalX * offset,
         y: sample.y + sample.normalY * offset,
       });
     }
 
-    if (P.orbitMode === "arcTurns") {
-      paths.push(
+    if (springSettings.orbitMode === "arcTurns") {
+      paths.push([
         buildRoundedCornerPolyline(
           removeSequentialDuplicates(points),
-          Math.max(0, P.springArcRadiusMM),
-          getRoundedCornerStep(P.springArcRadiusMM)
+          Math.max(0, springSettings.springArcRadiusMM),
+          getRoundedCornerStep(springSettings.springArcRadiusMM, springSettings.spineSampleStepMM)
         )
-      );
+      ]);
       continue;
     }
 
-    paths.push(points);
+    paths.push([points]);
   }
 
   return paths;
@@ -519,15 +575,17 @@ function generateSpringPaths() {
 
 function getRenderSpinePaths() {
   const spines = getSpineSegments();
-  return spines.map((segment) => getRenderPathForSegment(segment)).filter((segment) => segment.length > 0);
+  return spines
+    .map((segment, index) => getRenderPathForSegment(segment, spineStyles[index] || createSpineStyle()))
+    .filter((segment) => segment.length > 0);
 }
 
-function getRenderPathForSegment(segment) {
+function getRenderPathForSegment(segment, springSettings = P) {
   if (segment.length <= 2) {
     return segment.map(copyPoint);
   }
 
-  const iterations = Math.max(0, Math.floor(P.spineSmoothing));
+  const iterations = Math.max(0, Math.floor(springSettings.spineSmoothing));
   let points = segment.map(copyPoint);
 
   for (let i = 0; i < iterations; i += 1) {
@@ -559,28 +617,51 @@ function chaikin(points) {
   return next;
 }
 
-function getArcLengthSamplesForPath(renderPoints) {
+function getArcLengthSamplesForPath(renderPoints, springSettings = P) {
   if (renderPoints.length < 2) {
     return [];
   }
 
-  const totalLength = getPolylineLength(renderPoints);
-  if (totalLength <= 0.0001) {
+  const segments = [];
+  let totalLength = 0;
+  for (let i = 0; i < renderPoints.length - 1; i += 1) {
+    const a = renderPoints[i];
+    const b = renderPoints[i + 1];
+    const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+    if (segLen > 0.0001) {
+      segments.push({ a, b, segLen, startDist: totalLength });
+      totalLength += segLen;
+    }
+  }
+
+  if (segments.length === 0 || totalLength <= 0.0001) {
     return [];
   }
 
-  const pitch = Math.max(0.5, P.coilPitchMM);
-  const samplesPerTurn = Math.max(8, Math.floor(P.samplesPerTurn));
-  const step = Math.min(Math.max(0.25, P.spineSampleStepMM), pitch / 2, pitch / samplesPerTurn);
+  const pitch = Math.max(0.5, springSettings.coilPitchMM);
+  const samplesPerTurn = Math.max(8, Math.floor(springSettings.samplesPerTurn));
+  const step = Math.min(
+    Math.max(0.25, springSettings.spineSampleStepMM),
+    pitch / 2,
+    pitch / samplesPerTurn
+  );
   const sampleCount = Math.max(2, Math.ceil(totalLength / step));
   const samples = [];
+  let currentSegIdx = 0;
 
   for (let i = 0; i <= sampleCount; i += 1) {
     const distance = i === sampleCount ? totalLength : Math.min(i * step, totalLength);
-    const center = samplePolylineAtDistance(renderPoints, distance);
+    while (
+      currentSegIdx < segments.length - 1 &&
+      segments[currentSegIdx].startDist + segments[currentSegIdx].segLen < distance - 0.0001
+    ) {
+      currentSegIdx += 1;
+    }
+    const seg = segments[currentSegIdx];
+    const t = seg.segLen > 0 ? (distance - seg.startDist) / seg.segLen : 0;
     samples.push({
-      x: center.x,
-      y: center.y,
+      x: lerp(seg.a.x, seg.b.x, t),
+      y: lerp(seg.a.y, seg.b.y, t),
       distance,
     });
   }
@@ -604,7 +685,9 @@ function ensureGeometryCache() {
   }
 
   cachedRenderSpinePaths = getRenderSpinePaths();
-  cachedArcLengthSampleGroups = cachedRenderSpinePaths.map((path) => getArcLengthSamplesForPath(path));
+  cachedArcLengthSampleGroups = cachedRenderSpinePaths.map((path, index) =>
+    getArcLengthSamplesForPath(path, spineStyles[index] || createSpineStyle())
+  );
   cachedSpringPaths = generateSpringPaths();
   geometryDirty = false;
 }
@@ -667,6 +750,8 @@ function buildPresetPoints(mode) {
       return buildSeedCurvePreset();
     case "seedFill":
       return buildSeedFillPreset();
+    case "hamiltonian":
+      return buildHamiltonianPreset();
     case "none":
     default:
       return null;
@@ -715,17 +800,40 @@ function buildSeedCurvePreset() {
   const rng = mulberry32(Math.floor(P.presetSeed));
   const maxPoints = Math.max(2, Math.floor(P.presetPointCount));
   const points = [];
+  const visited = new Set();
   let col = Math.floor(rng() * cols);
   let row = Math.floor(rng() * rows);
   let lastDir = null;
+
+  function keyOf(nextCol, nextRow) {
+    return `${nextCol},${nextRow}`;
+  }
+
+  function getVisitedCentroid() {
+    if (points.length === 0) {
+      return { x: col, y: row };
+    }
+    let sumX = 0;
+    let sumY = 0;
+    for (const point of points) {
+      sumX += (point.x - inset) / Math.max(dx, 0.0001);
+      sumY += (point.y - inset) / Math.max(dy, 0.0001);
+    }
+    return {
+      x: sumX / points.length,
+      y: sumY / points.length,
+    };
+  }
 
   for (let i = 0; i < maxPoints; i += 1) {
     points.push({
       x: inset + col * dx,
       y: inset + row * dy,
     });
+    visited.add(keyOf(col, row));
 
     const candidates = [];
+    const centroid = getVisitedCentroid();
     for (let dRow = -1; dRow <= 1; dRow += 1) {
       for (let dCol = -1; dCol <= 1; dCol += 1) {
         if (dRow === 0 && dCol === 0) {
@@ -738,14 +846,28 @@ function buildSeedCurvePreset() {
           continue;
         }
 
-        const sameAsLast =
+        const alreadyVisited = visited.has(keyOf(nextCol, nextRow));
+        if (alreadyVisited) {
+          continue;
+        }
+
+        const reversesLast =
           lastDir && lastDir.dCol === -dCol && lastDir.dRow === -dRow;
+        const continuesLast =
+          lastDir && lastDir.dCol === dCol && lastDir.dRow === dRow;
+        const spreadBias = Math.hypot(nextCol - centroid.x, nextRow - centroid.y);
+        const centerBias = Math.hypot(nextCol - (cols - 1) * 0.5, nextRow - (rows - 1) * 0.5);
         candidates.push({
           nextCol,
           nextRow,
           dCol,
           dRow,
-          score: rng() + (sameAsLast ? -0.4 : 0),
+          score:
+            spreadBias * 1.4 +
+            centerBias * 0.12 +
+            (continuesLast ? 0.35 : 0) -
+            (reversesLast ? 1.2 : 0) +
+            rng() * 0.25,
         });
       }
     }
@@ -755,7 +877,8 @@ function buildSeedCurvePreset() {
     }
 
     candidates.sort((a, b) => b.score - a.score);
-    const next = candidates[0];
+    const pickIndex = candidates.length > 2 && rng() < 0.18 ? 1 : 0;
+    const next = candidates[pickIndex];
     col = next.nextCol;
     row = next.nextRow;
     lastDir = { dCol: next.dCol, dRow: next.dRow };
@@ -785,6 +908,99 @@ function buildSeedFillPreset() {
   }));
 
   return snapPresetPoints(points);
+}
+
+function buildHamiltonianPreset() {
+  const inset = getPresetInset();
+  const cols = Math.max(2, Math.floor(P.presetCols));
+  const rows = Math.max(2, Math.floor(P.presetRows));
+  const usableW = Math.max(10, P.canvasWMM - inset * 2);
+  const usableH = Math.max(10, P.canvasHMM - inset * 2);
+  const dx = cols <= 1 ? 0 : usableW / (cols - 1);
+  const dy = rows <= 1 ? 0 : usableH / (rows - 1);
+  const rng = mulberry32(Math.floor(P.presetSeed));
+
+  const visited = new Array(rows).fill(null).map(() => new Array(cols).fill(false));
+  const path = [];
+
+  function getNeighbors(col, row) {
+    const result = [];
+    const directions = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ];
+
+    for (const [dCol, dRow] of directions) {
+      const nextCol = col + dCol;
+      const nextRow = row + dRow;
+      if (
+        nextCol >= 0 &&
+        nextCol < cols &&
+        nextRow >= 0 &&
+        nextRow < rows &&
+        !visited[nextRow][nextCol]
+      ) {
+        result.push({ col: nextCol, row: nextRow });
+      }
+    }
+
+    return result;
+  }
+
+  function solve(col, row) {
+    visited[row][col] = true;
+    path.push({ x: inset + col * dx, y: inset + row * dy });
+    if (path.length >= cols * rows) {
+      return true;
+    }
+
+    const neighbors = getNeighbors(col, row)
+      .map((neighbor) => {
+        const previous = path[path.length - 2];
+        const previousCol = previous ? Math.round((previous.x - inset) / Math.max(dx, 0.0001)) : null;
+        const previousRow = previous ? Math.round((previous.y - inset) / Math.max(dy, 0.0001)) : null;
+        const isStraight =
+          previousCol !== null &&
+          previousRow !== null &&
+          neighbor.col - col === col - previousCol &&
+          neighbor.row - row === row - previousRow;
+        const turns = previousCol !== null && previousRow !== null && !isStraight;
+        const straightPenalty = isStraight ? P.presetStraightPenalty : 0;
+        const turnBonus = turns ? -P.presetTurnBias : 0;
+        return {
+          ...neighbor,
+          score:
+            getNeighbors(neighbor.col, neighbor.row).length * 2 +
+            straightPenalty +
+            turnBonus +
+            rng() * 0.4,
+        };
+      })
+      .sort((a, b) => a.score - b.score);
+
+    for (const next of neighbors) {
+      if (solve(next.col, next.row)) {
+        return true;
+      }
+    }
+
+    if (path.length >= Math.min(rows * cols, Math.max(2, Math.floor(P.presetPointCount)))) {
+      return true;
+    }
+
+    if (path.length < 8) {
+      path.pop();
+      visited[row][col] = false;
+      return false;
+    }
+
+    return true;
+  }
+
+  solve(0, 0);
+  return snapPresetPoints(path);
 }
 
 function generateSeedFillCells(cols, rows, targetCount, seed) {
@@ -884,8 +1100,11 @@ function buildFastSeedFillPath(cols, rows, targetCount, rng) {
       const onwardOptions = countUnvisitedNeighbors(nextCol, nextRow);
       const continuesStraight = currentDir === direction.dir;
       const turns = currentDir !== "" && currentDir !== direction.dir;
-      const straightPenalty = continuesStraight ? 2.4 + currentStraightRun * 1.2 : 0;
-      const turnBonus = turns ? -1.35 : 0;
+      const straightPenalty =
+        continuesStraight
+          ? P.presetStraightPenalty + currentStraightRun * (P.presetStraightPenalty * 0.5)
+          : 0;
+      const turnBonus = turns ? -P.presetTurnBias : 0;
       const deadEndPenalty = onwardOptions === 0 ? 3 : 0;
       const boundaryPenalty = countBoundaryTouches(nextCol, nextRow) * 0.65;
       const axisPenalty = countAxisBias(getAxis(direction.dir)) * 0.18;
@@ -954,16 +1173,16 @@ function getPresetInset() {
   return constrain(P.presetInsetMM, 0, Math.min(P.canvasWMM, P.canvasHMM) * 0.45);
 }
 
-function getRoundedCornerStep(radiusMM) {
+function getRoundedCornerStep(radiusMM, sampleStepMM = P.spineSampleStepMM) {
   const radius = Math.max(0.25, radiusMM);
-  return Math.max(0.2, Math.min(P.spineSampleStepMM, radius * 0.3, 2));
+  return Math.max(0.2, Math.min(sampleStepMM, radius * 0.3, 2));
 }
 
-function generateOffsetSpringPaths(spineSamples) {
-  const lineCount = Math.max(1, Math.floor(P.offsetLineCount));
-  const gap = Math.max(0, P.offsetGapMM);
-  const radius = Math.max(0, P.springArcRadiusMM);
-  const step = getRoundedCornerStep(radius);
+function generateOffsetSpringPaths(spineSamples, springSettings = P) {
+  const lineCount = Math.max(1, Math.floor(springSettings.offsetLineCount));
+  const gap = Math.max(0, springSettings.offsetGapMM);
+  const radius = Math.max(0, springSettings.springArcRadiusMM);
+  const step = getRoundedCornerStep(radius, springSettings.spineSampleStepMM);
   const centerOffset = (lineCount - 1) * 0.5;
   const paths = [];
 
@@ -986,14 +1205,14 @@ function generateOffsetSpringPaths(spineSamples) {
   return paths;
 }
 
-function generateBlackLetterPaths(renderPoints) {
+function generateBlackLetterPaths(renderPoints, springSettings = P) {
   if (renderPoints.length < 2) {
     return [];
   }
 
-  const spacing = Math.max(0.5, P.coilPitchMM);
-  const nibWidth = Math.max(0.1, P.blackLetterNibWidthMM);
-  const angle = radians(P.blackLetterAngleDeg);
+  const spacing = Math.max(0.5, springSettings.coilPitchMM);
+  const nibWidth = Math.max(0.1, springSettings.blackLetterNibWidthMM);
+  const angle = radians(springSettings.blackLetterAngleDeg);
   const halfWidthX = Math.cos(angle) * nibWidth * 0.5;
   const halfWidthY = Math.sin(angle) * nibWidth * 0.5;
   const centers = getPolylineStampPoints(renderPoints, spacing);
@@ -1179,6 +1398,10 @@ function handleSelectionMousePressed() {
   }
 
   if (hoveredAnchorIndex >= 0) {
+    if (hoveredAnchorMeta.spineIdx !== activeSpineIdx) {
+      selectedAnchorIndices = new Set();
+    }
+    activeSpineIdx = hoveredAnchorMeta.spineIdx;
     if (keyIsDown(SHIFT)) {
       toggleAnchorSelection(hoveredAnchorIndex);
     } else {
@@ -1223,9 +1446,10 @@ function finalizeSelectionMarquee() {
   }
 
   if (!isClickSelection) {
+    const activeFlatIndices = new Set(getFlatIndicesForSpine(activeSpineIdx));
     for (let i = 0; i < spinePoints.length; i += 1) {
       const point = spinePoints[i];
-      if (!point) {
+      if (!point || !activeFlatIndices.has(i)) {
         continue;
       }
       if (isPointInsideRect(point, rect)) {
@@ -1313,39 +1537,45 @@ function shiftSelectedIndicesAfterRemoval(removedIndex) {
 }
 
 function updateHoveredAnchor() {
-  hoveredAnchorIndex = findHoveredAnchorIndex();
+  hoveredAnchorMeta = findHoveredAnchorMeta();
+  hoveredAnchorIndex = hoveredAnchorMeta.flatIdx;
 }
 
-function findHoveredAnchorIndex() {
+function findHoveredAnchorMeta() {
   const point = getMousePointMM();
   if (!point) {
-    return -1;
+    return { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
   }
 
   const threshold = Math.max(P.hoverRadiusMM, P.anchorRadiusMM);
   const thresholdSq = threshold * threshold;
-  let closestIndex = -1;
+  let closest = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
   let closestDistSq = Infinity;
+  let spineIdx = 0;
+  let anchorIdx = 0;
 
   for (let i = 0; i < spinePoints.length; i += 1) {
     const anchor = spinePoints[i];
     if (!anchor) {
+      spineIdx += 1;
+      anchorIdx = 0;
       continue;
     }
     const dx = anchor.x - point.x;
     const dy = anchor.y - point.y;
     const distSq = dx * dx + dy * dy;
     if (distSq <= thresholdSq && distSq < closestDistSq) {
-      closestIndex = i;
+      closest = { spineIdx, anchorIdx, flatIdx: i };
       closestDistSq = distSq;
     }
+    anchorIdx += 1;
   }
 
-  return closestIndex;
+  return closest;
 }
 
-function getOrbitOffset(phase, amplitude, distance, pitch) {
-  switch (P.orbitMode) {
+function getOrbitOffset(phase, amplitude, distance, pitch, orbitMode = P.orbitMode) {
+  switch (orbitMode) {
     case "cosine":
       return Math.cos(phase) * amplitude;
     case "triangle":
@@ -1426,6 +1656,7 @@ function buildPane() {
       spaceFill: "spaceFill",
       seedCurve: "seedCurve",
       seedFill: "seedFill",
+      hamiltonian: "hamiltonian",
     },
     label: "Preset",
   });
@@ -1459,80 +1690,27 @@ function buildPane() {
     step: 1,
     label: "Points",
   });
-  presetFolder.addButton({ title: "Apply Preset" }).on("click", applyPreset);
-
-  const springFolder = pane.addFolder({ title: "Spring" });
-  springFolder.addInput(P, "orbitMode", {
-    options: {
-      sine: "sine",
-      cosine: "cosine",
-      triangle: "triangle",
-      square: "square",
-      saw: "saw",
-      lissajous: "lissajous",
-      damped: "damped",
-      arcTurns: "arcTurns",
-      offsetPaths: "offsetPaths",
-      blackLetter: "blackLetter",
-    },
-    label: "Orbit",
-  });
-  springFolder.addInput(P, "coilAmplitudeMM", {
+  presetFolder.addInput(P, "presetTurnBias", {
     min: 0,
-    max: 80,
-    step: 0.1,
-    label: "Amplitude",
-  });
-  springFolder.addInput(P, "coilPitchMM", { min: 1, max: 100, step: 0.1, label: "Pitch" });
-  springFolder.addInput(P, "samplesPerTurn", {
-    min: 8,
-    max: 240,
-    step: 1,
-    label: "Samples",
-  });
-  springFolder.addInput(P, "offsetLineCount", {
-    min: 1,
-    max: 40,
-    step: 1,
-    label: "Num Lines",
-  });
-  springFolder.addInput(P, "offsetGapMM", {
-    min: 0,
-    max: 40,
-    step: 0.1,
-    label: "Gap",
-  });
-  springFolder.addInput(P, "spineSmoothing", {
-    min: 0,
-    max: 5,
-    step: 1,
-    label: "Corners",
-  });
-  springFolder.addInput(P, "spineSampleStepMM", {
-    min: 0.25,
     max: 10,
-    step: 0.25,
-    label: "Sample Step",
+    step: 0.1,
+    label: "Turn Bias",
   });
-  springFolder.addInput(P, "springArcRadiusMM", {
+  presetFolder.addInput(P, "presetStraightPenalty", {
     min: 0,
-    max: 80,
+    max: 10,
     step: 0.1,
-    label: "Arc Radius",
+    label: "Straight Pen",
   });
-  springFolder.addInput(P, "blackLetterAngleDeg", {
-    min: -180,
-    max: 180,
-    step: 1,
-    label: "Nib Angle",
+  presetFolder.addButton({ title: "New Seed" }).on("click", () => {
+    if (P.presetMode === "none") {
+      return;
+    }
+    P.presetSeed = Math.floor(Math.random() * 1000000);
+    pane.refresh();
+    applyPreset();
   });
-  springFolder.addInput(P, "blackLetterNibWidthMM", {
-    min: 0.1,
-    max: 80,
-    step: 0.1,
-    label: "Nib Width",
-  });
-  springFolder.addInput(P, "showSpring", { label: "Show Spring" });
+  presetFolder.addButton({ title: "Apply Preset" }).on("click", applyPreset);
 
   const styleFolder = pane.addFolder({ title: "Style" });
   styleFolder.addInput(P, "bg", { label: "BG" });
@@ -1591,15 +1769,20 @@ function buildPane() {
 function hookUI() {
   document.getElementById("undoBtn").addEventListener("click", () => {
     removeLastSpinePoint();
+    syncSpineStylesWithSegments();
     refreshAnchorMonitor();
     invalidateGeometry();
     redraw();
   });
 
   document.getElementById("clearBtn").addEventListener("click", () => {
-    spinePoints.length = 0;
+    clearActiveSpine();
     selectedAnchorIndices = new Set();
     marqueeSelection = null;
+    hoveredAnchorIndex = -1;
+    draggedAnchorIndex = -1;
+    hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+    draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
     refreshAnchorMonitor();
     invalidateGeometry();
     redraw();
@@ -1613,7 +1796,104 @@ function hookUI() {
     exportSpineSVG();
   });
 
+  const wrap = document.getElementById("wrap");
+  wrap.addEventListener(
+    "wheel",
+    (event) => {
+      if (!event.altKey && !event.ctrlKey && !event.metaKey) {
+        return;
+      }
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? 0.9 : 1.1;
+      applyPreviewZoom(delta, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+    },
+    { passive: false }
+  );
+
+  wrap.addEventListener(
+    "touchstart",
+    (event) => {
+      if (event.touches.length !== 2) {
+        pinchGestureState = null;
+        return;
+      }
+      event.preventDefault();
+      pinchGestureState = getPinchGestureSnapshot(event.touches);
+    },
+    { passive: false }
+  );
+
+  wrap.addEventListener(
+    "touchmove",
+    (event) => {
+      if (event.touches.length !== 2) {
+        pinchGestureState = null;
+        return;
+      }
+      event.preventDefault();
+      const nextGesture = getPinchGestureSnapshot(event.touches);
+      if (!pinchGestureState || pinchGestureState.distance <= 0 || nextGesture.distance <= 0) {
+        pinchGestureState = nextGesture;
+        return;
+      }
+
+      const zoomFactor = nextGesture.distance / pinchGestureState.distance;
+      applyPreviewZoom(zoomFactor, nextGesture.center);
+      pinchGestureState = nextGesture;
+    },
+    { passive: false }
+  );
+
+  wrap.addEventListener("touchend", () => {
+    pinchGestureState = null;
+  });
+  wrap.addEventListener("touchcancel", () => {
+    pinchGestureState = null;
+  });
+
   window.addEventListener("resize", updateCanvasDisplaySize);
+}
+
+function getPinchGestureSnapshot(touches) {
+  const first = touches[0];
+  const second = touches[1];
+  return {
+    distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY),
+    center: {
+      clientX: (first.clientX + second.clientX) * 0.5,
+      clientY: (first.clientY + second.clientY) * 0.5,
+    },
+  };
+}
+
+function applyPreviewZoom(multiplier, pointer) {
+  if (!cnv || !pointer || !Number.isFinite(multiplier) || multiplier <= 0) {
+    return;
+  }
+
+  const wrap = document.getElementById("wrap");
+  const previousRect = cnv.elt.getBoundingClientRect();
+  const previousScale = P.previewScale;
+  const nextScale = constrain(previousScale * multiplier, 0.1, 10);
+  if (Math.abs(nextScale - previousScale) < 0.0001) {
+    return;
+  }
+
+  const relativeX = previousRect.width > 0 ? (pointer.clientX - previousRect.left) / previousRect.width : 0.5;
+  const relativeY = previousRect.height > 0 ? (pointer.clientY - previousRect.top) / previousRect.height : 0.5;
+
+  P.previewScale = nextScale;
+  P.fitToViewport = false;
+  pane.refresh();
+  updateCanvasDisplaySize();
+
+  const nextRect = cnv.elt.getBoundingClientRect();
+  wrap.scrollLeft += (nextRect.width - previousRect.width) * relativeX;
+  wrap.scrollTop += (nextRect.height - previousRect.height) * relativeY;
+  redraw();
 }
 
 function refreshAnchorMonitor() {
@@ -1624,15 +1904,109 @@ function refreshAnchorMonitor() {
   anchorFolder.dispose();
   const segments = getSpineSegments();
   const pointCount = spinePoints.filter(Boolean).length;
-  anchorFolder = pane.addFolder({ title: `Spines (${segments.length})` });
-  anchorFolder.addMonitor({ count: segments.length }, "count", { label: "Spines" });
+  const activePoints = segments[activeSpineIdx] || [];
+  const activeStyle = spineStyles[activeSpineIdx] || createSpineStyle();
+  anchorFolder = pane.addFolder({ title: `Active Spine (${activeSpineIdx + 1})` });
+  anchorFolder.addMonitor({ count: Math.max(segments.length, spineStyles.length) }, "count", {
+    label: "Spines",
+  });
   anchorFolder.addMonitor({ pointCount }, "pointCount", { label: "Points" });
   anchorFolder.addMonitor({ selectedCount: selectedAnchorIndices.size }, "selectedCount", {
     label: "Selected",
   });
 
-  const preview = spinePoints
-    .filter(Boolean)
+  const layersFolder = anchorFolder.addFolder({ title: "Layers" });
+  if (segments.length === 0) {
+    layersFolder.addMonitor({ empty: "No spines yet" }, "empty", { label: "State" });
+  } else {
+    segments.forEach((segment, index) => {
+      const isActive = index === activeSpineIdx;
+      const label = `${isActive ? "●" : "○"} Spine ${index + 1} (${segment.length} pts)`;
+      layersFolder.addButton({ title: label }).on("click", () => {
+        setActiveSpine(index);
+      });
+    });
+  }
+
+  const colorFolder = anchorFolder.addFolder({ title: "Colors" });
+  colorFolder.addInput(activeStyle, "springColor", { label: "Spring" });
+  colorFolder.addInput(activeStyle, "spineColor", { label: "Spine" });
+  colorFolder.addInput(activeStyle, "anchorColor", { label: "Anchors" });
+
+  const springFolder = anchorFolder.addFolder({ title: "Spring Settings" });
+  springFolder.addInput(activeStyle, "orbitMode", {
+    options: {
+      sine: "sine",
+      cosine: "cosine",
+      triangle: "triangle",
+      square: "square",
+      saw: "saw",
+      lissajous: "lissajous",
+      damped: "damped",
+      arcTurns: "arcTurns",
+      offsetPaths: "offsetPaths",
+      blackLetter: "blackLetter",
+    },
+    label: "Orbit",
+  });
+  springFolder.addInput(activeStyle, "coilAmplitudeMM", {
+    min: 0,
+    max: 80,
+    step: 0.1,
+    label: "Amplitude",
+  });
+  springFolder.addInput(activeStyle, "coilPitchMM", { min: 1, max: 100, step: 0.1, label: "Pitch" });
+  springFolder.addInput(activeStyle, "samplesPerTurn", {
+    min: 8,
+    max: 240,
+    step: 1,
+    label: "Samples",
+  });
+  springFolder.addInput(activeStyle, "offsetLineCount", {
+    min: 1,
+    max: 40,
+    step: 1,
+    label: "Num Lines",
+  });
+  springFolder.addInput(activeStyle, "offsetGapMM", {
+    min: 0,
+    max: 40,
+    step: 0.1,
+    label: "Gap",
+  });
+  springFolder.addInput(activeStyle, "spineSmoothing", {
+    min: 0,
+    max: 5,
+    step: 1,
+    label: "Corners",
+  });
+  springFolder.addInput(activeStyle, "spineSampleStepMM", {
+    min: 0.25,
+    max: 10,
+    step: 0.25,
+    label: "Sample Step",
+  });
+  springFolder.addInput(activeStyle, "springArcRadiusMM", {
+    min: 0,
+    max: 80,
+    step: 0.1,
+    label: "Arc Radius",
+  });
+  springFolder.addInput(activeStyle, "blackLetterAngleDeg", {
+    min: -180,
+    max: 180,
+    step: 1,
+    label: "Nib Angle",
+  });
+  springFolder.addInput(activeStyle, "blackLetterNibWidthMM", {
+    min: 0.1,
+    max: 80,
+    step: 0.1,
+    label: "Nib Width",
+  });
+  springFolder.addInput(activeStyle, "showSpring", { label: "Show Spring" });
+
+  const preview = activePoints
     .slice(0, 8)
     .map((point, index) => `${index + 1}: ${fmt(point.x)}, ${fmt(point.y)}`)
     .join(" | ");
@@ -1648,7 +2022,7 @@ function refreshAnchorMonitor() {
 
 function exportSVG() {
   ensureGeometryCache();
-  const springPaths = cachedSpringPaths;
+  const segments = getSpineSegments();
   const svg = [];
 
   svg.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -1678,42 +2052,50 @@ function exportSVG() {
   }
 
   if (P.showSpine) {
-    for (const renderPath of cachedRenderSpinePaths) {
+    for (let segmentIndex = 0; segmentIndex < cachedRenderSpinePaths.length; segmentIndex += 1) {
+      const renderPath = cachedRenderSpinePaths[segmentIndex];
+      const style = spineStyles[segmentIndex] || createSpineStyle();
       if (renderPath.length < 2) {
         continue;
       }
       svg.push(
         `<path d="${polylineToPath(renderPath)}" fill="none" stroke="${escapeXML(
-          P.spineColor
+          style.spineColor
         )}" stroke-width="${fmt(P.spineStrokeMM)}"/>`
       );
     }
   }
 
-  if (P.showSpring) {
-    for (const springPath of springPaths) {
-      if (springPath.length < 2) {
+  if (spineStyles.some((style) => (style || createSpineStyle()).showSpring)) {
+    for (let segmentIndex = 0; segmentIndex < cachedSpringPaths.length; segmentIndex += 1) {
+      const style = spineStyles[segmentIndex] || createSpineStyle();
+      if (!style.showSpring) {
         continue;
       }
-      svg.push(
-        `<path d="${polylineToPath(springPath)}" fill="none" stroke="${escapeXML(
-          P.springColor
-        )}" stroke-width="${fmt(P.springStrokeMM)}"/>`
-      );
+      for (const springPath of cachedSpringPaths[segmentIndex]) {
+        if (springPath.length < 2) {
+          continue;
+        }
+        svg.push(
+          `<path d="${polylineToPath(springPath)}" fill="none" stroke="${escapeXML(
+            style.springColor
+          )}" stroke-width="${fmt(P.springStrokeMM)}"/>`
+        );
+      }
     }
   }
 
   if (P.showAnchors) {
-    svg.push(`<g fill="${escapeXML(P.anchorColor)}" stroke="none">`);
-    for (const point of spinePoints) {
-      if (!point) {
-        continue;
+    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+      const style = spineStyles[segmentIndex] || createSpineStyle();
+      svg.push(`<g fill="${escapeXML(style.anchorColor)}" stroke="none">`);
+      for (const point of segments[segmentIndex]) {
+        svg.push(
+          `<circle cx="${fmt(point.x)}" cy="${fmt(point.y)}" r="${fmt(P.anchorRadiusMM)}"/>`
+        );
       }
-      svg.push(
-        `<circle cx="${fmt(point.x)}" cy="${fmt(point.y)}" r="${fmt(P.anchorRadiusMM)}"/>`
-      );
+      svg.push("</g>");
     }
-    svg.push("</g>");
   }
 
   svg.push("</svg>");
@@ -1734,13 +2116,15 @@ function exportSpineSVG() {
       P.canvasHMM
     )}mm" viewBox="0 0 ${fmt(P.canvasWMM)} ${fmt(P.canvasHMM)}">`
   );
-  for (const renderPath of cachedRenderSpinePaths) {
+  for (let segmentIndex = 0; segmentIndex < cachedRenderSpinePaths.length; segmentIndex += 1) {
+    const renderPath = cachedRenderSpinePaths[segmentIndex];
     if (renderPath.length < 2) {
       continue;
     }
+    const style = spineStyles[segmentIndex] || createSpineStyle();
     svg.push(
       `<path d="${polylineToPath(renderPath)}" fill="none" stroke="${escapeXML(
-        P.spineColor
+        style.spineColor
       )}" stroke-width="${fmt(P.spineStrokeMM)}"/>`
     );
   }
@@ -1790,8 +2174,13 @@ function startNewSpine() {
   }
 
   spinePoints.push(null);
+  spineStyles.push(createSpineStyle());
+  activeSpineIdx = spineStyles.length - 1;
+  selectedAnchorIndices = new Set();
   hoveredAnchorIndex = -1;
   draggedAnchorIndex = -1;
+  hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
   invalidateGeometry();
   refreshAnchorMonitor();
   redraw();
@@ -1814,6 +2203,7 @@ function removeLastSpinePoint() {
   while (spinePoints.length > 0 && spinePoints[spinePoints.length - 1] === null) {
     spinePoints.pop();
   }
+  syncSpineStylesWithSegments();
 }
 
 function getSpineSvgFilename() {
@@ -1826,6 +2216,141 @@ function getSpineSvgFilename() {
   }
 
   return `${P.svgFilename}-spine.svg`;
+}
+
+function createSpineStyle() {
+  return {
+    springColor: P.springColor,
+    spineColor: P.spineColor,
+    anchorColor: P.anchorColor,
+    orbitMode: P.orbitMode,
+    coilAmplitudeMM: P.coilAmplitudeMM,
+    coilPitchMM: P.coilPitchMM,
+    samplesPerTurn: P.samplesPerTurn,
+    spineSmoothing: P.spineSmoothing,
+    spineSampleStepMM: P.spineSampleStepMM,
+    offsetLineCount: P.offsetLineCount,
+    offsetGapMM: P.offsetGapMM,
+    blackLetterAngleDeg: P.blackLetterAngleDeg,
+    blackLetterNibWidthMM: P.blackLetterNibWidthMM,
+    springArcRadiusMM: P.springArcRadiusMM,
+    showSpring: P.showSpring,
+  };
+}
+
+function setActiveSpine(index) {
+  const segmentCount = getSpineSegments().length;
+  activeSpineIdx = constrain(index, 0, Math.max(0, segmentCount - 1));
+  selectedAnchorIndices = new Set();
+  hoveredAnchorIndex = -1;
+  draggedAnchorIndex = -1;
+  hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  refreshAnchorMonitor();
+  redraw();
+}
+
+function syncSpineStylesWithSegments() {
+  const segmentCount = getSpineSegments().length;
+  while (spineStyles.length < segmentCount) {
+    spineStyles.push(createSpineStyle());
+  }
+  if (spineStyles.length > segmentCount) {
+    spineStyles.length = segmentCount;
+  }
+  activeSpineIdx = constrain(activeSpineIdx, 0, Math.max(0, segmentCount - 1));
+}
+
+function replaceActiveSpinePoints(nextPoints) {
+  const replacement = Array.isArray(nextPoints) ? nextPoints.map(copyPoint) : [];
+  const range = getFlatRangeForSpine(activeSpineIdx);
+  if (!range) {
+    spinePoints.length = 0;
+    spinePoints.push(...replacement);
+    return;
+  }
+
+  const before = spinePoints.slice(0, range.start);
+  const after = spinePoints.slice(range.end + 1);
+  spinePoints.length = 0;
+  spinePoints.push(...before, ...replacement, ...after);
+}
+
+function clearActiveSpine() {
+  const segmentCount = getSpineSegments().length;
+  if (segmentCount <= 1) {
+    spinePoints.length = 0;
+    spineStyles = [createSpineStyle()];
+    activeSpineIdx = 0;
+    return;
+  }
+
+  const range = getFlatRangeForSpine(activeSpineIdx);
+  if (!range) {
+    return;
+  }
+
+  let removeStart = range.start;
+  let removeEnd = range.end;
+  if (removeEnd + 1 < spinePoints.length && spinePoints[removeEnd + 1] === null) {
+    removeEnd += 1;
+  } else if (removeStart > 0 && spinePoints[removeStart - 1] === null) {
+    removeStart -= 1;
+  }
+
+  spinePoints.splice(removeStart, removeEnd - removeStart + 1);
+  spineStyles.splice(activeSpineIdx, 1);
+  activeSpineIdx = constrain(activeSpineIdx, 0, Math.max(0, spineStyles.length - 1));
+  syncSpineStylesWithSegments();
+}
+
+function getFlatRangeForSpine(targetSpineIdx) {
+  let spineIdx = 0;
+  let start = -1;
+  let end = -1;
+
+  for (let i = 0; i < spinePoints.length; i += 1) {
+    const point = spinePoints[i];
+    if (point === null) {
+      if (spineIdx === targetSpineIdx) {
+        break;
+      }
+      spineIdx += 1;
+      continue;
+    }
+
+    if (spineIdx === targetSpineIdx) {
+      if (start < 0) {
+        start = i;
+      }
+      end = i;
+    }
+  }
+
+  if (start < 0) {
+    if (targetSpineIdx === spineStyles.length - 1) {
+      return { start: spinePoints.length, end: spinePoints.length - 1 };
+    }
+    return null;
+  }
+
+  return { start, end };
+}
+
+function getFlatIndicesForSpine(targetSpineIdx) {
+  const indices = [];
+  let spineIdx = 0;
+  for (let i = 0; i < spinePoints.length; i += 1) {
+    const point = spinePoints[i];
+    if (!point) {
+      spineIdx += 1;
+      continue;
+    }
+    if (spineIdx === targetSpineIdx) {
+      indices.push(i);
+    }
+  }
+  return indices;
 }
 
 function polylineToPath(points) {

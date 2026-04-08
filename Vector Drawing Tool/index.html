@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Vector Drawing Tool</title>
+    <title>Calligraphy Object Tool</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link
       rel="stylesheet"
@@ -48,6 +48,8 @@
         height: 100%;
         display: grid;
         place-items: center;
+        overflow: auto;
+        touch-action: none;
       }
 
       .row {
@@ -95,7 +97,7 @@
 
       <div class="row">
         <button id="undoBtn" class="btn">Undo Point</button>
-        <button id="removeStrokeBtn" class="btn">Remove Stroke</button>
+        <button id="removeStrokeBtn" class="btn">Remove Object</button>
         <button id="clearBtn" class="btn">Clear All</button>
         <button id="svgBtn" class="btn">Export SVG</button>
         <button id="spineSvgBtn" class="btn">Export Spine SVG</button>
@@ -104,10 +106,10 @@
       <div class="hint">
         Notes:
         <ul>
-          <li>Drag to draw a new stroke.</li>
-          <li>Drag an existing anchor to edit it later.</li>
-          <li>Every drag creates a separate stroke.</li>
-          <li><code>Smoothing</code> affects preview/export, not raw editable anchors.</li>
+          <li>Drag to draw a new calligraphy object.</li>
+          <li>Each object keeps its own spine, nib settings, smoothing, and export mode.</li>
+          <li>Use the layers panel to select which object you are editing.</li>
+          <li><code>Export Spine SVG</code> is the plotter-friendly centerline output.</li>
         </ul>
       </div>
     </aside>
