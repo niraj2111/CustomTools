@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generative Vases - p5.js Sketch</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css">
+    <style>
+        :root {
+            --panel-width: 360px;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #121212;
+            display: grid;
+            grid-template-columns: var(--panel-width) 1fr;
+            height: 100vh;
+            overflow: hidden;
+            font-family: system-ui, -apple-system, sans-serif;
+            color: #eee;
+        }
+        aside {
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        main {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #0d0d0d;
+            overflow: auto;
+            position: relative;
+        }
+        #wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-width: 100%;
+            min-height: 100%;
+        }
+        canvas {
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            background: white !important;
+        }
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        button {
+            background: #333;
+            border: 1px solid #444;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #444;
+            border-color: #555;
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        .hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: auto;
+            padding: 10px 0;
+            border-top: 1px solid #333;
+        }
+        code {
+            background: #222;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <aside>
+        <div id="pane"></div>
+        <div class="btn-group">
+            <button type="button" id="randomBtn">New Random Vase</button>
+            <button type="button" id="svgBtn">Export SVG</button>
+        </div>
+        <div class="hint">
+            <strong>Controls:</strong><br>
+            - Use the sliders to adjust the vase shape.<br>
+            - Multi-line rendering creates the depth effect.<br>
+            - Exported SVG is ready for AxiDraw / Plotters.<br>
+            - <code>R</code>: New Seed | <code>S</code>: Save SVG
+        </div>
+    </aside>
+    <main id="main">
+        <div id="wrap"></div>
+    </main>
+    
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="sketch.js"></script>
+</body>
+</html>
