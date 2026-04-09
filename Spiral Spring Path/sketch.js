@@ -534,7 +534,7 @@ function generateSpringPaths() {
     const pitch = Math.max(0.5, springSettings.coilPitchMM);
     const amplitude = Math.max(0, springSettings.coilAmplitudeMM);
     if (springSettings.orbitMode === "offsetPaths") {
-      paths.push(generateOffsetSpringPaths(spineSamples, springSettings));
+      paths.push(generateOffsetSpringPaths(renderPath, springSettings));
       continue;
     }
 
@@ -1178,31 +1178,188 @@ function getRoundedCornerStep(radiusMM, sampleStepMM = P.spineSampleStepMM) {
   return Math.max(0.2, Math.min(sampleStepMM, radius * 0.3, 2));
 }
 
-function generateOffsetSpringPaths(spineSamples, springSettings = P) {
+function generateOffsetSpringPaths(renderPath, springSettings = P) {
   const lineCount = Math.max(1, Math.floor(springSettings.offsetLineCount));
   const gap = Math.max(0, springSettings.offsetGapMM);
   const radius = Math.max(0, springSettings.springArcRadiusMM);
   const step = getRoundedCornerStep(radius, springSettings.spineSampleStepMM);
   const centerOffset = (lineCount - 1) * 0.5;
+  const sourcePoints = simplifyOffsetSourcePath(renderPath, springSettings);
   const paths = [];
+
+  if (sourcePoints.length < 2) {
+    return paths;
+  }
 
   for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
     const offsetAmount = (lineIndex - centerOffset) * gap;
-    const points = [];
-
-    for (const sample of spineSamples) {
-      points.push({
-        x: sample.x + sample.normalX * offsetAmount,
-        y: sample.y + sample.normalY * offsetAmount,
-      });
-    }
-
-    paths.push(
-      buildRoundedCornerPolyline(removeSequentialDuplicates(points), radius, step)
-    );
+    paths.push(buildOffsetPolyline(sourcePoints, offsetAmount, radius, step));
   }
 
   return paths;
+}
+
+function simplifyOffsetSourcePath(points, springSettings = P) {
+  const uniquePoints = removeSequentialDuplicates(points).map(copyPoint);
+  if (uniquePoints.length <= 2) {
+    return uniquePoints;
+  }
+
+  const radius = Math.max(0, springSettings.springArcRadiusMM);
+  const sampleStep = Math.max(0.1, springSettings.spineSampleStepMM);
+  const radiusTolerance = radius > 0.0001 ? radius * 0.18 : sampleStep * 0.25;
+  const epsilon = Math.max(0.08, Math.min(sampleStep * 0.4, radiusTolerance, 0.75));
+  return removeNearlyCollinearPoints(simplifyPolylineRDP(uniquePoints, epsilon));
+}
+
+function buildOffsetPolyline(points, offsetAmount, radius, step) {
+  const segments = getOffsetSegments(points, offsetAmount);
+  if (segments.length === 0) {
+    return [];
+  }
+
+  const rawPoints = [copyPoint(segments[0].start)];
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    const current = segments[i];
+    const next = segments[i + 1];
+    const join = intersectLines(current.start, current.end, next.start, next.end);
+    appendPointIfDistinct(
+      rawPoints,
+      clampOffsetJoinPoint(join, current.end, next.start, offsetAmount, radius)
+    );
+  }
+  appendPointIfDistinct(rawPoints, segments[segments.length - 1].end);
+
+  return buildRoundedCornerPolyline(removeNearlyCollinearPoints(rawPoints), radius, step);
+}
+
+function getOffsetSegments(points, offsetAmount) {
+  const segments = [];
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const a = points[i];
+    const b = points[i + 1];
+    const tangent = normalizeVector(b.x - a.x, b.y - a.y);
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length <= 0.0001) {
+      continue;
+    }
+
+    const normal = {
+      x: -tangent.y,
+      y: tangent.x,
+    };
+    segments.push({
+      start: {
+        x: a.x + normal.x * offsetAmount,
+        y: a.y + normal.y * offsetAmount,
+      },
+      end: {
+        x: b.x + normal.x * offsetAmount,
+        y: b.y + normal.y * offsetAmount,
+      },
+    });
+  }
+
+  return segments;
+}
+
+function intersectLines(a1, a2, b1, b2) {
+  const denominator =
+    (a1.x - a2.x) * (b1.y - b2.y) - (a1.y - a2.y) * (b1.x - b2.x);
+  if (Math.abs(denominator) <= 0.000001) {
+    return null;
+  }
+
+  const detA = a1.x * a2.y - a1.y * a2.x;
+  const detB = b1.x * b2.y - b1.y * b2.x;
+  return {
+    x: (detA * (b1.x - b2.x) - (a1.x - a2.x) * detB) / denominator,
+    y: (detA * (b1.y - b2.y) - (a1.y - a2.y) * detB) / denominator,
+  };
+}
+
+function clampOffsetJoinPoint(join, currentEnd, nextStart, offsetAmount, radius) {
+  if (!join) {
+    return copyPoint(currentEnd);
+  }
+
+  const miterLimit = Math.max(radius * 4, Math.abs(offsetAmount) * 6, 6);
+  const distToCurrent = Math.hypot(join.x - currentEnd.x, join.y - currentEnd.y);
+  const distToNext = Math.hypot(join.x - nextStart.x, join.y - nextStart.y);
+  if (distToCurrent <= miterLimit && distToNext <= miterLimit) {
+    return join;
+  }
+
+  return {
+    x: (currentEnd.x + nextStart.x) * 0.5,
+    y: (currentEnd.y + nextStart.y) * 0.5,
+  };
+}
+
+function simplifyPolylineRDP(points, epsilon) {
+  if (points.length <= 2) {
+    return points.map(copyPoint);
+  }
+
+  let maxDistance = -1;
+  let splitIndex = -1;
+
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const distance = getPointToLineDistance(points[i], points[0], points[points.length - 1]);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      splitIndex = i;
+    }
+  }
+
+  if (maxDistance <= epsilon || splitIndex < 0) {
+    return [copyPoint(points[0]), copyPoint(points[points.length - 1])];
+  }
+
+  const left = simplifyPolylineRDP(points.slice(0, splitIndex + 1), epsilon);
+  const right = simplifyPolylineRDP(points.slice(splitIndex), epsilon);
+  return left.slice(0, -1).concat(right);
+}
+
+function getPointToLineDistance(point, lineStart, lineEnd) {
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq <= 0.000001) {
+    return Math.hypot(point.x - lineStart.x, point.y - lineStart.y);
+  }
+
+  const area = Math.abs(
+    dx * (lineStart.y - point.y) - (lineStart.x - point.x) * dy
+  );
+  return area / Math.sqrt(lengthSq);
+}
+
+function removeNearlyCollinearPoints(points, angleToleranceDeg = 2.5) {
+  if (points.length <= 2) {
+    return points.map(copyPoint);
+  }
+
+  const tolerance = radians(angleToleranceDeg);
+  const result = [copyPoint(points[0])];
+
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const prev = result[result.length - 1];
+    const current = points[i];
+    const next = points[i + 1];
+    const inbound = normalizeVector(current.x - prev.x, current.y - prev.y);
+    const outbound = normalizeVector(next.x - current.x, next.y - current.y);
+    const dot = constrain(inbound.x * outbound.x + inbound.y * outbound.y, -1, 1);
+    const angle = Math.acos(dot);
+
+    if (angle >= tolerance) {
+      result.push(copyPoint(current));
+    }
+  }
+
+  result.push(copyPoint(points[points.length - 1]));
+  return result;
 }
 
 function generateBlackLetterPaths(renderPoints, springSettings = P) {
