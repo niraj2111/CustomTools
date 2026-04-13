@@ -224,11 +224,15 @@ function mouseMoved() {
 }
 
 function touchStarted(event) {
-  suppressMouseUntil = Date.now() + 700;
   if (!event || !event.touches) {
     return true;
   }
 
+  if (!isTouchEventOnCanvas(event)) {
+    return true;
+  }
+
+  suppressMouseUntil = Date.now() + 700;
   if (event.touches.length >= 2) {
     endActiveTouchStroke();
     return false;
@@ -246,11 +250,15 @@ function touchStarted(event) {
 }
 
 function touchMoved(event) {
-  suppressMouseUntil = Date.now() + 700;
   if (!event || !event.touches) {
     return true;
   }
 
+  if (activeTouchId === null && !isTouchEventOnCanvas(event)) {
+    return true;
+  }
+
+  suppressMouseUntil = Date.now() + 700;
   if (event.touches.length >= 2) {
     endActiveTouchStroke();
     return false;
@@ -267,12 +275,16 @@ function touchMoved(event) {
 }
 
 function touchEnded(event) {
-  suppressMouseUntil = Date.now() + 700;
   if (!event) {
     endActiveTouchStroke();
     return false;
   }
 
+  if (activeTouchId === null && drawingStrokeIndex < 0 && !draggedAnchor) {
+    return true;
+  }
+
+  suppressMouseUntil = Date.now() + 700;
   const endedTouch = getEndedActiveTouch(event);
   if (!endedTouch && activeTouchId !== null) {
     return false;
@@ -283,6 +295,10 @@ function touchEnded(event) {
 }
 
 function touchCancelled() {
+  if (activeTouchId === null && drawingStrokeIndex < 0 && !draggedAnchor) {
+    return true;
+  }
+
   suppressMouseUntil = Date.now() + 700;
   endActiveTouchStroke();
   return false;
@@ -616,6 +632,13 @@ function getEndedActiveTouch(event) {
     }
   }
   return null;
+}
+
+function isTouchEventOnCanvas(event) {
+  const touch =
+    (event.touches && event.touches[0]) ||
+    (event.changedTouches && event.changedTouches[0]);
+  return Boolean(getTouchPointMM(touch));
 }
 
 function endActiveTouchStroke() {
