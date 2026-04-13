@@ -35,6 +35,8 @@ let drawingStrokeIndex = -1;
 let cachedRenderStrokes = [];
 let currentDisplayScale = 1;
 let pinchGestureState = null;
+let activeTouchId = null;
+let suppressMouseUntil = 0;
 
 const P = {
   canvasPreset: "A4Portrait",
@@ -113,21 +115,29 @@ function draw() {
 }
 
 function mousePressed() {
-  if (!isPointerInsideCanvas()) {
-    return;
-  }
-
-  updateHoveredAnchor();
-  if (hoveredAnchor) {
-    draggedAnchor = { strokeIndex: hoveredAnchor.strokeIndex, pointIndex: hoveredAnchor.pointIndex };
-    activeStrokeIndex = hoveredAnchor.strokeIndex;
-    refreshStrokeMonitor();
-    redraw();
+  if (shouldSuppressMouseEvent()) {
     return;
   }
 
   const point = getMousePointMM();
   if (!point) {
+    return;
+  }
+
+  beginPointerStroke(point);
+}
+
+function beginPointerStroke(point) {
+  if (!point) {
+    return;
+  }
+
+  updateHoveredAnchor(point);
+  if (hoveredAnchor) {
+    draggedAnchor = { strokeIndex: hoveredAnchor.strokeIndex, pointIndex: hoveredAnchor.pointIndex };
+    activeStrokeIndex = hoveredAnchor.strokeIndex;
+    refreshStrokeMonitor();
+    redraw();
     return;
   }
 
@@ -143,7 +153,23 @@ function mousePressed() {
 }
 
 function mouseDragged() {
+  if (shouldSuppressMouseEvent()) {
+    return;
+  }
+
   const point = getMousePointMM();
+  continuePointerStroke(point);
+}
+
+function mouseReleased() {
+  if (shouldSuppressMouseEvent()) {
+    return;
+  }
+
+  endPointerStroke();
+}
+
+function continuePointerStroke(point) {
   if (!point) {
     return;
   }
@@ -170,7 +196,7 @@ function mouseDragged() {
   redraw();
 }
 
-function mouseReleased() {
+function endPointerStroke() {
   if (draggedAnchor) {
     draggedAnchor = null;
     invalidateGeometry();
@@ -195,6 +221,75 @@ function mouseMoved() {
   if (previous !== next) {
     redraw();
   }
+}
+
+function touchStarted(event) {
+  suppressMouseUntil = Date.now() + 700;
+  if (!event || !event.touches) {
+    return true;
+  }
+
+  if (event.touches.length >= 2) {
+    endActiveTouchStroke();
+    return false;
+  }
+
+  const touch = getPrimaryChangedTouch(event);
+  const point = getTouchPointMM(touch);
+  if (!point) {
+    return true;
+  }
+
+  activeTouchId = touch.identifier;
+  beginPointerStroke(point);
+  return false;
+}
+
+function touchMoved(event) {
+  suppressMouseUntil = Date.now() + 700;
+  if (!event || !event.touches) {
+    return true;
+  }
+
+  if (event.touches.length >= 2) {
+    endActiveTouchStroke();
+    return false;
+  }
+
+  const touch = getActiveTouch(event);
+  const point = getTouchPointMM(touch);
+  if (!point) {
+    return true;
+  }
+
+  continuePointerStroke(point);
+  return false;
+}
+
+function touchEnded(event) {
+  suppressMouseUntil = Date.now() + 700;
+  if (!event) {
+    endActiveTouchStroke();
+    return false;
+  }
+
+  const endedTouch = getEndedActiveTouch(event);
+  if (!endedTouch && activeTouchId !== null) {
+    return false;
+  }
+
+  endActiveTouchStroke();
+  return false;
+}
+
+function touchCancelled() {
+  suppressMouseUntil = Date.now() + 700;
+  endActiveTouchStroke();
+  return false;
+}
+
+function shouldSuppressMouseEvent() {
+  return Date.now() < suppressMouseUntil;
 }
 
 function keyPressed() {
@@ -457,12 +552,11 @@ function drawAnchors() {
   }
 }
 
-function updateHoveredAnchor() {
-  hoveredAnchor = findHoveredAnchor();
+function updateHoveredAnchor(point = getMousePointMM()) {
+  hoveredAnchor = findHoveredAnchor(point);
 }
 
-function findHoveredAnchor() {
-  const point = getMousePointMM();
+function findHoveredAnchor(point = getMousePointMM()) {
   if (!point) {
     return null;
   }
@@ -486,6 +580,51 @@ function findHoveredAnchor() {
   }
 
   return closest;
+}
+
+function getPrimaryChangedTouch(event) {
+  if (event.changedTouches && event.changedTouches.length > 0) {
+    return event.changedTouches[0];
+  }
+  if (event.touches && event.touches.length > 0) {
+    return event.touches[0];
+  }
+  return null;
+}
+
+function getActiveTouch(event) {
+  if (!event || activeTouchId === null) {
+    return getPrimaryChangedTouch(event);
+  }
+
+  for (const touch of event.touches || []) {
+    if (touch.identifier === activeTouchId) {
+      return touch;
+    }
+  }
+  return null;
+}
+
+function getEndedActiveTouch(event) {
+  if (!event || activeTouchId === null) {
+    return getPrimaryChangedTouch(event);
+  }
+
+  for (const touch of event.changedTouches || []) {
+    if (touch.identifier === activeTouchId) {
+      return touch;
+    }
+  }
+  return null;
+}
+
+function endActiveTouchStroke() {
+  if (activeTouchId === null && drawingStrokeIndex < 0 && !draggedAnchor) {
+    return;
+  }
+
+  activeTouchId = null;
+  endPointerStroke();
 }
 
 function ensureGeometryCache() {
@@ -1443,6 +1582,39 @@ function getMousePointMM() {
   return {
     x: constrain(mouseX / pxPerMM, 0, P.canvasWMM),
     y: constrain(mouseY / pxPerMM, 0, P.canvasHMM),
+  };
+}
+
+function getTouchPointMM(touch) {
+  if (!touch) {
+    return null;
+  }
+  return getClientPointMM(touch.clientX, touch.clientY);
+}
+
+function getClientPointMM(clientX, clientY) {
+  const pxPerMM = getPxPerMM();
+  if (!cnv || pxPerMM <= 0 || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+
+  const rect = cnv.elt.getBoundingClientRect();
+  if (
+    clientX < rect.left ||
+    clientX > rect.right ||
+    clientY < rect.top ||
+    clientY > rect.bottom ||
+    rect.width <= 0 ||
+    rect.height <= 0
+  ) {
+    return null;
+  }
+
+  const canvasX = ((clientX - rect.left) / rect.width) * width;
+  const canvasY = ((clientY - rect.top) / rect.height) * height;
+  return {
+    x: constrain(canvasX / pxPerMM, 0, P.canvasWMM),
+    y: constrain(canvasY / pxPerMM, 0, P.canvasHMM),
   };
 }
 
