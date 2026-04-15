@@ -8,6 +8,7 @@ Interactive spring-path sketch with:
 - grid snapping for spine anchors (based on selected grid type)
 - click-to-place polyline spine editing
 - Hamiltonian spine preset with turn/straight bias tuning
+- tree spine preset that grows upward from bottom-center using Points, Turn Bias, and Straight Penalty
 - offset-path spring mode with rounded arc turns
 - blackletter brush mode with fixed-angle nib strokes
 - preview zoom / fit controls, including trackpad/wheel zoom and pinch-to-zoom

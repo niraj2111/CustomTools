@@ -15,6 +15,8 @@ let cnv;
 let anchorFolder;
 let gridFolder;
 let gridTypeControlBlades = [];
+let presetFolder;
+let treePresetControlBlades = [];
 let spineStyles = [];
 let activeSpineIdx = 0;
 let hoveredAnchorIndex = -1;
@@ -77,6 +79,16 @@ const P = {
   presetPointCount: 64,
   presetTurnBias: 1.35,
   presetStraightPenalty: 2.4,
+  treeSpread: 0.35,
+  treeCrownStart: 0.35,
+  treeLateralStepRatio: 0.085,
+  treeStepDensity: 0.9,
+  treeJitter: 0.35,
+  treeCenterPenalty: 0.45,
+  treeEdgePenalty: 1.35,
+  treeCrownPull: 0.2,
+  treeUpwardWeight: 1.2,
+  treeSecondChoiceChance: 0.16,
   springArcRadiusMM: 8,
   showSpring: true,
   svgFilename: "Spiral-Spring-Path.svg",
@@ -750,6 +762,8 @@ function buildPresetPoints(mode) {
       return buildSeedCurvePreset();
     case "seedFill":
       return buildSeedFillPreset();
+    case "tree":
+      return buildTreePreset();
     case "hamiltonian":
       return buildHamiltonianPreset();
     case "none":
@@ -1001,6 +1015,201 @@ function buildHamiltonianPreset() {
 
   solve(0, 0);
   return snapPresetPoints(path);
+}
+
+function buildTreePreset() {
+  const inset = getPresetInset();
+  const minX = inset;
+  const maxX = Math.max(minX + 1, P.canvasWMM - inset);
+  const minY = inset;
+  const maxY = Math.max(minY + 1, P.canvasHMM - inset);
+  const usableW = Math.max(10, maxX - minX);
+  const usableH = Math.max(10, maxY - minY);
+  const targetCount = Math.max(2, Math.floor(P.presetPointCount));
+  const rng = mulberry32(Math.floor(P.presetSeed));
+  const centerX = P.canvasWMM * 0.5;
+  const spread = Math.max(0, P.treeSpread);
+  const crownStart = constrain(P.treeCrownStart, 0, 1);
+  const lateralStepRatio = Math.max(0.01, P.treeLateralStepRatio);
+  const density = Math.max(0.1, P.treeStepDensity);
+  const jitterAmount = Math.max(0, P.treeJitter);
+  const centerPenalty = Math.max(0, P.treeCenterPenalty);
+  const edgePenalty = Math.max(0, P.treeEdgePenalty);
+  const crownPull = Math.max(0, P.treeCrownPull);
+  const upwardWeight = Math.max(0, P.treeUpwardWeight);
+  const secondChoiceChance = constrain(P.treeSecondChoiceChance, 0, 1);
+
+  const yStepBase = Math.max(1.2, Math.min(10, usableH / Math.max(3, targetCount * density)));
+  const xStepBase = Math.max(1.2, Math.min(12, usableW * lateralStepRatio));
+  const directionTemplates = [
+    { vx: 0, vy: -1.25 },
+    { vx: -0.35 * spread, vy: -1.1 },
+    { vx: 0.35 * spread, vy: -1.1 },
+    { vx: -0.7 * spread, vy: -0.95 },
+    { vx: 0.7 * spread, vy: -0.95 },
+    { vx: -1.0 * spread, vy: -0.7 },
+    { vx: 1.0 * spread, vy: -0.7 },
+  ];
+
+  const points = [{ x: constrain(centerX, minX, maxX), y: maxY }];
+  let previousDirection = -1;
+  let straightRun = 0;
+
+  for (let i = 1; i < targetCount; i += 1) {
+    const current = points[points.length - 1];
+    const growthProgress = constrain((maxY - current.y) / Math.max(1, usableH), 0, 1);
+    const branchSpreadTarget = constrain(growthProgress * usableW * spread, 0, usableW * spread);
+    const candidates = [];
+
+    for (let dirIndex = 0; dirIndex < directionTemplates.length; dirIndex += 1) {
+      const direction = directionTemplates[dirIndex];
+      const jitter = Math.max(0.1, 1 - jitterAmount * 0.5 + rng() * jitterAmount);
+      const nextX = constrain(current.x + direction.vx * xStepBase * jitter, minX, maxX);
+      const nextY = constrain(current.y + direction.vy * yStepBase * jitter, minY, maxY);
+
+      if (Math.abs(nextX - current.x) < 0.001 && Math.abs(nextY - current.y) < 0.001) {
+        continue;
+      }
+
+      const continuesStraight = dirIndex === previousDirection;
+      const turns = previousDirection !== -1 && dirIndex !== previousDirection;
+      const boundaryPenalty =
+        (Math.abs(nextX - centerX) / Math.max(1, usableW)) * centerPenalty +
+        (nextX <= minX + xStepBase || nextX >= maxX - xStepBase ? edgePenalty : 0);
+      const spreadDistance = Math.abs(nextX - centerX);
+      const crownSpreadScore =
+        growthProgress > crownStart
+          ? Math.abs(spreadDistance - branchSpreadTarget) / Math.max(1, usableW) - growthProgress * crownPull
+          : spreadDistance / Math.max(1, usableW) * 0.08;
+      const straightPenalty = continuesStraight
+        ? P.presetStraightPenalty + straightRun * (P.presetStraightPenalty * 0.45)
+        : 0;
+      const turnBonus = turns ? -P.presetTurnBias : 0;
+      const upwardBias = ((nextY - current.y) / Math.max(1, yStepBase)) * upwardWeight;
+
+      candidates.push({
+        dirIndex,
+        nextX,
+        nextY,
+        score:
+          straightPenalty +
+          turnBonus +
+          boundaryPenalty +
+          crownSpreadScore +
+          upwardBias +
+          rng() * 0.3,
+      });
+    }
+
+    if (candidates.length === 0) {
+      break;
+    }
+
+    candidates.sort((a, b) => a.score - b.score);
+    const pickIndex = candidates.length > 2 && rng() < secondChoiceChance ? 1 : 0;
+    const next = candidates[pickIndex];
+    points.push({ x: next.nextX, y: next.nextY });
+    straightRun = next.dirIndex === previousDirection ? straightRun + 1 : 0;
+    previousDirection = next.dirIndex;
+
+    if (next.nextY <= minY + yStepBase * 0.3) {
+      break;
+    }
+  }
+
+  return snapPresetPoints(removeSequentialDuplicates(points));
+}
+
+function rebuildTreePresetControls() {
+  for (const blade of treePresetControlBlades) {
+    blade.dispose();
+  }
+  treePresetControlBlades = [];
+
+  if (!presetFolder || P.presetMode !== "tree") {
+    return;
+  }
+
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeSpread", {
+      min: 0,
+      max: 0.8,
+      step: 0.01,
+      label: "Tree Spread",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeCrownStart", {
+      min: 0,
+      max: 1,
+      step: 0.01,
+      label: "Crown Start",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeLateralStepRatio", {
+      min: 0.01,
+      max: 0.25,
+      step: 0.005,
+      label: "Lateral Step",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeStepDensity", {
+      min: 0.1,
+      max: 2,
+      step: 0.05,
+      label: "Step Density",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeJitter", {
+      min: 0,
+      max: 1,
+      step: 0.01,
+      label: "Jitter",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeCenterPenalty", {
+      min: 0,
+      max: 2,
+      step: 0.05,
+      label: "Center Pen",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeEdgePenalty", {
+      min: 0,
+      max: 4,
+      step: 0.05,
+      label: "Edge Pen",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeCrownPull", {
+      min: 0,
+      max: 1,
+      step: 0.01,
+      label: "Crown Pull",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeUpwardWeight", {
+      min: 0,
+      max: 3,
+      step: 0.05,
+      label: "Upward Wt",
+    })
+  );
+  treePresetControlBlades.push(
+    presetFolder.addInput(P, "treeSecondChoiceChance", {
+      min: 0,
+      max: 1,
+      step: 0.01,
+      label: "2nd Pick %",
+    })
+  );
 }
 
 function generateSeedFillCells(cols, rows, targetCount, seed) {
@@ -1806,17 +2015,24 @@ function buildPane() {
   gridFolder.addInput(P, "showGrid", { label: "Show Grid" });
   rebuildGridTypeControls();
 
-  const presetFolder = pane.addFolder({ title: "Spine Presets" });
-  presetFolder.addInput(P, "presetMode", {
-    options: {
-      none: "none",
-      spaceFill: "spaceFill",
-      seedCurve: "seedCurve",
-      seedFill: "seedFill",
-      hamiltonian: "hamiltonian",
-    },
-    label: "Preset",
-  });
+  presetFolder = pane.addFolder({ title: "Spine Presets" });
+  presetFolder
+    .addInput(P, "presetMode", {
+      options: {
+        none: "none",
+        spaceFill: "spaceFill",
+        seedCurve: "seedCurve",
+        seedFill: "seedFill",
+        tree: "tree",
+        hamiltonian: "hamiltonian",
+      },
+      label: "Preset",
+    })
+    .on("change", () => {
+      rebuildTreePresetControls();
+      pane.refresh();
+      redraw();
+    });
   presetFolder.addInput(P, "presetInsetMM", {
     min: 0,
     max: 100,
@@ -1868,6 +2084,7 @@ function buildPane() {
     applyPreset();
   });
   presetFolder.addButton({ title: "Apply Preset" }).on("click", applyPreset);
+  rebuildTreePresetControls();
 
   const styleFolder = pane.addFolder({ title: "Style" });
   styleFolder.addInput(P, "bg", { label: "BG" });
