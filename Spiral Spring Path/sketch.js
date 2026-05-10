@@ -17,6 +17,7 @@ let gridFolder;
 let gridTypeControlBlades = [];
 let presetFolder;
 let treePresetControlBlades = [];
+let defaultSpringFolder;
 let spineStyles = [];
 let activeSpineIdx = 0;
 let hoveredAnchorIndex = -1;
@@ -92,6 +93,21 @@ const P = {
   springArcRadiusMM: 8,
   showSpring: true,
   svgFilename: "Spiral-Spring-Path.svg",
+};
+
+const defaultSpringSettings = {
+  orbitMode: P.orbitMode,
+  coilAmplitudeMM: P.coilAmplitudeMM,
+  coilPitchMM: P.coilPitchMM,
+  samplesPerTurn: P.samplesPerTurn,
+  spineSmoothing: P.spineSmoothing,
+  spineSampleStepMM: P.spineSampleStepMM,
+  offsetLineCount: P.offsetLineCount,
+  offsetGapMM: P.offsetGapMM,
+  blackLetterAngleDeg: P.blackLetterAngleDeg,
+  blackLetterNibWidthMM: P.blackLetterNibWidthMM,
+  springArcRadiusMM: P.springArcRadiusMM,
+  showSpring: P.showSpring,
 };
 
 const spinePoints = [];
@@ -2129,6 +2145,21 @@ function buildPane() {
     updateCanvasDisplaySize();
   });
 
+  defaultSpringFolder = pane.addFolder({ title: "Default Spring Settings" });
+  buildSpringSettingsInputs(defaultSpringFolder, defaultSpringSettings);
+  defaultSpringFolder
+    .addButton({ title: "Apply Defaults To Active Spine" })
+    .on("click", () => {
+      const activeStyle = spineStyles[activeSpineIdx];
+      if (!activeStyle) {
+        return;
+      }
+      applyDefaultSpringSettingsToStyle(activeStyle);
+      refreshAnchorMonitor();
+      invalidateGeometry();
+      redraw();
+    });
+
   anchorFolder = pane.addFolder({ title: "Spine" });
   refreshAnchorMonitor();
 
@@ -2308,77 +2339,13 @@ function refreshAnchorMonitor() {
   colorFolder.addInput(activeStyle, "anchorColor", { label: "Anchors" });
 
   const springFolder = anchorFolder.addFolder({ title: "Spring Settings" });
-  springFolder.addInput(activeStyle, "orbitMode", {
-    options: {
-      sine: "sine",
-      cosine: "cosine",
-      triangle: "triangle",
-      square: "square",
-      saw: "saw",
-      lissajous: "lissajous",
-      damped: "damped",
-      arcTurns: "arcTurns",
-      offsetPaths: "offsetPaths",
-      blackLetter: "blackLetter",
-    },
-    label: "Orbit",
+  buildSpringSettingsInputs(springFolder, activeStyle);
+  springFolder.addButton({ title: "Reset This Spine To Defaults" }).on("click", () => {
+    applyDefaultSpringSettingsToStyle(activeStyle);
+    refreshAnchorMonitor();
+    invalidateGeometry();
+    redraw();
   });
-  springFolder.addInput(activeStyle, "coilAmplitudeMM", {
-    min: 0,
-    max: 80,
-    step: 0.1,
-    label: "Amplitude",
-  });
-  springFolder.addInput(activeStyle, "coilPitchMM", { min: 1, max: 100, step: 0.1, label: "Pitch" });
-  springFolder.addInput(activeStyle, "samplesPerTurn", {
-    min: 8,
-    max: 240,
-    step: 1,
-    label: "Samples",
-  });
-  springFolder.addInput(activeStyle, "offsetLineCount", {
-    min: 1,
-    max: 40,
-    step: 1,
-    label: "Num Lines",
-  });
-  springFolder.addInput(activeStyle, "offsetGapMM", {
-    min: 0,
-    max: 40,
-    step: 0.1,
-    label: "Gap",
-  });
-  springFolder.addInput(activeStyle, "spineSmoothing", {
-    min: 0,
-    max: 5,
-    step: 1,
-    label: "Corners",
-  });
-  springFolder.addInput(activeStyle, "spineSampleStepMM", {
-    min: 0.25,
-    max: 10,
-    step: 0.25,
-    label: "Sample Step",
-  });
-  springFolder.addInput(activeStyle, "springArcRadiusMM", {
-    min: 0,
-    max: 80,
-    step: 0.1,
-    label: "Arc Radius",
-  });
-  springFolder.addInput(activeStyle, "blackLetterAngleDeg", {
-    min: -180,
-    max: 180,
-    step: 1,
-    label: "Nib Angle",
-  });
-  springFolder.addInput(activeStyle, "blackLetterNibWidthMM", {
-    min: 0.1,
-    max: 80,
-    step: 0.1,
-    label: "Nib Width",
-  });
-  springFolder.addInput(activeStyle, "showSpring", { label: "Show Spring" });
 
   const preview = activePoints
     .slice(0, 8)
@@ -2597,19 +2564,112 @@ function createSpineStyle() {
     springColor: P.springColor,
     spineColor: P.spineColor,
     anchorColor: P.anchorColor,
-    orbitMode: P.orbitMode,
-    coilAmplitudeMM: P.coilAmplitudeMM,
-    coilPitchMM: P.coilPitchMM,
-    samplesPerTurn: P.samplesPerTurn,
-    spineSmoothing: P.spineSmoothing,
-    spineSampleStepMM: P.spineSampleStepMM,
-    offsetLineCount: P.offsetLineCount,
-    offsetGapMM: P.offsetGapMM,
-    blackLetterAngleDeg: P.blackLetterAngleDeg,
-    blackLetterNibWidthMM: P.blackLetterNibWidthMM,
-    springArcRadiusMM: P.springArcRadiusMM,
-    showSpring: P.showSpring,
+    orbitMode: defaultSpringSettings.orbitMode,
+    coilAmplitudeMM: defaultSpringSettings.coilAmplitudeMM,
+    coilPitchMM: defaultSpringSettings.coilPitchMM,
+    samplesPerTurn: defaultSpringSettings.samplesPerTurn,
+    spineSmoothing: defaultSpringSettings.spineSmoothing,
+    spineSampleStepMM: defaultSpringSettings.spineSampleStepMM,
+    offsetLineCount: defaultSpringSettings.offsetLineCount,
+    offsetGapMM: defaultSpringSettings.offsetGapMM,
+    blackLetterAngleDeg: defaultSpringSettings.blackLetterAngleDeg,
+    blackLetterNibWidthMM: defaultSpringSettings.blackLetterNibWidthMM,
+    springArcRadiusMM: defaultSpringSettings.springArcRadiusMM,
+    showSpring: defaultSpringSettings.showSpring,
   };
+}
+
+function buildSpringSettingsInputs(folder, target) {
+  folder.addInput(target, "orbitMode", {
+    options: {
+      sine: "sine",
+      cosine: "cosine",
+      triangle: "triangle",
+      square: "square",
+      saw: "saw",
+      lissajous: "lissajous",
+      damped: "damped",
+      arcTurns: "arcTurns",
+      offsetPaths: "offsetPaths",
+      blackLetter: "blackLetter",
+    },
+    label: "Orbit",
+  });
+  folder.addInput(target, "coilAmplitudeMM", {
+    min: 0,
+    max: 80,
+    step: 0.1,
+    label: "Amplitude",
+  });
+  folder.addInput(target, "coilPitchMM", { min: 1, max: 100, step: 0.1, label: "Pitch" });
+  folder.addInput(target, "samplesPerTurn", {
+    min: 8,
+    max: 240,
+    step: 1,
+    label: "Samples",
+  });
+  folder.addInput(target, "offsetLineCount", {
+    min: 1,
+    max: 40,
+    step: 1,
+    label: "Num Lines",
+  });
+  folder.addInput(target, "offsetGapMM", {
+    min: 0,
+    max: 40,
+    step: 0.1,
+    label: "Gap",
+  });
+  folder.addInput(target, "spineSmoothing", {
+    min: 0,
+    max: 5,
+    step: 1,
+    label: "Corners",
+  });
+  folder.addInput(target, "spineSampleStepMM", {
+    min: 0.25,
+    max: 10,
+    step: 0.25,
+    label: "Sample Step",
+  });
+  folder.addInput(target, "springArcRadiusMM", {
+    min: 0,
+    max: 80,
+    step: 0.1,
+    label: "Arc Radius",
+  });
+  folder.addInput(target, "blackLetterAngleDeg", {
+    min: -180,
+    max: 180,
+    step: 1,
+    label: "Nib Angle",
+  });
+  folder.addInput(target, "blackLetterNibWidthMM", {
+    min: 0.1,
+    max: 80,
+    step: 0.1,
+    label: "Nib Width",
+  });
+  folder.addInput(target, "showSpring", { label: "Show Spring" });
+}
+
+function applyDefaultSpringSettingsToStyle(style) {
+  if (!style) {
+    return;
+  }
+
+  style.orbitMode = defaultSpringSettings.orbitMode;
+  style.coilAmplitudeMM = defaultSpringSettings.coilAmplitudeMM;
+  style.coilPitchMM = defaultSpringSettings.coilPitchMM;
+  style.samplesPerTurn = defaultSpringSettings.samplesPerTurn;
+  style.spineSmoothing = defaultSpringSettings.spineSmoothing;
+  style.spineSampleStepMM = defaultSpringSettings.spineSampleStepMM;
+  style.offsetLineCount = defaultSpringSettings.offsetLineCount;
+  style.offsetGapMM = defaultSpringSettings.offsetGapMM;
+  style.blackLetterAngleDeg = defaultSpringSettings.blackLetterAngleDeg;
+  style.blackLetterNibWidthMM = defaultSpringSettings.blackLetterNibWidthMM;
+  style.springArcRadiusMM = defaultSpringSettings.springArcRadiusMM;
+  style.showSpring = defaultSpringSettings.showSpring;
 }
 
 function setActiveSpine(index) {

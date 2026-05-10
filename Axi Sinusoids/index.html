@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Axi Sinusoids</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
+    />
+    <style>
+      :root {
+        --panel: 370px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: var(--panel) 1fr;
+        height: 100vh;
+        background: #0f131a;
+        color: #edf2f7;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      aside {
+        background: #151b24;
+        border-right: 1px solid #273043;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      main {
+        display: grid;
+      }
+
+      #wrap {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 14px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        background: #202938;
+        border: 1px solid #324055;
+        color: #edf2f7;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+        user-select: none;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .hint {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #b8c4d6;
+        margin-top: 10px;
+      }
+
+      code {
+        color: #ffffff;
+      }
+
+      ul {
+        padding-left: 18px;
+        margin: 8px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <div id="pane"></div>
+
+      <div class="row">
+        <button id="renderBtn" class="btn">Render</button>
+        <button id="svgBtn" class="btn">Export SVG</button>
+      </div>
+
+      <div class="hint">
+        Notes:
+        <ul>
+          <li>The pattern is built from stacked square-wave rows whose frequency, threshold, phase, or domain can be modulated across the page.</li>
+          <li><code>Canvas</code>, <code>Margin</code>, and <code>Stroke</code> are measured in millimeters.</li>
+          <li><code>Zoom</code> and <code>Fit View</code> only affect the preview; SVG export stays in true mm units.</li>
+          <li><code>Mode</code> switches between multiple square-wave behaviors including duty-cycle, warp, interference, hysteresis, pulse, and topography variants.</li>
+        </ul>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wrap"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>
