@@ -163,7 +163,7 @@ function draw() {
   renderCrane();
 
   const cX = width - CW - 10;
-  const cY = height - CH - 44;
+  const cY = height - CH - 10;
   drawingContext.drawImage(craneCanvas.elt, cX, cY, CW, CH);
 
   noFill();
@@ -182,7 +182,7 @@ function handleDrawing() {
   if (!mouseIsPressed) return;
 
   const cX = width - CW - 10;
-  const cY = height - CH - 44;
+  const cY = height - CH - 10;
   if (mouseX > cX && mouseX < cX + CW && mouseY > cY && mouseY < cY + CH) return;
 
   const u = map(mouseX, sqPixelL, sqPixelL + sqPixelW, 0, 512);
@@ -214,7 +214,7 @@ function handleDrawing() {
 
 function mousePressed() {
   const cX = width - CW - 10;
-  const cY = height - CH - 44;
+  const cY = height - CH - 10;
   if (mouseX > cX && mouseX < cX + CW && mouseY > cY && mouseY < cY + CH) {
     craneDragStart = { x: mouseX, y: mouseY, rx: craneRotX, ry: craneRotY };
   }
@@ -238,21 +238,24 @@ function keyPressed() {
 function renderCrane() {
   const g = craneCanvas;
   g.background(248, 247, 242);
+  g.ambientMaterial(255, 255, 255);
+  g.specularMaterial(40, 36, 28);
+  g.shininess(12);
+  g.ambientLight(120, 114, 100);
+  g.directionalLight(200, 190, 160, -0.6, -0.8, -0.5);
+  g.directionalLight(80, 100, 130, 0.8, -0.4, 0.2);
+  g.directionalLight(100, 80, 40, 0.2, 0.6, 0.9);
+  g.pointLight(160, 140, 100, 0, -120, 80);
 
-  // Lighting for readable depth while preserving texture color.
-  g.ambientLight(145, 140, 130);
-  g.directionalLight(210, 205, 190, -0.35, -0.75, -0.45);
-  g.directionalLight(105, 110, 130, 0.55, -0.2, 0.4);
+  const tex = g.createImage(512, 512);
+  tex.copy(drawingLayer, 0, 0, 512, 512, 0, 0, 512, 512);
 
   g.push();
   g.rotateX(craneRotX);
   g.rotateY(craneRotY + frameCount * 0.005);
   g.scale(0.72);
   g.noStroke();
-  g.ambientMaterial(255, 255, 255);
-  g.specularMaterial(36, 34, 30);
-  g.shininess(10);
-  g.texture(drawingLayer);
+  g.texture(tex);
   g.textureMode(NORMAL);
 
   const triTex = (ax, ay, az, au, av, bx, by, bz, bu, bv, cx, cy, cz, cu, cv) => {
