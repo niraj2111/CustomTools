@@ -238,18 +238,21 @@ function keyPressed() {
 function renderCrane() {
   const g = craneCanvas;
   g.background(248, 247, 242);
-  g.noLights();
 
-  const tex = g.createImage(512, 512);
-  tex.copy(drawingLayer, 0, 0, 512, 512, 0, 0, 512, 512);
+  // Lighting for readable depth while preserving texture color.
+  g.ambientLight(145, 140, 130);
+  g.directionalLight(210, 205, 190, -0.35, -0.75, -0.45);
+  g.directionalLight(105, 110, 130, 0.55, -0.2, 0.4);
 
   g.push();
   g.rotateX(craneRotX);
   g.rotateY(craneRotY + frameCount * 0.005);
   g.scale(0.72);
   g.noStroke();
-  g.tint(255);
-  g.texture(tex);
+  g.ambientMaterial(255, 255, 255);
+  g.specularMaterial(36, 34, 30);
+  g.shininess(10);
+  g.texture(drawingLayer);
   g.textureMode(NORMAL);
 
   const triTex = (ax, ay, az, au, av, bx, by, bz, bu, bv, cx, cy, cz, cu, cv) => {
