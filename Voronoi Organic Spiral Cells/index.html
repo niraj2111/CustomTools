@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Voronoi Organic Spiral Cells</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
+    />
+    <style>
+      :root {
+        --panel: 385px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: var(--panel) 1fr;
+        height: 100vh;
+        background: #0e1217;
+        color: #edf3fb;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      aside {
+        background: #141b24;
+        border-right: 1px solid #263242;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      main {
+        display: grid;
+      }
+
+      #wrap {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 14px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        background: #202b39;
+        border: 1px solid #304052;
+        color: #edf3fb;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+        user-select: none;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .hint {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #b8c4d3;
+        margin-top: 10px;
+      }
+
+      code {
+        color: #ffffff;
+      }
+
+      ul {
+        padding-left: 18px;
+        margin: 8px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <div id="pane"></div>
+
+      <div class="row">
+        <button id="regenBtn" class="btn">Regenerate</button>
+        <button id="clearBtn" class="btn">Clear</button>
+        <button id="paintBtn" class="btn">Paint All</button>
+      </div>
+
+      <div class="row">
+        <button id="svgBtn" class="btn">Export SVG</button>
+        <button id="pngBtn" class="btn">Export PNG</button>
+      </div>
+
+      <div class="hint">
+        Notes:
+        <ul>
+          <li>Click or drag inside the page to reveal cells one by one.</li>
+          <li>Paper size, margin, stroke, and export all work in millimeters.</li>
+          <li><code>Zoom</code> and <code>Fit View</code> only affect the preview.</li>
+          <li>Use <code>D</code> for debug, <code>R</code> to regenerate, <code>C</code> to clear, <code>A</code> to paint all, and <code>S</code> to save a PNG.</li>
+          <li>SVG export uses the cached cell spirals directly for cleaner plotter-friendly output.</li>
+        </ul>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wrap"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="../shared/paper.js"></script>
+    <script src="../shared/export.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>
