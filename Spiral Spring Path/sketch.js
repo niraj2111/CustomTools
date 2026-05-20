@@ -64,6 +64,8 @@ const P = {
   selectionColor: "#22c55e",
   coilAmplitudeMM: 6,
   coilPitchMM: 5,
+  modulationDepth: 0,
+  modulationCycles: 1,
   samplesPerTurn: 18,
   orbitMode: "blackLetter",
   spineSmoothing: 4,
@@ -71,7 +73,9 @@ const P = {
   offsetLineCount: 5,
   offsetGapMM: 3,
   blackLetterAngleDeg: -45,
+  blackLetterAngleSweepDeg: 0,
   blackLetterNibWidthMM: 3,
+  blackLetterConnectStamps: false,
   presetMode: "none",
   presetInsetMM: 20,
   presetCols: 8,
@@ -99,13 +103,17 @@ const defaultSpringSettings = {
   orbitMode: P.orbitMode,
   coilAmplitudeMM: P.coilAmplitudeMM,
   coilPitchMM: P.coilPitchMM,
+  modulationDepth: P.modulationDepth,
+  modulationCycles: P.modulationCycles,
   samplesPerTurn: P.samplesPerTurn,
   spineSmoothing: P.spineSmoothing,
   spineSampleStepMM: P.spineSampleStepMM,
   offsetLineCount: P.offsetLineCount,
   offsetGapMM: P.offsetGapMM,
   blackLetterAngleDeg: P.blackLetterAngleDeg,
+  blackLetterAngleSweepDeg: P.blackLetterAngleSweepDeg,
   blackLetterNibWidthMM: P.blackLetterNibWidthMM,
+  blackLetterConnectStamps: P.blackLetterConnectStamps,
   springArcRadiusMM: P.springArcRadiusMM,
   showSpring: P.showSpring,
 };
@@ -571,9 +579,10 @@ function generateSpringPaths() {
     for (let sampleIndex = 0; sampleIndex < spineSamples.length; sampleIndex += 1) {
       const sample = spineSamples[sampleIndex];
       const phase = (sample.distance / pitch) * TWO_PI_VALUE;
+      const modulation = getAmplitudeModulation(sample, spineSamples, springSettings);
       const offset = getOrbitOffset(
         phase,
-        amplitude,
+        amplitude * modulation,
         sample.distance,
         pitch,
         springSettings.orbitMode
@@ -1592,23 +1601,47 @@ function generateBlackLetterPaths(renderPoints, springSettings = P) {
     return [];
   }
 
-  const spacing = Math.max(0.5, springSettings.coilPitchMM);
   const nibWidth = Math.max(0.1, springSettings.blackLetterNibWidthMM);
-  const angle = radians(springSettings.blackLetterAngleDeg);
-  const halfWidthX = Math.cos(angle) * nibWidth * 0.5;
-  const halfWidthY = Math.sin(angle) * nibWidth * 0.5;
-  const centers = getPolylineStampPoints(renderPoints, spacing);
+  const baseAngle = radians(springSettings.blackLetterAngleDeg);
+  const angleSweep = radians(springSettings.blackLetterAngleSweepDeg || 0);
+  const centers = getModulatedPolylineStampPoints(renderPoints, springSettings);
+  const centerCount = centers.length;
 
-  return centers.map((center) => [
-    {
-      x: center.x - halfWidthX,
-      y: center.y - halfWidthY,
-    },
-    {
-      x: center.x + halfWidthX,
-      y: center.y + halfWidthY,
-    },
-  ]);
+  const stampSegments = centers.map((centerData, index) => {
+    const t = centerCount <= 1 ? 0 : index / (centerCount - 1);
+    const angle = baseAngle + angleSweep * t;
+    const halfWidthX = Math.cos(angle) * nibWidth * 0.5;
+    const halfWidthY = Math.sin(angle) * nibWidth * 0.5;
+
+    return [
+      {
+        x: centerData.x - halfWidthX,
+        y: centerData.y - halfWidthY,
+      },
+      {
+        x: centerData.x + halfWidthX,
+        y: centerData.y + halfWidthY,
+      },
+    ];
+  });
+
+  if (!springSettings.blackLetterConnectStamps) {
+    return stampSegments;
+  }
+
+  const zigZagPath = [];
+  for (let i = 0; i < stampSegments.length; i += 1) {
+    const segment = stampSegments[i];
+    if (segment.length < 2) {
+      continue;
+    }
+    const startPoint = i % 2 === 0 ? segment[0] : segment[1];
+    const endPoint = i % 2 === 0 ? segment[1] : segment[0];
+    appendPointIfDistinct(zigZagPath, startPoint);
+    appendPointIfDistinct(zigZagPath, endPoint);
+  }
+
+  return zigZagPath.length >= 2 ? [zigZagPath] : [];
 }
 
 function getPolylineStampPoints(points, spacing) {
@@ -1633,6 +1666,54 @@ function getPolylineStampPoints(points, spacing) {
   }
 
   return samples;
+}
+
+function getModulatedPolylineStampPoints(points, springSettings = P) {
+  const totalLength = getPolylineLength(points);
+  if (totalLength <= 0.0001) {
+    return [];
+  }
+
+  const baseSpacing = Math.max(0.1, springSettings.coilPitchMM);
+  const result = [];
+  let distance = 0;
+
+  while (distance <= totalLength + 0.0001) {
+    const clampedDistance = Math.min(distance, totalLength);
+    const point = samplePolylineAtDistance(points, clampedDistance);
+    result.push({
+      x: point.x,
+      y: point.y,
+      distance: clampedDistance,
+      totalLength,
+    });
+
+    if (clampedDistance >= totalLength) {
+      break;
+    }
+
+    const modulation = getModulationFactorAtDistance(clampedDistance, totalLength, springSettings);
+    const step = Math.max(0.1, baseSpacing * modulation);
+    distance += step;
+  }
+
+  const last = result[result.length - 1];
+  const endPoint = points[points.length - 1];
+  if (
+    !last ||
+    Math.abs(last.distance - totalLength) > 0.0001 ||
+    !nearlyEqual(last.x, endPoint.x) ||
+    !nearlyEqual(last.y, endPoint.y)
+  ) {
+    result.push({
+      x: endPoint.x,
+      y: endPoint.y,
+      distance: totalLength,
+      totalLength,
+    });
+  }
+
+  return result;
 }
 
 function buildRoundedCornerPolyline(points, radius, step) {
@@ -1974,6 +2055,26 @@ function getOrbitOffset(phase, amplitude, distance, pitch, orbitMode = P.orbitMo
     default:
       return Math.sin(phase) * amplitude;
   }
+}
+
+function getAmplitudeModulation(sample, spineSamples, springSettings = P) {
+  const sampleCount = spineSamples.length;
+  const totalLength = sampleCount > 0 ? spineSamples[sampleCount - 1].distance : 0;
+  return getModulationFactorAtDistance(sample.distance, totalLength, springSettings);
+}
+
+function getModulationFactorAtDistance(distance, totalLength, springSettings = P) {
+  const depth = constrain(springSettings.modulationDepth || 0, 0, 1);
+  if (depth <= 0) {
+    return 1;
+  }
+  const cycles = Math.max(0, springSettings.modulationCycles || 0);
+  if (cycles <= 0) {
+    return 1;
+  }
+  const normalized = totalLength > 0.0001 ? constrain(distance / totalLength, 0, 1) : 0;
+  const wave = 0.5 + 0.5 * Math.sin(normalized * cycles * TWO_PI_VALUE - Math.PI / 2);
+  return lerp(1 - depth, 1, wave);
 }
 
 function triangleWave(phase) {
@@ -2567,13 +2668,17 @@ function createSpineStyle() {
     orbitMode: defaultSpringSettings.orbitMode,
     coilAmplitudeMM: defaultSpringSettings.coilAmplitudeMM,
     coilPitchMM: defaultSpringSettings.coilPitchMM,
+    modulationDepth: defaultSpringSettings.modulationDepth,
+    modulationCycles: defaultSpringSettings.modulationCycles,
     samplesPerTurn: defaultSpringSettings.samplesPerTurn,
     spineSmoothing: defaultSpringSettings.spineSmoothing,
     spineSampleStepMM: defaultSpringSettings.spineSampleStepMM,
     offsetLineCount: defaultSpringSettings.offsetLineCount,
     offsetGapMM: defaultSpringSettings.offsetGapMM,
     blackLetterAngleDeg: defaultSpringSettings.blackLetterAngleDeg,
+    blackLetterAngleSweepDeg: defaultSpringSettings.blackLetterAngleSweepDeg,
     blackLetterNibWidthMM: defaultSpringSettings.blackLetterNibWidthMM,
+    blackLetterConnectStamps: defaultSpringSettings.blackLetterConnectStamps,
     springArcRadiusMM: defaultSpringSettings.springArcRadiusMM,
     showSpring: defaultSpringSettings.showSpring,
   };
@@ -2602,6 +2707,18 @@ function buildSpringSettingsInputs(folder, target) {
     label: "Amplitude",
   });
   folder.addInput(target, "coilPitchMM", { min: 1, max: 100, step: 0.1, label: "Pitch" });
+  folder.addInput(target, "modulationDepth", {
+    min: 0,
+    max: 3,
+    step: 0.01,
+    label: "Mod Depth",
+  });
+  folder.addInput(target, "modulationCycles", {
+    min: 0,
+    max: 24,
+    step: 0.1,
+    label: "Mod Cycles",
+  });
   folder.addInput(target, "samplesPerTurn", {
     min: 8,
     max: 240,
@@ -2644,11 +2761,20 @@ function buildSpringSettingsInputs(folder, target) {
     step: 1,
     label: "Nib Angle",
   });
+  folder.addInput(target, "blackLetterAngleSweepDeg", {
+    min: -720,
+    max: 720,
+    step: 1,
+    label: "Angle Sweep",
+  });
   folder.addInput(target, "blackLetterNibWidthMM", {
     min: 0.1,
     max: 80,
     step: 0.1,
     label: "Nib Width",
+  });
+  folder.addInput(target, "blackLetterConnectStamps", {
+    label: "Connect Stamps",
   });
   folder.addInput(target, "showSpring", { label: "Show Spring" });
 }
@@ -2661,13 +2787,17 @@ function applyDefaultSpringSettingsToStyle(style) {
   style.orbitMode = defaultSpringSettings.orbitMode;
   style.coilAmplitudeMM = defaultSpringSettings.coilAmplitudeMM;
   style.coilPitchMM = defaultSpringSettings.coilPitchMM;
+  style.modulationDepth = defaultSpringSettings.modulationDepth;
+  style.modulationCycles = defaultSpringSettings.modulationCycles;
   style.samplesPerTurn = defaultSpringSettings.samplesPerTurn;
   style.spineSmoothing = defaultSpringSettings.spineSmoothing;
   style.spineSampleStepMM = defaultSpringSettings.spineSampleStepMM;
   style.offsetLineCount = defaultSpringSettings.offsetLineCount;
   style.offsetGapMM = defaultSpringSettings.offsetGapMM;
   style.blackLetterAngleDeg = defaultSpringSettings.blackLetterAngleDeg;
+  style.blackLetterAngleSweepDeg = defaultSpringSettings.blackLetterAngleSweepDeg;
   style.blackLetterNibWidthMM = defaultSpringSettings.blackLetterNibWidthMM;
+  style.blackLetterConnectStamps = defaultSpringSettings.blackLetterConnectStamps;
   style.springArcRadiusMM = defaultSpringSettings.springArcRadiusMM;
   style.showSpring = defaultSpringSettings.showSpring;
 }
