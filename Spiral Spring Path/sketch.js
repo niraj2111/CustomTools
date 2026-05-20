@@ -17,6 +17,9 @@ let gridFolder;
 let gridTypeControlBlades = [];
 let presetFolder;
 let treePresetControlBlades = [];
+let drawPresetControlBlades = [];
+let presetGeneralControlBlades = [];
+let presetActionBlades = [];
 let defaultSpringFolder;
 let spineStyles = [];
 let activeSpineIdx = 0;
@@ -33,6 +36,7 @@ let cachedArcLengthSampleGroups = [];
 let cachedSpringPaths = [];
 let currentDisplayScale = 1;
 let pinchGestureState = null;
+let currentDrawStroke = null;
 
 const P = {
   canvasWMM: 148,
@@ -77,6 +81,9 @@ const P = {
   blackLetterNibWidthMM: 3,
   blackLetterConnectStamps: false,
   presetMode: "none",
+  drawStreamline: 0.45,
+  drawSmoothing: 0.25,
+  drawMinDistanceMM: 1.2,
   presetInsetMM: 20,
   presetCols: 8,
   presetRows: 10,
@@ -174,6 +181,11 @@ function mousePressed() {
     return;
   }
 
+  if (P.presetMode === "draw") {
+    beginFreehandStroke();
+    return;
+  }
+
   updateHoveredAnchor();
   if (selectionMode) {
     handleSelectionMousePressed();
@@ -208,6 +220,11 @@ function mousePressed() {
 }
 
 function mouseDragged() {
+  if (P.presetMode === "draw") {
+    extendFreehandStroke();
+    return;
+  }
+
   if (selectionMode) {
     updateSelectionMarquee();
     return;
@@ -230,6 +247,11 @@ function mouseDragged() {
 }
 
 function mouseReleased() {
+  if (P.presetMode === "draw") {
+    endFreehandStroke();
+    return;
+  }
+
   if (selectionMode) {
     finalizeSelectionMarquee();
     return;
@@ -243,6 +265,10 @@ function mouseReleased() {
 }
 
 function mouseMoved() {
+  if (P.presetMode === "draw") {
+    return;
+  }
+
   const previous = hoveredAnchorIndex;
   updateHoveredAnchor();
   if (previous !== hoveredAnchorIndex) {
@@ -290,6 +316,10 @@ function keyPressed() {
 }
 
 function applyPreset() {
+  if (P.presetMode === "draw") {
+    return;
+  }
+
   const nextPoints = buildPresetPoints(P.presetMode);
   if (!nextPoints) {
     return;
@@ -781,6 +811,8 @@ function normalizeVector(x, y) {
 
 function buildPresetPoints(mode) {
   switch (mode) {
+    case "draw":
+      return null;
     case "spaceFill":
       return buildSpaceFillPreset();
     case "seedCurve":
@@ -1235,6 +1267,159 @@ function rebuildTreePresetControls() {
       label: "2nd Pick %",
     })
   );
+}
+
+function rebuildDrawPresetControls() {
+  for (const blade of drawPresetControlBlades) {
+    blade.dispose();
+  }
+  drawPresetControlBlades = [];
+
+  if (!presetFolder || P.presetMode !== "draw") {
+    return;
+  }
+
+  drawPresetControlBlades.push(
+    presetFolder.addInput(P, "drawStreamline", {
+      min: 0,
+      max: 1,
+      step: 0.01,
+      label: "Streamline",
+    })
+  );
+  drawPresetControlBlades.push(
+    presetFolder.addInput(P, "drawSmoothing", {
+      min: 0,
+      max: 1,
+      step: 0.01,
+      label: "Smoothing",
+    })
+  );
+  drawPresetControlBlades.push(
+    presetFolder.addInput(P, "drawMinDistanceMM", {
+      min: 0.1,
+      max: 20,
+      step: 0.1,
+      label: "Min Dist",
+    })
+  );
+}
+
+function updatePresetModeUI() {
+  const isDrawMode = P.presetMode === "draw";
+  const showGeneratorControls = !isDrawMode;
+
+  for (const blade of presetGeneralControlBlades) {
+    blade.hidden = !showGeneratorControls;
+  }
+
+  for (const blade of presetActionBlades) {
+    blade.hidden = !showGeneratorControls;
+  }
+}
+
+function beginFreehandStroke() {
+  const point = getSnappedMousePointMM();
+  if (!point) {
+    return;
+  }
+
+  const activePoints = getSpineSegments()[activeSpineIdx] || [];
+  if (activePoints.length > 0) {
+    startNewSpine();
+  }
+
+  currentDrawStroke = {
+    filtered: copyPoint(point),
+    points: [copyPoint(point)],
+  };
+
+  replaceActiveSpinePoints(currentDrawStroke.points);
+  selectedAnchorIndices = new Set();
+  marqueeSelection = null;
+  hoveredAnchorIndex = -1;
+  draggedAnchorIndex = -1;
+  hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  draggedAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  invalidateGeometry();
+  refreshAnchorMonitor();
+  redraw();
+}
+
+function extendFreehandStroke() {
+  if (!currentDrawStroke) {
+    return;
+  }
+
+  const point = getSnappedMousePointMM();
+  if (!point) {
+    return;
+  }
+
+  const streamFactor = constrain(P.drawStreamline, 0, 1);
+  let nextPoint = {
+    x: lerp(currentDrawStroke.filtered.x, point.x, constrain(1 - streamFactor * 0.85, 0.05, 1)),
+    y: lerp(currentDrawStroke.filtered.y, point.y, constrain(1 - streamFactor * 0.85, 0.05, 1)),
+  };
+  currentDrawStroke.filtered = copyPoint(nextPoint);
+
+  const last = currentDrawStroke.points[currentDrawStroke.points.length - 1];
+  if (last && Math.hypot(nextPoint.x - last.x, nextPoint.y - last.y) < Math.max(0.05, P.drawMinDistanceMM)) {
+    return;
+  }
+
+  currentDrawStroke.points.push(nextPoint);
+  const smoothed = smoothFreehandPoints(currentDrawStroke.points);
+  replaceActiveSpinePoints(smoothed);
+  invalidateGeometry();
+  refreshAnchorMonitor();
+  redraw();
+}
+
+function endFreehandStroke() {
+  if (!currentDrawStroke) {
+    return;
+  }
+
+  const finalPoints = smoothFreehandPoints(currentDrawStroke.points);
+  replaceActiveSpinePoints(finalPoints);
+  currentDrawStroke = null;
+  syncSpineStylesWithSegments();
+  invalidateGeometry();
+  refreshAnchorMonitor();
+  redraw();
+}
+
+function smoothFreehandPoints(points) {
+  if (!Array.isArray(points) || points.length < 3) {
+    return (points || []).map(copyPoint);
+  }
+
+  const factor = constrain(P.drawSmoothing, 0, 1);
+  if (factor <= 0.001) {
+    return points.map(copyPoint);
+  }
+
+  const passes = factor < 0.34 ? 1 : factor < 0.67 ? 2 : 3;
+  const alpha = 0.12 + factor * 0.2;
+  let out = points.map(copyPoint);
+
+  for (let pass = 0; pass < passes; pass += 1) {
+    const next = [copyPoint(out[0])];
+    for (let i = 1; i < out.length - 1; i += 1) {
+      const prev = out[i - 1];
+      const cur = out[i];
+      const after = out[i + 1];
+      next.push({
+        x: cur.x * (1 - alpha * 2) + (prev.x + after.x) * alpha,
+        y: cur.y * (1 - alpha * 2) + (prev.y + after.y) * alpha,
+      });
+    }
+    next.push(copyPoint(out[out.length - 1]));
+    out = next;
+  }
+
+  return removeSequentialDuplicates(out);
 }
 
 function generateSeedFillCells(cols, rows, targetCount, seed) {
@@ -2137,6 +2322,7 @@ function buildPane() {
     .addInput(P, "presetMode", {
       options: {
         none: "none",
+        draw: "draw",
         spaceFill: "spaceFill",
         seedCurve: "seedCurve",
         seedFill: "seedFill",
@@ -2146,53 +2332,58 @@ function buildPane() {
       label: "Preset",
     })
     .on("change", () => {
+      currentDrawStroke = null;
+      updatePresetModeUI();
       rebuildTreePresetControls();
+      rebuildDrawPresetControls();
       pane.refresh();
       redraw();
     });
-  presetFolder.addInput(P, "presetInsetMM", {
-    min: 0,
-    max: 100,
-    step: 1,
-    label: "Inset",
-  });
-  presetFolder.addInput(P, "presetCols", {
-    min: 2,
-    max: 40,
-    step: 1,
-    label: "Cols",
-  });
-  presetFolder.addInput(P, "presetRows", {
-    min: 2,
-    max: 40,
-    step: 1,
-    label: "Rows",
-  });
-  presetFolder.addInput(P, "presetSeed", {
-    min: 0,
-    max: 999999,
-    step: 1,
-    label: "Seed",
-  });
-  presetFolder.addInput(P, "presetPointCount", {
-    min: 2,
-    max: 400,
-    step: 1,
-    label: "Points",
-  });
-  presetFolder.addInput(P, "presetTurnBias", {
-    min: 0,
-    max: 10,
-    step: 0.1,
-    label: "Turn Bias",
-  });
-  presetFolder.addInput(P, "presetStraightPenalty", {
-    min: 0,
-    max: 10,
-    step: 0.1,
-    label: "Straight Pen",
-  });
-  presetFolder.addButton({ title: "New Seed" }).on("click", () => {
+  presetGeneralControlBlades = [
+    presetFolder.addInput(P, "presetInsetMM", {
+      min: 0,
+      max: 100,
+      step: 1,
+      label: "Inset",
+    }),
+    presetFolder.addInput(P, "presetCols", {
+      min: 2,
+      max: 40,
+      step: 1,
+      label: "Cols",
+    }),
+    presetFolder.addInput(P, "presetRows", {
+      min: 2,
+      max: 40,
+      step: 1,
+      label: "Rows",
+    }),
+    presetFolder.addInput(P, "presetSeed", {
+      min: 0,
+      max: 999999,
+      step: 1,
+      label: "Seed",
+    }),
+    presetFolder.addInput(P, "presetPointCount", {
+      min: 2,
+      max: 400,
+      step: 1,
+      label: "Points",
+    }),
+    presetFolder.addInput(P, "presetTurnBias", {
+      min: 0,
+      max: 10,
+      step: 0.1,
+      label: "Turn Bias",
+    }),
+    presetFolder.addInput(P, "presetStraightPenalty", {
+      min: 0,
+      max: 10,
+      step: 0.1,
+      label: "Straight Pen",
+    }),
+  ];
+  const newSeedButton = presetFolder.addButton({ title: "New Seed" }).on("click", () => {
     if (P.presetMode === "none") {
       return;
     }
@@ -2200,8 +2391,11 @@ function buildPane() {
     pane.refresh();
     applyPreset();
   });
-  presetFolder.addButton({ title: "Apply Preset" }).on("click", applyPreset);
+  const applyPresetButton = presetFolder.addButton({ title: "Apply Preset" }).on("click", applyPreset);
+  presetActionBlades = [newSeedButton, applyPresetButton];
+  updatePresetModeUI();
   rebuildTreePresetControls();
+  rebuildDrawPresetControls();
 
   const styleFolder = pane.addFolder({ title: "Style" });
   styleFolder.addInput(P, "bg", { label: "BG" });
