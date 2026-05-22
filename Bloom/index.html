@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bloom</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
+    />
+    <style>
+      :root {
+        --panel: 400px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: var(--panel) 1fr;
+        height: 100vh;
+        background: #10151c;
+        color: #eef3f7;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      aside {
+        background: #151c24;
+        border-right: 1px solid #273341;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      main {
+        display: grid;
+      }
+
+      #wrap {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 16px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        background: #202a37;
+        border: 1px solid #304153;
+        color: #eef3f7;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .hint {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #b8c4d2;
+        margin-top: 10px;
+      }
+
+      code {
+        color: #ffffff;
+      }
+
+      ul {
+        padding-left: 18px;
+        margin: 8px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <div id="pane"></div>
+
+      <div class="row">
+        <button id="resetPetalBtn" class="btn">Reset Petal</button>
+        <button id="svgBtn" class="btn">Export SVG</button>
+        <button id="pngBtn" class="btn">Save PNG</button>
+      </div>
+
+      <div class="hint">
+        Notes:
+        <ul>
+          <li>Drag the blue anchors and orange bezier handles in the petal editor.</li>
+          <li>Hold <code>Shift</code> while dragging a paired handle to keep opposite handles colinear.</li>
+          <li>The generator rebuilds both preview and export from the same path model.</li>
+          <li><code>Export SVG</code> writes vector paths for petals, stem curves, petioles, and disc.</li>
+        </ul>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wrap"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="../shared/paper.js"></script>
+    <script src="../shared/export.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>
