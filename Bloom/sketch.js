@@ -199,7 +199,7 @@ function setupPane() {
   });
 
   const fLines = pane.addFolder({ title: "Surface linework", expanded: true });
-  fLines.addInput(state, "longitudinalLines", { min: 1, max: 25, step: 1 });
+  fLines.addInput(state, "longitudinalLines", { min: 1, max: 45, step: 1 });
   fLines.addInput(state, "crossLines", { min: 0, max: 30, step: 1 });
   fLines.addInput(state, "lineSamples", { min: 8, max: 100, step: 1 });
   fLines.addInput(state, "drawLongitudinal");
