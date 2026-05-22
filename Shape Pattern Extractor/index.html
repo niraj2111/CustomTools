@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Shape Pattern Extractor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
+    />
+    <style>
+      :root {
+        --panel: 400px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: var(--panel) 1fr;
+        height: 100vh;
+        background: #0f1319;
+        color: #edf2f8;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      aside {
+        background: #151c25;
+        border-right: 1px solid #273341;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      main {
+        display: grid;
+      }
+
+      #wrap {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 14px;
+      }
+
+      .source-card {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        background: #0f141b;
+        border: 1px solid #243241;
+      }
+
+      .source-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .source-title {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .source-sub {
+        font-size: 11px;
+        color: #aeb9c8;
+      }
+
+      #sourcePad {
+        width: 100%;
+        max-width: 320px;
+        aspect-ratio: 1;
+        display: block;
+        border-radius: 12px;
+        border: 1px dashed #334559;
+        background: #ffffff;
+        cursor: crosshair;
+        touch-action: none;
+      }
+
+      #sourcePad.dragover {
+        border-color: #72a7ff;
+        box-shadow: 0 0 0 1px #72a7ff inset;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        background: #202b39;
+        border: 1px solid #304052;
+        color: #edf3fb;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+        user-select: none;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .hint {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #b8c4d3;
+        margin-top: 10px;
+      }
+
+      code {
+        color: #ffffff;
+      }
+
+      ul {
+        padding-left: 18px;
+        margin: 8px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <div id="pane"></div>
+
+      <section class="source-card">
+        <div class="source-head">
+          <div>
+            <div class="source-title">Source Graphics</div>
+            <div class="source-sub">Drop an image or draw with the brush</div>
+          </div>
+        </div>
+        <canvas id="sourcePad" width="320" height="320"></canvas>
+        <div class="row">
+          <button id="loadBtn" class="btn">Load Image</button>
+          <button id="clearSourceBtn" class="btn">Clear Source</button>
+        </div>
+        <input id="fileInput" type="file" accept="image/*" hidden />
+      </section>
+
+      <div class="row">
+        <button id="analyzeBtn" class="btn">Rebuild Pattern</button>
+        <button id="svgBtn" class="btn">Export SVG</button>
+      </div>
+
+      <div class="hint">
+        Notes:
+        <ul>
+          <li>The source pad is raster, but export contains only the generated pattern paths.</li>
+          <li>Extraction starts from thresholded source shapes and turns them into connected components.</li>
+          <li>The first pattern preset is a vein-like structure with a midrib and branching side veins.</li>
+          <li><code>Zoom</code> and <code>Fit View</code> only affect the preview.</li>
+        </ul>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wrap"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="../shared/paper.js"></script>
+    <script src="../shared/export.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>
