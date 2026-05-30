@@ -253,7 +253,7 @@ function buildPane() {
 
   const spiralFolder = pane.addFolder({ title: "Spiral" });
   spiralFolder
-    .addInput(P, "spiralGap", { min: 0.4, max: 12, step: 0.1, label: "Line Gap" })
+    .addInput(P, "spiralGap", { min: 0.1, max: 12, step: 0.01, label: "Line Gap" })
     .on("change", requestRebuild);
   spiralFolder
     .addInput(P, "pointSpacing", { min: 0.25, max: 6, step: 0.05, label: "Point Gap" })
@@ -265,7 +265,7 @@ function buildPane() {
     .addInput(P, "maxTurns", { min: 1, max: 60, step: 0.25, label: "Max Turns" })
     .on("change", requestRebuild);
   spiralFolder
-    .addInput(P, "spiralFreq", { min: 0.5, max: 24, step: 0.25, label: "Frequency" })
+    .addInput(P, "spiralFreq", { min: 0.5, max: 24, step: 0.05, label: "Frequency" })
     .on("change", requestRebuild);
   spiralFolder
     .addInput(P, "spiralMargin", { min: 0.2, max: 1.08, step: 0.01, label: "Margin" })
