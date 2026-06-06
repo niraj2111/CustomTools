@@ -43,28 +43,22 @@ const P = {
   widthScale: 0.06,
   heightScale: 0.1,
   noiseStrengthMM: 18,
+  noiseScale: 0.015,
+  radialFlow: 1,
+  angularFlow: 14,
   noiseOctaves: 4,
   noiseFalloff: 0.4,
-  noiseX1: 0.01,
-  noiseY1: 0.02,
-  noiseX2: 0.02,
-  noiseY2: 0.02,
-  noiseOffset1: 1,
-  noiseOffset2: 2,
   outerEdgeTightness: 0.35,
   splitFrequency: 5,
   splitThetaStepDeg: 0.05,
   splitWidthScale: 0.07,
   splitHeightScale: 0.09,
   splitCutMM: 60,
-  splitNoiseXTop: 0.02,
-  splitNoiseYTop: 0.02,
-  splitNoiseXMid: 0.02,
-  splitNoiseYMid: 0.03,
-  splitNoiseXBottom: 0.02,
-  splitNoiseYBottom: 0.03,
-  splitTopBias: -0.75,
-  splitBottomBias: 0.75,
+  splitTopMultiplier: 1,
+  splitMidMultiplier: 0.85,
+  splitBottomMultiplier: 1,
+  splitTopBias: -0.2,
+  splitBottomBias: 0.2,
   splitUseRandomBias: true,
   smoothIterations: 0,
   svgIncludeBackground: true,
@@ -195,28 +189,19 @@ function buildPane() {
     .addInput(P, "noiseStrengthMM", { min: 0, max: 120, step: 0.5, label: "Strength" })
     .on("change", regenerate);
   noiseFolder
+    .addInput(P, "noiseScale", { min: 0.001, max: 0.08, step: 0.001, label: "Scale" })
+    .on("change", regenerate);
+  noiseFolder
+    .addInput(P, "radialFlow", { min: 0.2, max: 3, step: 0.05, label: "Radial Flow" })
+    .on("change", regenerate);
+  noiseFolder
+    .addInput(P, "angularFlow", { min: 1, max: 40, step: 0.5, label: "Angular Flow" })
+    .on("change", regenerate);
+  noiseFolder
     .addInput(P, "noiseOctaves", { min: 1, max: 8, step: 1, label: "Octaves" })
     .on("change", regenerate);
   noiseFolder
     .addInput(P, "noiseFalloff", { min: 0, max: 0.95, step: 0.01, label: "Falloff" })
-    .on("change", regenerate);
-  noiseFolder
-    .addInput(P, "noiseX1", { min: 0, max: 0.08, step: 0.001, label: "Noise X1" })
-    .on("change", regenerate);
-  noiseFolder
-    .addInput(P, "noiseY1", { min: 0, max: 0.08, step: 0.001, label: "Noise Y1" })
-    .on("change", regenerate);
-  noiseFolder
-    .addInput(P, "noiseX2", { min: 0, max: 0.08, step: 0.001, label: "Noise X2" })
-    .on("change", regenerate);
-  noiseFolder
-    .addInput(P, "noiseY2", { min: 0, max: 0.08, step: 0.001, label: "Noise Y2" })
-    .on("change", regenerate);
-  noiseFolder
-    .addInput(P, "noiseOffset1", { min: -20, max: 20, step: 0.1, label: "Offset 1" })
-    .on("change", regenerate);
-  noiseFolder
-    .addInput(P, "noiseOffset2", { min: -20, max: 20, step: 0.1, label: "Offset 2" })
     .on("change", regenerate);
   noiseFolder
     .addInput(P, "outerEdgeTightness", { min: 0, max: 1, step: 0.01, label: "Outer Tight" })
@@ -239,22 +224,13 @@ function buildPane() {
     .addInput(P, "splitCutMM", { min: 0, max: 160, step: 1, label: "Cut" })
     .on("change", regenerate);
   splitFolder
-    .addInput(P, "splitNoiseXTop", { min: 0, max: 0.08, step: 0.001, label: "Top X" })
+    .addInput(P, "splitTopMultiplier", { min: 0, max: 2, step: 0.05, label: "Top Mult" })
     .on("change", regenerate);
   splitFolder
-    .addInput(P, "splitNoiseYTop", { min: 0, max: 0.08, step: 0.001, label: "Top Y" })
+    .addInput(P, "splitMidMultiplier", { min: 0, max: 2, step: 0.05, label: "Mid Mult" })
     .on("change", regenerate);
   splitFolder
-    .addInput(P, "splitNoiseXMid", { min: 0, max: 0.08, step: 0.001, label: "Mid X" })
-    .on("change", regenerate);
-  splitFolder
-    .addInput(P, "splitNoiseYMid", { min: 0, max: 0.08, step: 0.001, label: "Mid Y" })
-    .on("change", regenerate);
-  splitFolder
-    .addInput(P, "splitNoiseXBottom", { min: 0, max: 0.08, step: 0.001, label: "Bot X" })
-    .on("change", regenerate);
-  splitFolder
-    .addInput(P, "splitNoiseYBottom", { min: 0, max: 0.08, step: 0.001, label: "Bot Y" })
+    .addInput(P, "splitBottomMultiplier", { min: 0, max: 2, step: 0.05, label: "Bot Mult" })
     .on("change", regenerate);
   splitFolder
     .addInput(P, "splitTopBias", { min: -1.5, max: 1.5, step: 0.01, label: "Top Bias" })
@@ -366,12 +342,12 @@ function buildNormSpiralPoints() {
   for (let theta = 0; theta < thetaMax && points.length < MAX_POINTS; theta += P.thetaStepDeg) {
     const x = P.widthScale * theta * cos(theta * P.frequency);
     const y = P.heightScale * theta * sin(theta * P.frequency);
-    const rx = P.noiseStrengthMM * map(noise(x * P.noiseX1, y * P.noiseY1 + P.noiseOffset1), 0, 1, 0, 1);
-    const ry = P.noiseStrengthMM * map(noise(x * P.noiseX2, y * P.noiseY2 + P.noiseOffset2), 0, 1, 0, 1);
+    const basePoint = { x: center.x + x, y: center.y + y };
+    const radialOffset = sampleRadialField(x, y);
 
     points.push(
       applyShapeConstraint(
-        tightenOuterEdge({ x: center.x + x + rx, y: center.y + y + ry }, center),
+        tightenOuterEdge(applyRadialNoise(basePoint, center, radialOffset), center),
         center
       )
     );
@@ -391,47 +367,20 @@ function buildSplitSpiralPoints() {
   for (let theta = 0; theta < thetaMax && points.length < MAX_POINTS; theta += P.splitThetaStepDeg) {
     const x = P.splitWidthScale * theta * cos(theta * P.splitFrequency);
     const y = P.splitHeightScale * theta * sin(theta * P.splitFrequency);
-    let rx = 0;
-    let ry = 0;
+    const basePoint = { x: center.x + x, y: center.y + y };
+    let radialOffset = 0;
 
     if (y < -P.splitCutMM) {
-      rx = P.noiseStrengthMM * map(noise(x * P.splitNoiseXTop, y * P.splitNoiseYTop) + rand2, 0, 1, 0, 1);
-      ry = P.noiseStrengthMM * map(
-        noise(x * P.splitNoiseXTop, y * P.splitNoiseYTop + P.noiseOffset1) + P.splitTopBias,
-        0,
-        1,
-        0,
-        1
-      );
+      radialOffset = sampleRadialField(x, y, rand2 + P.splitTopBias) * P.splitTopMultiplier;
     } else if (y < P.splitCutMM) {
-      rx = P.noiseStrengthMM * map(noise(x * P.splitNoiseXMid, y * P.splitNoiseYMid), 0, 1, 0, 1);
-      ry = P.noiseStrengthMM * map(
-        noise(x * (P.splitNoiseXMid + 0.01), y * P.splitNoiseYMid + P.noiseOffset2),
-        0,
-        1,
-        0,
-        1
-      );
+      radialOffset = sampleRadialField(x, y) * P.splitMidMultiplier;
     } else {
-      rx = P.noiseStrengthMM * map(
-        noise(x * P.splitNoiseXBottom, y * P.splitNoiseYBottom) + rand1,
-        0,
-        1,
-        0,
-        1
-      );
-      ry = P.noiseStrengthMM * map(
-        noise(x * P.splitNoiseXBottom, y * P.splitNoiseYBottom + P.noiseOffset2) + P.splitBottomBias,
-        0,
-        1,
-        0,
-        1
-      );
+      radialOffset = sampleRadialField(x, y, rand1 + P.splitBottomBias) * P.splitBottomMultiplier;
     }
 
     points.push(
       applyShapeConstraint(
-        tightenOuterEdge({ x: center.x + x + rx, y: center.y + y + ry }, center),
+        tightenOuterEdge(applyRadialNoise(basePoint, center, radialOffset), center),
         center
       )
     );
@@ -479,6 +428,48 @@ function applyShapeConstraint(point, center) {
   return {
     x: constrain(point.x, center.x - bounds.halfW, center.x + bounds.halfW),
     y: constrain(point.y, center.y - bounds.halfH, center.y + bounds.halfH),
+  };
+}
+
+function sampleRadialField(localX, localY, bias = 0) {
+  const radius = Math.sqrt(localX * localX + localY * localY);
+  const angle = Math.atan2(localY, localX);
+  const radialCoord = radius * P.noiseScale * P.radialFlow;
+  const angularX = Math.cos(angle) * P.angularFlow;
+  const angularY = Math.sin(angle) * P.angularFlow;
+  const primary = map(
+    noise(radialCoord + 11.3 + bias, angularX + P.seed * 0.01, angularY + 7.1),
+    0,
+    1,
+    -1,
+    1
+  );
+  const detail = map(
+    noise(
+      radialCoord * 2.35 + 19.7 + bias,
+      angularX * 1.85 + P.seed * 0.017,
+      angularY * 1.85 + 3.1
+    ),
+    0,
+    1,
+    -1,
+    1
+  );
+  return P.noiseStrengthMM * (primary * 0.75 + detail * 0.35);
+}
+
+function applyRadialNoise(point, center, radialOffset) {
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+
+  if (len <= 0.000001) {
+    return point;
+  }
+
+  return {
+    x: point.x + (dx / len) * radialOffset,
+    y: point.y + (dy / len) * radialOffset,
   };
 }
 
@@ -593,18 +584,20 @@ function normalizeParams() {
   P.widthScale = constrain(P.widthScale, 0.005, 0.2);
   P.heightScale = constrain(P.heightScale, 0.005, 0.2);
   P.noiseStrengthMM = constrain(P.noiseStrengthMM, 0, 120);
+  P.noiseScale = constrain(P.noiseScale, 0.001, 0.08);
+  P.radialFlow = constrain(P.radialFlow, 0.2, 3);
+  P.angularFlow = constrain(P.angularFlow, 1, 40);
   P.noiseOctaves = constrain(Math.floor(P.noiseOctaves), 1, 8);
   P.noiseFalloff = constrain(P.noiseFalloff, 0, 0.95);
-  P.noiseX1 = constrain(P.noiseX1, 0, 0.08);
-  P.noiseY1 = constrain(P.noiseY1, 0, 0.08);
-  P.noiseX2 = constrain(P.noiseX2, 0, 0.08);
-  P.noiseY2 = constrain(P.noiseY2, 0, 0.08);
   P.outerEdgeTightness = constrain(P.outerEdgeTightness, 0, 1);
   P.splitFrequency = constrain(P.splitFrequency, 1, 30);
   P.splitThetaStepDeg = constrain(P.splitThetaStepDeg, 0.01, 1);
   P.splitWidthScale = constrain(P.splitWidthScale, 0.005, 0.2);
   P.splitHeightScale = constrain(P.splitHeightScale, 0.005, 0.2);
   P.splitCutMM = constrain(P.splitCutMM, 0, 160);
+  P.splitTopMultiplier = constrain(P.splitTopMultiplier, 0, 2);
+  P.splitMidMultiplier = constrain(P.splitMidMultiplier, 0, 2);
+  P.splitBottomMultiplier = constrain(P.splitBottomMultiplier, 0, 2);
   P.smoothIterations = constrain(Math.floor(P.smoothIterations), 0, 4);
   pane.refresh();
 }
