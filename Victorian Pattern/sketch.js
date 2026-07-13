@@ -281,16 +281,57 @@ function initCompositionFlow() {
   const baseAngle = rnd(-1.18, -0.72);
   const spineJitter = rnd(0.14, 0.24);
   const floatingJitter = spineJitter * 0.65;
+  const lateralFan = rnd(0.22, 0.42);
+  const verticalLift = rnd(0.08, 0.2);
+  const waveAmp = rnd(0.05, 0.12);
+  const waveFreq = rnd(1.4, 2.3);
+  const noiseScale = rnd(1.6, 3.4);
   compositionFlow = {
     baseAngle,
     spineJitter,
     floatingJitter,
+    lateralFan,
+    verticalLift,
+    waveAmp,
+    waveFreq,
+    noiseScale,
   };
 }
 
-function randomFlowAngle(jitter) {
-  const direction = chance(0.75) ? 1 : -1;
-  return compositionFlow.baseAngle + rnd(-jitter, jitter) * direction;
+function flowAngleAt(x, y, role = "spine") {
+  const width = stageWidth();
+  const height = stageHeight();
+  const nx = constrain(x / Math.max(1, width), 0, 1);
+  const ny = constrain(y / Math.max(1, height), 0, 1);
+  const centeredX = nx - 0.5;
+  const centeredY = ny - 0.5;
+  const jitter = role === "floating" ? compositionFlow.floatingJitter : compositionFlow.spineJitter;
+
+  // Fan inward from the sides so the composition wraps toward the center.
+  const fan = -centeredX * compositionFlow.lateralFan;
+  // Lower stems launch more upright; higher stems relax into lateral motion.
+  const verticalBias = (0.5 - ny) * compositionFlow.verticalLift;
+  // Add a gentle engraved-wave drift so the field is not purely linear.
+  const wave =
+    Math.sin(nx * Math.PI * compositionFlow.waveFreq + ny * Math.PI * 0.85) *
+    compositionFlow.waveAmp;
+  // Spatial noise adds local variation while preserving the global sweep.
+  const local =
+    map(
+      noise(
+        nx * compositionFlow.noiseScale + 17.3,
+        ny * compositionFlow.noiseScale + 41.7,
+        role === "floating" ? 0.73 : 0.31
+      ),
+      0,
+      1,
+      -jitter,
+      jitter
+    ) *
+    (role === "floating" ? 1.15 : 0.9);
+  const centerSettling = -centeredY * 0.03;
+
+  return compositionFlow.baseAngle + fan + verticalBias + wave + local + centerSettling;
 }
 
 function appendArcPhase(arcs, P, T, sign, radiusRange, sweepRange) {
@@ -483,6 +524,341 @@ function collectPocketSeeds(grid, count, radius, bounds) {
   return chosen;
 }
 
+function createDistributedPoints(count, bounds, options = {}) {
+  if (count <= 0) {
+    return [];
+  }
+
+  const width = Math.max(1, bounds.xMax - bounds.xMin);
+  const height = Math.max(1, bounds.yMax - bounds.yMin);
+  const aspect = width / height;
+  const rowBias = options.rowBias ?? 1;
+  const rows = Math.max(1, Math.round(Math.sqrt((count / Math.max(0.25, aspect)) * rowBias)));
+  const cols = Math.max(1, Math.ceil(count / rows));
+  const jitterX = options.jitterX ?? 0.18;
+  const jitterY = options.jitterY ?? 0.16;
+  const points = [];
+
+  for (let i = 0; i < count; i++) {
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    const xT = cols === 1 ? 0.5 : constrain((col + 0.5 + rnd(-jitterX, jitterX)) / cols, 0.06, 0.94);
+    const yT = rows === 1 ? 0.5 : constrain((row + 0.5 + rnd(-jitterY, jitterY)) / rows, 0.06, 0.94);
+    points.push({
+      x: lerp(bounds.xMin, bounds.xMax, xT),
+      y: lerp(bounds.yMin, bounds.yMax, yT),
+    });
+  }
+
+  return points.sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+function buildDistributedSpines(grid, count, tier, queue, placement = {}) {
+  const points = createDistributedPoints(count, placement.bounds, {
+    rowBias: placement.rowBias,
+    jitterX: placement.jitterX,
+    jitterY: placement.jitterY,
+  });
+
+  for (const point of points) {
+    const spine = buildSpine(grid, 0, 1, {
+      ...tier,
+      preferredPoint: point,
+      spreadX: placement.spreadX ?? su(18),
+      spreadY: placement.spreadY ?? su(24),
+      yMin: placement.bounds.yMin,
+      yMax: placement.bounds.yMax,
+    });
+    if (spine) {
+      queue.push({ chain: spine, scale: tier.rootScale ?? 1 });
+    }
+  }
+}
+
+function buildDistributedFloating(grid, count, tier, queue, placement = {}) {
+  const points = createDistributedPoints(count, placement.bounds, {
+    rowBias: placement.rowBias,
+    jitterX: placement.jitterX ?? 0.22,
+    jitterY: placement.jitterY ?? 0.22,
+  });
+
+  for (const point of points) {
+    const spine = buildFloating(grid, {
+      ...tier,
+      preferredPoint: point,
+      spreadX: placement.spreadX ?? su(18),
+      spreadY: placement.spreadY ?? su(18),
+      yMin: placement.bounds.yMin,
+      yMax: placement.bounds.yMax,
+    });
+    if (spine) {
+      queue.push({ chain: spine, scale: tier.scaleMax ?? 1 });
+    }
+  }
+}
+
+function pushIfChain(queue, chain, scale) {
+  if (chain) {
+    queue.push({ chain, scale });
+  }
+}
+
+function createLineGuidePoints(x0, y0, x1, y1, count, options = {}) {
+  if (count <= 0) {
+    return [];
+  }
+  const points = [];
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const baseAngle = Math.atan2(dy, dx);
+  const spread = options.spread ?? 0;
+
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / Math.max(1, count - 1);
+    const angleOffset =
+      options.angleOffsetAtT?.(t, i) ?? (spread ? lerp(-spread, spread, t) : 0);
+    points.push({
+      x: lerp(x0, x1, t),
+      y: lerp(y0, y1, t),
+      launchAngle: baseAngle + angleOffset,
+      lockToGuide: true,
+    });
+  }
+
+  return points;
+}
+
+function createEllipseGuidePoints(cx, cy, rx, ry, count, options = {}) {
+  if (count <= 0) {
+    return [];
+  }
+  const points = [];
+  const startAngle = options.startAngle ?? -PI * 0.1;
+  const endAngle = options.endAngle ?? PI * 1.1;
+  const inward = options.inward ?? true;
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / Math.max(1, count - 1);
+    const angle = lerp(startAngle, endAngle, t);
+    const x = cx + Math.cos(angle) * rx;
+    const y = cy + Math.sin(angle) * ry;
+    const nx = Math.cos(angle) / Math.max(1e-6, rx);
+    const ny = Math.sin(angle) / Math.max(1e-6, ry);
+    const radial = Math.atan2(ny, nx);
+    points.push({
+      x,
+      y,
+      launchAngle: inward ? radial + PI : radial,
+      lockToGuide: true,
+    });
+  }
+  return points;
+}
+
+function queuePointsAsSpines(grid, points, tier, queue, placement = {}) {
+  for (const point of points) {
+    pushIfChain(
+      queue,
+      buildSpine(grid, 0, 1, {
+        ...tier,
+        preferredPoint: point,
+        spreadX: placement.spreadX ?? su(14),
+        spreadY: placement.spreadY ?? su(14),
+        yMin: placement.bounds?.yMin ?? tier.yMin,
+        yMax: placement.bounds?.yMax ?? tier.yMax,
+      }),
+      tier.rootScale ?? 1
+    );
+  }
+}
+
+function queuePointsAsFloating(grid, points, tier, queue, placement = {}) {
+  for (const point of points) {
+    pushIfChain(
+      queue,
+      buildFloating(grid, {
+        ...tier,
+        preferredPoint: point,
+        spreadX: placement.spreadX ?? su(12),
+        spreadY: placement.spreadY ?? su(12),
+        yMin: placement.bounds?.yMin ?? tier.yMin,
+        yMax: placement.bounds?.yMax ?? tier.yMax,
+      }),
+      tier.scaleMax ?? 1
+    );
+  }
+}
+
+function seedFreeFieldMotif(grid, queue, tiers, bounds, aspect) {
+  const largeBounds = {
+    xMin: bounds.xMin,
+    xMax: bounds.xMax,
+    yMin: tiers.large.yMin,
+    yMax: tiers.large.yMax,
+  };
+  const mediumBounds = {
+    xMin: bounds.xMin,
+    xMax: bounds.xMax,
+    yMin: tiers.medium.yMin,
+    yMax: tiers.medium.yMax,
+  };
+  const floatingBounds = {
+    xMin: bounds.xMin,
+    xMax: bounds.xMax,
+    yMin: tiers.small.yMin,
+    yMax: tiers.small.yMax,
+  };
+
+  buildDistributedSpines(grid, params.largeSpines, tiers.large, queue, {
+    bounds: largeBounds,
+    rowBias: aspect < 0.85 ? 1.8 : 1.1,
+    spreadX: su(18),
+    spreadY: su(26),
+  });
+  buildDistributedSpines(grid, params.mediumSpines, tiers.medium, queue, {
+    bounds: mediumBounds,
+    rowBias: aspect < 0.85 ? 2.2 : 1.3,
+    spreadX: su(20),
+    spreadY: su(28),
+  });
+  buildDistributedFloating(grid, params.smallSpines, tiers.small, queue, {
+    bounds: floatingBounds,
+    rowBias: aspect < 0.85 ? 2.4 : 1.4,
+    spreadX: su(16),
+    spreadY: su(20),
+  });
+}
+
+function seedBottomBaselineMotif(grid, queue, tiers, bounds) {
+  const baselineY = bounds.yMax - su(18);
+  const largePoints = createLineGuidePoints(bounds.xMin, baselineY, bounds.xMax, baselineY, params.largeSpines, {
+    spread: 0.24,
+  });
+  const mediumPoints = createLineGuidePoints(bounds.xMin, baselineY - su(12), bounds.xMax, baselineY - su(12), params.mediumSpines, {
+    spread: 0.36,
+  });
+  const floatingPoints = createLineGuidePoints(bounds.xMin, baselineY - su(22), bounds.xMax, baselineY - su(22), params.smallSpines, {
+    spread: 0.44,
+  });
+  queuePointsAsSpines(grid, largePoints, tiers.large, queue, { spreadX: su(12), spreadY: su(10), bounds });
+  queuePointsAsSpines(grid, mediumPoints, tiers.medium, queue, { spreadX: su(14), spreadY: su(12), bounds });
+  queuePointsAsFloating(grid, floatingPoints, tiers.small, queue, { spreadX: su(10), spreadY: su(10), bounds });
+}
+
+function seedCenterAxisMotif(grid, queue, tiers, bounds) {
+  const axisX = (bounds.xMin + bounds.xMax) * 0.5;
+  const y0 = lerp(bounds.yMin, bounds.yMax, 0.18);
+  const y1 = lerp(bounds.yMin, bounds.yMax, 0.92);
+  const makeAxisPoints = (count, spreadBase) =>
+    Array.from({ length: count }, (_, i) => {
+      const t = count === 1 ? 0.5 : i / Math.max(1, count - 1);
+      const side = i % 2 === 0 ? -1 : 1;
+      return {
+        x: axisX + side * su(spreadBase),
+        y: lerp(y0, y1, t),
+        launchAngle: -PI / 2 + lerp(-0.12, 0.12, t),
+        lockToGuide: true,
+      };
+    });
+  queuePointsAsSpines(grid, makeAxisPoints(params.largeSpines, 10), tiers.large, queue, { spreadX: su(10), spreadY: su(12), bounds });
+  queuePointsAsSpines(grid, makeAxisPoints(params.mediumSpines, 18), tiers.medium, queue, { spreadX: su(12), spreadY: su(12), bounds });
+  queuePointsAsFloating(grid, makeAxisPoints(params.smallSpines, 24), tiers.small, queue, { spreadX: su(12), spreadY: su(12), bounds });
+}
+
+function seedTwinRailsMotif(grid, queue, tiers, bounds) {
+  const leftX = lerp(bounds.xMin, bounds.xMax, 0.16);
+  const rightX = lerp(bounds.xMin, bounds.xMax, 0.84);
+  const y0 = lerp(bounds.yMin, bounds.yMax, 0.12);
+  const y1 = lerp(bounds.yMin, bounds.yMax, 0.9);
+  const splitCounts = (count) => [Math.ceil(count / 2), Math.floor(count / 2)];
+  const [lLarge, rLarge] = splitCounts(params.largeSpines);
+  const [lMedium, rMedium] = splitCounts(params.mediumSpines);
+  const [lSmall, rSmall] = splitCounts(params.smallSpines);
+  const leftLarge = createLineGuidePoints(leftX, y0, leftX, y1, lLarge, { spread: 0.18 });
+  const rightLarge = createLineGuidePoints(rightX, y0, rightX, y1, rLarge, { spread: 0.18 });
+  leftLarge.forEach((p) => (p.launchAngle += 0.78));
+  rightLarge.forEach((p) => (p.launchAngle -= 0.78));
+  const leftMedium = createLineGuidePoints(leftX, y0, leftX, y1, lMedium, { spread: 0.28 });
+  const rightMedium = createLineGuidePoints(rightX, y0, rightX, y1, rMedium, { spread: 0.28 });
+  leftMedium.forEach((p) => (p.launchAngle += 0.62));
+  rightMedium.forEach((p) => (p.launchAngle -= 0.62));
+  const leftSmall = createLineGuidePoints(leftX, y0, leftX, y1, lSmall, { spread: 0.34 });
+  const rightSmall = createLineGuidePoints(rightX, y0, rightX, y1, rSmall, { spread: 0.34 });
+  leftSmall.forEach((p) => (p.launchAngle += 0.55));
+  rightSmall.forEach((p) => (p.launchAngle -= 0.55));
+  queuePointsAsSpines(grid, leftLarge.concat(rightLarge), tiers.large, queue, { spreadX: su(12), spreadY: su(14), bounds });
+  queuePointsAsSpines(grid, leftMedium.concat(rightMedium), tiers.medium, queue, { spreadX: su(12), spreadY: su(14), bounds });
+  queuePointsAsFloating(grid, leftSmall.concat(rightSmall), tiers.small, queue, { spreadX: su(10), spreadY: su(12), bounds });
+}
+
+function seedMedallionMotif(grid, queue, tiers, bounds) {
+  const cx = (bounds.xMin + bounds.xMax) * 0.5;
+  const cy = (bounds.yMin + bounds.yMax) * 0.54;
+  const width = bounds.xMax - bounds.xMin;
+  const height = bounds.yMax - bounds.yMin;
+  const largePoints = createEllipseGuidePoints(cx, cy, width * 0.34, height * 0.24, params.largeSpines, {
+    startAngle: PI * 0.1,
+    endAngle: PI * 0.9,
+    inward: true,
+  });
+  const mediumPoints = createEllipseGuidePoints(cx, cy, width * 0.4, height * 0.3, params.mediumSpines, {
+    startAngle: PI * 0.02,
+    endAngle: PI * 0.98,
+    inward: true,
+  });
+  const floatingPoints = createEllipseGuidePoints(cx, cy, width * 0.46, height * 0.36, params.smallSpines, {
+    startAngle: -PI * 0.1,
+    endAngle: PI * 1.1,
+    inward: true,
+  });
+  queuePointsAsSpines(grid, largePoints, tiers.large, queue, { spreadX: su(10), spreadY: su(10), bounds });
+  queuePointsAsSpines(grid, mediumPoints, tiers.medium, queue, { spreadX: su(12), spreadY: su(12), bounds });
+  queuePointsAsFloating(grid, floatingPoints, tiers.small, queue, { spreadX: su(12), spreadY: su(12), bounds });
+}
+
+function seedBorderFrameMotif(grid, queue, tiers, bounds) {
+  const topY = bounds.yMin + su(10);
+  const bottomY = bounds.yMax - su(10);
+  const leftX = bounds.xMin + su(10);
+  const rightX = bounds.xMax - su(10);
+  const largeBottom = createLineGuidePoints(bounds.xMin, bottomY, bounds.xMax, bottomY, Math.ceil(params.largeSpines * 0.6), { spread: 0.22 });
+  const largeTop = createLineGuidePoints(bounds.xMin, topY, bounds.xMax, topY, Math.floor(params.largeSpines * 0.4), { spread: 0.18 });
+  largeTop.forEach((p) => (p.launchAngle += PI));
+  const mediumLeft = createLineGuidePoints(leftX, bounds.yMin, leftX, bounds.yMax, Math.ceil(params.mediumSpines / 2), { spread: 0.24 });
+  const mediumRight = createLineGuidePoints(rightX, bounds.yMin, rightX, bounds.yMax, Math.floor(params.mediumSpines / 2), { spread: 0.24 });
+  mediumLeft.forEach((p) => (p.launchAngle += 0.62));
+  mediumRight.forEach((p) => (p.launchAngle -= 0.62));
+  const floatingTop = createLineGuidePoints(bounds.xMin, topY + su(14), bounds.xMax, topY + su(14), Math.ceil(params.smallSpines / 2), { spread: 0.32 });
+  const floatingBottom = createLineGuidePoints(bounds.xMin, bottomY - su(14), bounds.xMax, bottomY - su(14), Math.floor(params.smallSpines / 2), { spread: 0.32 });
+  floatingTop.forEach((p) => (p.launchAngle += PI));
+  queuePointsAsSpines(grid, largeBottom.concat(largeTop), tiers.large, queue, { spreadX: su(12), spreadY: su(10), bounds });
+  queuePointsAsSpines(grid, mediumLeft.concat(mediumRight), tiers.medium, queue, { spreadX: su(10), spreadY: su(10), bounds });
+  queuePointsAsFloating(grid, floatingTop.concat(floatingBottom), tiers.small, queue, { spreadX: su(10), spreadY: su(10), bounds });
+}
+
+function seedMotifPreset(grid, queue, tiers, bounds, aspect) {
+  switch (appState.motifPreset) {
+    case "bottomBaseline":
+      seedBottomBaselineMotif(grid, queue, tiers, bounds);
+      break;
+    case "centerAxis":
+      seedCenterAxisMotif(grid, queue, tiers, bounds);
+      break;
+    case "twinRails":
+      seedTwinRailsMotif(grid, queue, tiers, bounds);
+      break;
+    case "medallion":
+      seedMedallionMotif(grid, queue, tiers, bounds);
+      break;
+    case "borderFrame":
+      seedBorderFrameMotif(grid, queue, tiers, bounds);
+      break;
+    case "freeField":
+    default:
+      seedFreeFieldMotif(grid, queue, tiers, bounds, aspect);
+      break;
+  }
+}
+
 function findNearbySpawnPoint(points, candidate, threshold) {
   if (!points || !points.length || !(threshold > 0)) {
     return null;
@@ -522,11 +898,15 @@ function buildSpine(grid, col, nCols, tier = {}) {
   for (let tries = 0; tries < 30; tries++) {
     const rawPoint = {
       x: preferredPoint
-      ? constrain(preferredPoint.x + rnd(-spreadX, spreadX), x0, x1)
-      : x0 + cw * (col + rnd(0.1, 0.9)),
+        ? preferredPoint.lockToGuide
+          ? constrain(preferredPoint.x, x0, x1)
+          : constrain(preferredPoint.x + rnd(-spreadX, spreadX), x0, x1)
+        : x0 + cw * (col + rnd(0.1, 0.9)),
       y: preferredPoint
-      ? constrain(preferredPoint.y + rnd(-spreadY, spreadY), yMin, yMax)
-      : rnd(yMin, yMax),
+        ? preferredPoint.lockToGuide
+          ? constrain(preferredPoint.y, yMin, yMax)
+          : constrain(preferredPoint.y + rnd(-spreadY, spreadY), yMin, yMax)
+        : rnd(yMin, yMax),
     };
     const sharedPoint = preferredPoint
       ? null
@@ -534,7 +914,11 @@ function buildSpine(grid, col, nCols, tier = {}) {
     const px = sharedPoint ? sharedPoint.x : rawPoint.x;
     const py = sharedPoint ? sharedPoint.y : rawPoint.y;
     const startClearanceSkip = sharedPoint ? sharedSpawnSkip : 0;
-    const ang = randomFlowAngle(compositionFlow.spineJitter);
+    const launchAngle =
+      preferredPoint && preferredPoint.launchAngle !== undefined
+        ? preferredPoint.launchAngle
+        : flowAngleAt(px, py, "spine");
+    const ang = launchAngle;
     const T = [Math.cos(ang), Math.sin(ang)];
     const sA = chance(0.5) ? 1 : -1;
     const q = quartersFromTurns();
@@ -714,7 +1098,6 @@ function buildCornerSpine(grid, side = "left", tier = {}) {
     );
     P = phase.P;
     Tc = phase.T;
-
     const sp = spiralArcs(
       P[0],
       P[1],
@@ -787,7 +1170,6 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
     phase = appendTerminalTransition(arcs, Pp, Tc, sSp, hostRadius, spiralRadius, scale, "branch");
     Pp = phase.P;
     Tc = phase.T;
-
     const sp = spiralArcs(
       Pp[0],
       Pp[1],
@@ -874,7 +1256,6 @@ function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalB
     phase = appendTerminalTransition(arcs, Pp, Tc, side, hostRadius, targetRadius, scale, "branch");
     Pp = phase.P;
     Tc = phase.T;
-
     const sp = spiralArcs(
       Pp[0],
       Pp[1],
@@ -977,11 +1358,19 @@ function buildFloating(grid, tier = {}) {
   for (let tries = 0; tries < 10; tries++) {
     const P = preferredPoint
       ? [
-          constrain(preferredPoint.x + rnd(-spreadX, spreadX), m + su(30), genW - su(40)),
-          constrain(preferredPoint.y + rnd(-spreadY, spreadY), yMin, yMax),
+          preferredPoint.lockToGuide
+            ? constrain(preferredPoint.x, m + su(30), genW - su(40))
+            : constrain(preferredPoint.x + rnd(-spreadX, spreadX), m + su(30), genW - su(40)),
+          preferredPoint.lockToGuide
+            ? constrain(preferredPoint.y, yMin, yMax)
+            : constrain(preferredPoint.y + rnd(-spreadY, spreadY), yMin, yMax),
         ]
       : [rnd(m + su(30), genW - su(40)), rnd(yMin, yMax)];
-    const ang = randomFlowAngle(compositionFlow.floatingJitter);
+    const launchAngle =
+      preferredPoint && preferredPoint.launchAngle !== undefined
+        ? preferredPoint.launchAngle
+        : flowAngleAt(P[0], P[1], "floating");
+    const ang = launchAngle;
     const T = [Math.cos(ang), Math.sin(ang)];
     const side = chance(0.5) ? 1 : -1;
     const scale = rnd(scaleMin, scaleMax);
@@ -1009,7 +1398,6 @@ function buildFloating(grid, tier = {}) {
     phase = appendTerminalTransition(arcs, Pp, Tc, sSp, hostRadius, targetRadius, scale, "branch");
     Pp = phase.P;
     Tc = phase.T;
-
     const sp = spiralArcs(
       Pp[0],
       Pp[1],
@@ -1051,30 +1439,28 @@ function generate() {
   const grid = makeGrid(params.clearance);
   const queue = [];
   const cornerScale = 1.14;
-  const majorSpawnPoints = [];
+  const bounds = sourceBounds();
+  const aspect = stageWidth() / Math.max(1, stageHeight());
 
   const largeTier = {
     rootScale: 1.08,
-    yMin: stageHeight() * 0.48,
-    yMax: stageHeight() - margin() - su(45),
+    yMin: lerp(bounds.yMin, bounds.yMax, 0.34),
+    yMax: lerp(bounds.yMin, bounds.yMax, 0.94),
     bodyChance: 0.82,
     weightScale: 1.08,
-    sharedSpawnPoints: majorSpawnPoints,
-    sharedSpawnThreshold: 78,
-    sharedSpawnSkip: 72,
   };
   const mediumTier = {
     rootScale: 0.78,
-    yMin: stageHeight() * 0.34,
-    yMax: stageHeight() - margin() - su(55),
+    yMin: lerp(bounds.yMin, bounds.yMax, 0.14),
+    yMax: lerp(bounds.yMin, bounds.yMax, 0.82),
     bodyChance: 0.58,
     weightScale: 0.9,
   };
   const smallTier = {
     scaleMin: 0.34,
     scaleMax: 0.55,
-    yMin: stageHeight() * 0.22,
-    yMax: stageHeight() - margin() - su(70),
+    yMin: lerp(bounds.yMin, bounds.yMax, 0.06),
+    yMax: lerp(bounds.yMin, bounds.yMax, 0.88),
     wantsOffshoot: true,
     weightScale: 0.72,
   };
@@ -1099,62 +1485,55 @@ function generate() {
     }
   }
 
-  for (let i = 0; i < params.largeSpines; i++) {
-    const sp = buildSpine(grid, i, Math.max(1, params.largeSpines), largeTier);
-    if (sp) {
-      queue.push({ chain: sp, scale: largeTier.rootScale });
-    }
-  }
+  seedMotifPreset(
+    grid,
+    queue,
+    {
+      large: largeTier,
+      medium: mediumTier,
+      small: smallTier,
+    },
+    bounds,
+    aspect
+  );
 
-  for (let i = 0; i < params.mediumSpines; i++) {
-    const sp = buildSpine(grid, i, Math.max(1, params.mediumSpines), mediumTier);
-    if (sp) {
-      queue.push({ chain: sp, scale: mediumTier.rootScale });
+  if (appState.motifPreset === "freeField" || appState.motifPreset === "borderFrame") {
+    const pockets = bounds;
+    const mediumPocketSeeds = collectPocketSeeds(grid, 2, su(90), pockets);
+    for (const seed of mediumPocketSeeds) {
+      const sp = buildSpine(grid, 0, 1, {
+        ...mediumTier,
+        rootScale: 0.66,
+        bodyChance: 0.42,
+        weightScale: 0.8,
+        preferredPoint: seed,
+        spreadX: su(26),
+        spreadY: su(34),
+        yMin: pockets.yMin,
+        yMax: pockets.yMax,
+      });
+      if (sp) {
+        queue.push({ chain: sp, scale: 0.66 });
+      }
     }
-  }
 
-  for (let i = 0; i < params.smallSpines; i++) {
-    const sp = buildFloating(grid, smallTier);
-    if (sp) {
-      queue.push({ chain: sp, scale: smallTier.scaleMax });
-    }
-  }
-
-  const pockets = sourceBounds();
-  const mediumPocketSeeds = collectPocketSeeds(grid, 2, su(90), pockets);
-  for (const seed of mediumPocketSeeds) {
-    const sp = buildSpine(grid, 0, 1, {
-      ...mediumTier,
-      rootScale: 0.66,
-      bodyChance: 0.42,
-      weightScale: 0.8,
-      preferredPoint: seed,
-      spreadX: su(26),
-      spreadY: su(34),
-      yMin: pockets.yMin,
-      yMax: pockets.yMax,
-    });
-    if (sp) {
-      queue.push({ chain: sp, scale: 0.66 });
-    }
-  }
-
-  const smallPocketSeeds = collectPocketSeeds(grid, 4, su(54), pockets);
-  for (const seed of smallPocketSeeds) {
-    const sp = buildFloating(grid, {
-      ...smallTier,
-      scaleMin: 0.24,
-      scaleMax: 0.42,
-      weightScale: 0.58,
-      wantsOffshoot: true,
-      preferredPoint: seed,
-      spreadX: su(18),
-      spreadY: su(18),
-      yMin: pockets.yMin,
-      yMax: pockets.yMax,
-    });
-    if (sp) {
-      queue.push({ chain: sp, scale: 0.42 });
+    const smallPocketSeeds = collectPocketSeeds(grid, 4, su(54), pockets);
+    for (const seed of smallPocketSeeds) {
+      const sp = buildFloating(grid, {
+        ...smallTier,
+        scaleMin: 0.24,
+        scaleMax: 0.42,
+        weightScale: 0.58,
+        wantsOffshoot: true,
+        preferredPoint: seed,
+        spreadX: su(18),
+        spreadY: su(18),
+        yMin: pockets.yMin,
+        yMax: pockets.yMax,
+      });
+      if (sp) {
+        queue.push({ chain: sp, scale: 0.42 });
+      }
     }
   }
 

@@ -1,5 +1,5 @@
 (function attachVictorianPatternControls(global) {
-  const { CANVAS_PRESETS } = global.VictorianPatternState;
+  const { CANVAS_PRESETS, MOTIF_PRESETS } = global.VictorianPatternState;
 
   function buildPane(config) {
     const {
@@ -43,6 +43,14 @@
       .on("change", onCanvasChange);
 
     const structureFolder = pane.addFolder({ title: "Structure" });
+    structureFolder
+      .addInput(state, "motifPreset", {
+        options: Object.fromEntries(
+          Object.entries(MOTIF_PRESETS).map(([key, value]) => [value.label, key])
+        ),
+        label: "Motif",
+      })
+      .on("change", onPatternChange);
     structureFolder
       .addInput(state.params, "largeSpines", { min: 1, max: 16, step: 1, label: "Large" })
       .on("change", onPatternChange);

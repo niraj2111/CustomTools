@@ -8,6 +8,14 @@
     A3Portrait: { label: "A3 Portrait", widthMM: 297, heightMM: 420 },
     A3Landscape: { label: "A3 Landscape", widthMM: 420, heightMM: 297 },
   };
+  const MOTIF_PRESETS = {
+    freeField: { label: "Free Field" },
+    bottomBaseline: { label: "Bottom Baseline" },
+    centerAxis: { label: "Center Axis" },
+    twinRails: { label: "Twin Rails" },
+    medallion: { label: "Medallion" },
+    borderFrame: { label: "Border Frame" },
+  };
 
   const DEFAULT_PARAMS = {
     largeSpines: 16,
@@ -20,16 +28,17 @@
     clearance: 13,
     decay: 0.55,
     turns: 1,
-    leafProb: 0.0,
+    leafProb: 0.12,
     mirror: true,
     verticalSymmetry: false,
     voidOn: true,
   };
 
   function createAppState(config) {
-    const defaultPreset = "A4Landscape";
+    const defaultPreset = "A4Portrait";
     return {
       seed: 1,
+      motifPreset: "freeField",
       canvasPreset: defaultPreset,
       canvasWMM: CANVAS_PRESETS[defaultPreset].widthMM,
       canvasHMM: CANVAS_PRESETS[defaultPreset].heightMM,
@@ -45,7 +54,8 @@
 
   function resetAppState(state) {
     state.seed = 1;
-    state.canvasPreset = "A4Landscape";
+    state.motifPreset = "freeField";
+    state.canvasPreset = "A4Portrait";
     state.canvasWMM = CANVAS_PRESETS[state.canvasPreset].widthMM;
     state.canvasHMM = CANVAS_PRESETS[state.canvasPreset].heightMM;
     state.dpi = 144;
@@ -58,6 +68,7 @@
 
   global.VictorianPatternState = {
     CANVAS_PRESETS,
+    MOTIF_PRESETS,
     DEFAULT_PARAMS,
     MM_PER_INCH,
     createAppState,
