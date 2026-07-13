@@ -33,6 +33,7 @@
     decay: 0.55,
     turns: 1,
     leafProb: 0.12,
+    leafCurvature: 0.62,
     mirror: true,
     verticalSymmetry: false,
     voidOn: true,

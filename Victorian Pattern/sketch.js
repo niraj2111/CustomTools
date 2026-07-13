@@ -23,6 +23,10 @@ let R = mulberry32(1);
 const rnd = (a = 1, b) => (b === undefined ? R() * a : a + R() * (b - a));
 const rint = (a, b) => Math.floor(rnd(a, b + 1));
 const chance = (p) => R() < p;
+const normalizeVec = (x, y) => {
+  const mag = Math.hypot(x, y) || 1;
+  return [x / mag, y / mag];
+};
 
 // ---- exact arc primitives ----
 // An arc is {cx, cy, r, a0, da}. Point(t) at angle a0 + da*t, t in [0,1].
@@ -504,16 +508,21 @@ function buildTerminalLeafFromSpiral(terminalArcs, role = "branch") {
     return null;
   }
 
-  const source = terminalArcs[terminalArcs.length - 1];
-  const outer = [{ ...source }];
-  const outerStart = arcPointAt(source, 0);
-  const outerStartTangent = arcTangentAt(source, 0);
-  const outerTip = arcPointAt(source, 1);
-  const sign = Math.sign(source.da) || 1;
+  const outer = terminalArcs.map((arc) => ({ ...arc }));
+  const first = terminalArcs[0];
+  const last = terminalArcs[terminalArcs.length - 1];
+  const outerStart = arcPointAt(first, 0);
+  const outerStartTangent = arcTangentAt(first, 0);
+  const outerTip = arcPointAt(last, 1);
+  const sign = Math.sign(last.da) || 1;
   const inner = [];
-  const neckInset = role === "spine" ? 0.34 : 0.38;
-  const neckRadius = Math.max(su(3), source.r * (1 - neckInset));
-  const neckSweep = Math.abs(source.da) * (role === "spine" ? 0.62 : 0.58);
+  const curveAmount = Math.max(0, Math.min(1, params.leafCurvature ?? 0.62));
+  const outerMaxRadius = terminalArcs.reduce((maxRadius, arc) => Math.max(maxRadius, arc.r), 0);
+  const neckRadius = Math.max(
+    su(3),
+    outerMaxRadius * (role === "spine" ? lerp(0.44, 0.92, curveAmount) : lerp(0.38, 0.84, curveAmount))
+  );
+  const neckSweep = lerp(0.12, Math.min(Math.abs(last.da) * 0.92, 1.45), curveAmount);
   const neck = arcFrom(
     outerStart[0],
     outerStart[1],
@@ -523,36 +532,68 @@ function buildTerminalLeafFromSpiral(terminalArcs, role = "branch") {
     sign,
     neckSweep
   );
-  inner.push(neck.arc);
 
-  const closingArc = arcToPointWithTangent(
+  const closingPreferredSign = curveAmount < 0.5 ? -sign : sign;
+  let closingArc = arcToPointWithTangent(
     neck.ex,
     neck.ey,
     neck.etx,
     neck.ety,
     outerTip[0],
     outerTip[1],
-    sign
+    closingPreferredSign
   );
+  if (!closingArc) {
+    closingArc = arcToPointWithTangent(
+      neck.ex,
+      neck.ey,
+      neck.etx,
+      neck.ety,
+      outerTip[0],
+      outerTip[1],
+      -closingPreferredSign
+    );
+  }
 
-  if (closingArc && closingArc.r < source.r * 1.6 && Math.abs(closingArc.da) < Math.abs(source.da) * 1.35) {
-    inner.push(closingArc);
-  } else {
-    const fallback = arcToPointWithTangent(
+  if (closingArc) {
+    const maxClosingSweep = lerp(1.3, 2.4, curveAmount);
+    if (Math.abs(closingArc.da) <= maxClosingSweep) {
+      inner.push(neck.arc);
+      inner.push(closingArc);
+    }
+  }
+
+  if (!inner.length) {
+    const chordTangent = normalizeVec(outerTip[0] - outerStart[0], outerTip[1] - outerStart[1]);
+    const tangentBias = Math.min(1, curveAmount * 0.75);
+    const tangentBlend = normalizeVec(
+      chordTangent[0] * (1 - tangentBias) + outerStartTangent[0] * tangentBias,
+      chordTangent[1] * (1 - tangentBias) + outerStartTangent[1] * tangentBias
+    );
+    let fallback = arcToPointWithTangent(
       outerStart[0],
       outerStart[1],
-      outerStartTangent[0],
-      outerStartTangent[1],
+      tangentBlend[0],
+      tangentBlend[1],
       outerTip[0],
       outerTip[1],
       sign
     );
-    if (fallback) {
-      inner.length = 0;
-      inner.push(fallback);
-    } else {
+    if (!fallback) {
+      fallback = arcToPointWithTangent(
+        outerStart[0],
+        outerStart[1],
+        tangentBlend[0],
+        tangentBlend[1],
+        outerTip[0],
+        outerTip[1],
+        -sign
+      );
+    }
+    if (!fallback) {
       return null;
     }
+    inner.push(fallback);
   }
 
   return {

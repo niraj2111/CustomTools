@@ -88,6 +88,14 @@
     ornamentFolder
       .addInput(state.params, "leafProb", { min: 0, max: 0.5, step: 0.02, label: "Leaf Prob" })
       .on("change", onPatternChange);
+    ornamentFolder
+      .addInput(state.params, "leafCurvature", {
+        min: 0,
+        max: 1,
+        step: 0.01,
+        label: "Leaf Curve",
+      })
+      .on("change", onPatternChange);
     ornamentFolder.addInput(state.params, "mirror", { label: "Mirror" }).on("change", onPatternChange);
     ornamentFolder
       .addInput(state.params, "verticalSymmetry", { label: "Vertical" })
