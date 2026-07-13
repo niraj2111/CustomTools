@@ -1,5 +1,5 @@
 (function attachVictorianPatternControls(global) {
-  const { CANVAS_PRESETS, MOTIF_PRESETS } = global.VictorianPatternState;
+  const { CANVAS_PRESETS, MOTIF_PRESETS, VOID_SHAPES } = global.VictorianPatternState;
 
   function buildPane(config) {
     const {
@@ -94,9 +94,34 @@
       .on("change", onPatternChange);
     ornamentFolder.addInput(state.params, "voidOn", { label: "Void" }).on("change", onPatternChange);
 
+    const voidFolder = pane.addFolder({ title: "Void Mask" });
+    voidFolder
+      .addInput(state.voidMask, "shape", {
+        options: Object.fromEntries(
+          Object.entries(VOID_SHAPES).map(([key, value]) => [value.label, key])
+        ),
+        label: "Shape",
+      })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "xPct", { min: 0, max: 100, step: 0.5, label: "X %" })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "yPct", { min: 0, max: 100, step: 0.5, label: "Y %" })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "wPct", { min: 2, max: 100, step: 0.5, label: "W %" })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "hPct", { min: 2, max: 100, step: 0.5, label: "H %" })
+      .on("change", onPatternChange);
+
     const viewFolder = pane.addFolder({ title: "View" });
     viewFolder
       .addInput(state, "invertPreview", { label: "Invert Preview" })
+      .on("change", onViewChange);
+    viewFolder
+      .addInput(state, "debugParts", { label: "Debug Parts" })
       .on("change", onViewChange);
 
     const exportFolder = pane.addFolder({ title: "Export" });

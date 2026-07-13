@@ -23,8 +23,16 @@
 
     if (chain.kind === "stroke") {
       output += `<path d="${arcsToPath(chain.arcs, arcPointAt)}"/>\n`;
+      if (chain.terminalLeaf && chain.terminalLeaf.outer?.length && chain.terminalLeaf.inner?.length) {
+        const innerReverse = reverseArcs(chain.terminalLeaf.inner);
+        const leafPath = `${arcsToPath(chain.terminalLeaf.outer, arcPointAt)} ${arcsToPath(
+          innerReverse,
+          arcPointAt
+        ).replace(/^M [^A]+/, "L")}`;
+        output += `<path d="${leafPath}"/>\n`;
+      }
       const last = chain.arcs[chain.arcs.length - 1];
-      if (last.r < 6) {
+      if (last.r < 6 && !chain.terminalLeaf) {
         const end = arcPointAt(last, 1);
         output += `<circle cx="${fmt(end[0])}" cy="${fmt(end[1])}" r="${fmt(Math.max(1.2, chain.wBase * 0.3))}"/>\n`;
       }
@@ -44,6 +52,20 @@
     return output;
   }
 
+  function voidMaskToSvg(voidMask, fillColor) {
+    if (!voidMask) {
+      return "";
+    }
+    if (voidMask.shape === "rect") {
+      return `<g id="void-mask"><rect x="${fmt(voidMask.x)}" y="${fmt(voidMask.y)}" width="${fmt(
+        voidMask.width
+      )}" height="${fmt(voidMask.height)}" fill="${fillColor}" stroke="none"/></g>\n`;
+    }
+    return `<g id="void-mask"><ellipse cx="${fmt(voidMask.cx)}" cy="${fmt(voidMask.cy)}" rx="${fmt(
+      voidMask.rx
+    )}" ry="${fmt(voidMask.ry)}" fill="${fillColor}" stroke="none"/></g>\n`;
+  }
+
   function downloadPng(saveCanvasFn, seed) {
     saveCanvasFn(`victorian-flourish-${seed}`, "png");
   }
@@ -56,12 +78,14 @@
       decay,
       invertPreview,
       model,
+      voidMask,
       reflectedChains,
       shouldSuppressUnresolvedCurl,
       helpers,
     } = config;
 
     const ink = invertPreview ? "#141413" : "#e9e7df";
+    const paper = invertPreview ? "#f6f4ee" : "#0e0e10";
     let body = "";
 
     for (const chain of model.chains) {
@@ -79,6 +103,7 @@
 <!-- Centerline geometry: pure circular arcs (A commands) + circles. G1-continuous. -->
 <g fill="none" stroke="${ink}" stroke-width="1" stroke-linecap="round">
 ${body}</g>
+${voidMaskToSvg(voidMask, paper)}
 </svg>`;
 
     const blob = new Blob([svg], { type: "image/svg+xml" });

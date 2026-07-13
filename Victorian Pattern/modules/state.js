@@ -16,6 +16,10 @@
     medallion: { label: "Medallion" },
     borderFrame: { label: "Border Frame" },
   };
+  const VOID_SHAPES = {
+    oval: { label: "Oval" },
+    rect: { label: "Rect" },
+  };
 
   const DEFAULT_PARAMS = {
     largeSpines: 16,
@@ -46,9 +50,17 @@
       previewScale: 1,
       fitToViewport: true,
       invertPreview: false,
+      debugParts: false,
       designWidth: config.canvasWidth,
       designHeight: config.canvasHeight,
       params: { ...DEFAULT_PARAMS },
+      voidMask: {
+        shape: "oval",
+        xPct: 50,
+        yPct: 60,
+        wPct: 25.333,
+        hPct: 25.556,
+      },
     };
   }
 
@@ -62,13 +74,22 @@
     state.previewScale = 1;
     state.fitToViewport = true;
     state.invertPreview = false;
+    state.debugParts = false;
     state.params = { ...DEFAULT_PARAMS };
+    state.voidMask = {
+      shape: "oval",
+      xPct: 50,
+      yPct: 60,
+      wPct: 25.333,
+      hPct: 25.556,
+    };
     return state;
   }
 
   global.VictorianPatternState = {
     CANVAS_PRESETS,
     MOTIF_PRESETS,
+    VOID_SHAPES,
     DEFAULT_PARAMS,
     MM_PER_INCH,
     createAppState,

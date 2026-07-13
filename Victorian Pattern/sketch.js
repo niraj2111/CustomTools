@@ -68,6 +68,48 @@ function reverseArcs(arcs) {
     .map((a) => ({ cx: a.cx, cy: a.cy, r: a.r, a0: a.a0 + a.da, da: -a.da }));
 }
 
+function arcToPointWithTangent(px, py, tx, ty, qx, qy, preferredSign = 1) {
+  const normalX = -ty;
+  const normalY = tx;
+  const dx = qx - px;
+  const dy = qy - py;
+  const distanceSq = dx * dx + dy * dy;
+  const signs = preferredSign >= 0 ? [1, -1] : [-1, 1];
+
+  for (const sign of signs) {
+    const normalDot = dx * normalX + dy * normalY;
+    const denom = 2 * sign * normalDot;
+    if (Math.abs(denom) < 1e-6) {
+      continue;
+    }
+
+    const radius = distanceSq / denom;
+    if (!(radius > 1e-6)) {
+      continue;
+    }
+
+    const cx = px + sign * normalX * radius;
+    const cy = py + sign * normalY * radius;
+    const a0 = Math.atan2(py - cy, px - cx);
+    let a1 = Math.atan2(qy - cy, qx - cx);
+    let da = a1 - a0;
+
+    if (sign > 0) {
+      while (da <= 0) da += TAU;
+    } else {
+      while (da >= 0) da -= TAU;
+    }
+
+    if (Math.abs(da) < 1e-4 || Math.abs(da) > Math.PI * 1.85) {
+      continue;
+    }
+
+    return { cx, cy, r: radius, a0, da };
+  }
+
+  return null;
+}
+
 // ---- logarithmic spiral as chained quarter-arcs (classical construction) ----
 // Each successive quarter-arc's radius is r *= k. The next center lies on the radial
 // line through the join point, so tangency is exact. This is a G1 piecewise-circular
@@ -129,7 +171,18 @@ function sampleArcs(arcs, step) {
       const t = i / n;
       const [x, y] = arcPointAt(a, t);
       const [tx, ty] = arcTangentAt(a, t);
-      out.push({ x, y, tx, ty, s: acc + L * t, r: a.r, dir: Math.sign(a.da) || 1 });
+      out.push({
+        x,
+        y,
+        tx,
+        ty,
+        s: acc + L * t,
+        r: a.r,
+        dir: Math.sign(a.da) || 1,
+        cx: a.cx,
+        cy: a.cy,
+        arc: a,
+      });
     }
     acc += L;
   }
@@ -215,11 +268,23 @@ function margin() {
 }
 
 function stageVoid() {
+  const mask = appState.voidMask;
+  const width = stageWidth();
+  const height = stageHeight();
+  const w = (width * mask.wPct) / 100;
+  const h = (height * mask.hPct) / 100;
+  const cx = (width * mask.xPct) / 100;
+  const cy = (height * mask.yPct) / 100;
   return {
-    cx: stageWidth() / 2,
-    cy: stageHeight() * 0.6,
-    rx: su(190),
-    ry: su(115),
+    shape: mask.shape,
+    cx,
+    cy,
+    rx: w * 0.5,
+    ry: h * 0.5,
+    x: cx - w * 0.5,
+    y: cy - h * 0.5,
+    width: w,
+    height: h,
   };
 }
 
@@ -228,9 +293,33 @@ function inVoid(x, y) {
     return false;
   }
   const currentVoid = stageVoid();
+  if (currentVoid.shape === "rect") {
+    return (
+      x > currentVoid.x &&
+      x < currentVoid.x + currentVoid.width &&
+      y > currentVoid.y &&
+      y < currentVoid.y + currentVoid.height
+    );
+  }
   const dx = (x - currentVoid.cx) / currentVoid.rx;
   const dy = (y - currentVoid.cy) / currentVoid.ry;
   return dx * dx + dy * dy < 1;
+}
+
+function drawVoidMask() {
+  if (!params.voidOn) {
+    return;
+  }
+  const currentVoid = stageVoid();
+  push();
+  noStroke();
+  fill(appState.invertPreview ? "#f6f4ee" : "#0e0e10");
+  if (currentVoid.shape === "rect") {
+    rect(currentVoid.x, currentVoid.y, currentVoid.width, currentVoid.height);
+  } else {
+    ellipse(currentVoid.cx, currentVoid.cy, currentVoid.rx * 2, currentVoid.ry * 2);
+  }
+  pop();
 }
 
 function inBounds(x, y) {
@@ -404,6 +493,73 @@ function terminalQuarterTurns(hasReversal, role) {
     return role === "spine" ? 1 : 1;
   }
   return role === "spine" ? Math.min(2, quartersFromTurns()) : quartersFromTurns();
+}
+
+function makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex) {
+  return { bodyEndIndex, transitionIndex, terminalStartIndex };
+}
+
+function buildTerminalLeafFromSpiral(terminalArcs, role = "branch") {
+  if (!terminalArcs || !terminalArcs.length) {
+    return null;
+  }
+
+  const source = terminalArcs[terminalArcs.length - 1];
+  const outer = [{ ...source }];
+  const outerStart = arcPointAt(source, 0);
+  const outerStartTangent = arcTangentAt(source, 0);
+  const outerTip = arcPointAt(source, 1);
+  const sign = Math.sign(source.da) || 1;
+  const inner = [];
+  const neckInset = role === "spine" ? 0.34 : 0.38;
+  const neckRadius = Math.max(su(3), source.r * (1 - neckInset));
+  const neckSweep = Math.abs(source.da) * (role === "spine" ? 0.62 : 0.58);
+  const neck = arcFrom(
+    outerStart[0],
+    outerStart[1],
+    outerStartTangent[0],
+    outerStartTangent[1],
+    neckRadius,
+    sign,
+    neckSweep
+  );
+  inner.push(neck.arc);
+
+  const closingArc = arcToPointWithTangent(
+    neck.ex,
+    neck.ey,
+    neck.etx,
+    neck.ety,
+    outerTip[0],
+    outerTip[1],
+    sign
+  );
+
+  if (closingArc && closingArc.r < source.r * 1.6 && Math.abs(closingArc.da) < Math.abs(source.da) * 1.35) {
+    inner.push(closingArc);
+  } else {
+    const fallback = arcToPointWithTangent(
+      outerStart[0],
+      outerStart[1],
+      outerStartTangent[0],
+      outerStartTangent[1],
+      outerTip[0],
+      outerTip[1],
+      sign
+    );
+    if (fallback) {
+      inner.length = 0;
+      inner.push(fallback);
+    } else {
+      return null;
+    }
+  }
+
+  return {
+    outer,
+    inner,
+    role,
+  };
 }
 
 function findBranchAnchor(chain, startT = 0.58, endT = 0.82) {
@@ -953,6 +1109,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
       P = phase.P;
       Tc = phase.T;
     }
+    const bodyEndIndex = arcs.length - 1;
 
     const hasReturn = chance(0.55);
     let sClose = sA;
@@ -984,6 +1141,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
     );
     P = phase.P;
     Tc = phase.T;
+    const transitionIndex = arcs.length - 1;
     const sp1 = spiralArcs(
       P[0],
       P[1],
@@ -995,6 +1153,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
       terminalQuarterTurns(hasReturn, "spine")
     );
     arcs = arcs.concat(sp1.arcs);
+    const terminalStartIndex = transitionIndex + 1;
 
     const samples = sampleArcs(arcs, 3);
     if (!testChain(samples, grid, startClearanceSkip)) {
@@ -1006,6 +1165,8 @@ function buildSpine(grid, col, nCols, tier = {}) {
       arcs,
       depth: 0,
       profile: "spine",
+      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+      terminalLeaf: buildTerminalLeafFromSpiral(sp1.arcs, "spine"),
       wBase: STROKE_WEIGHT,
       spawnPoint: { x: px, y: py },
     };
@@ -1067,6 +1228,7 @@ function buildCornerSpine(grid, side = "left", tier = {}) {
     );
     P = phase.P;
     Tc = phase.T;
+    const bodyEndIndex = arcs.length - 1;
 
     const hasReturn = chance(0.45);
     let sClose = sA;
@@ -1098,6 +1260,7 @@ function buildCornerSpine(grid, side = "left", tier = {}) {
     );
     P = phase.P;
     Tc = phase.T;
+    const transitionIndex = arcs.length - 1;
     const sp = spiralArcs(
       P[0],
       P[1],
@@ -1109,6 +1272,7 @@ function buildCornerSpine(grid, side = "left", tier = {}) {
       terminalQuarterTurns(hasReturn, "spine")
     );
     arcs = arcs.concat(sp.arcs);
+    const terminalStartIndex = transitionIndex + 1;
 
     const samples = sampleArcs(arcs, 3);
     if (!testChain(samples, grid, 0)) {
@@ -1120,6 +1284,8 @@ function buildCornerSpine(grid, side = "left", tier = {}) {
       arcs,
       depth: 0,
       profile: "spine",
+      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "spine"),
       wBase: STROKE_WEIGHT,
     };
     acceptChain(chain, samples, grid);
@@ -1158,6 +1324,7 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
     );
     Pp = phase.P;
     Tc = phase.T;
+    const bodyEndIndex = arcs.length - 1;
 
     const hasReturn = false;
     const sSp = side;
@@ -1170,6 +1337,7 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
     phase = appendTerminalTransition(arcs, Pp, Tc, sSp, hostRadius, spiralRadius, scale, "branch");
     Pp = phase.P;
     Tc = phase.T;
+    const transitionIndex = arcs.length - 1;
     const sp = spiralArcs(
       Pp[0],
       Pp[1],
@@ -1181,6 +1349,7 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
       terminalQuarterTurns(hasReturn, "branch")
     );
     arcs = arcs.concat(sp.arcs);
+    const terminalStartIndex = transitionIndex + 1;
 
     const samples = sampleArcs(arcs, 3);
     if (samples[samples.length - 1].s < skip * 1.4 || !testChain(samples, grid, skip)) {
@@ -1192,6 +1361,8 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
       arcs,
       depth,
       profile: "branch",
+      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
       wBase: STROKE_WEIGHT,
       wantsOffshoot: true,
     };
@@ -1249,6 +1420,7 @@ function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalB
     let phase = appendArcPhase(arcs, Pp, Tc, side, [r1, Math.max(r1 + 1, r1 * 1.18)], [0.42, 0.82]);
     Pp = phase.P;
     Tc = phase.T;
+    const bodyEndIndex = arcs.length - 1;
 
     const hostRadius = arcs[arcs.length - 1].r;
     const spiralScale = growthBoost(depth, scale, terminalBias) * 0.8;
@@ -1256,6 +1428,7 @@ function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalB
     phase = appendTerminalTransition(arcs, Pp, Tc, side, hostRadius, targetRadius, scale, "branch");
     Pp = phase.P;
     Tc = phase.T;
+    const transitionIndex = arcs.length - 1;
     const sp = spiralArcs(
       Pp[0],
       Pp[1],
@@ -1267,6 +1440,7 @@ function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalB
       1
     );
     arcs = arcs.concat(sp.arcs);
+    const terminalStartIndex = transitionIndex + 1;
 
     const samples = sampleArcs(arcs, 3);
     if (samples[samples.length - 1].s < skip * 1.05 || !testChain(samples, grid, skip)) {
@@ -1278,6 +1452,8 @@ function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalB
       arcs,
       depth,
       profile: "branch",
+      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
       wBase: STROKE_WEIGHT,
       wantsOffshoot: false,
       mustHaveOffshoot: false,
@@ -1380,6 +1556,7 @@ function buildFloating(grid, tier = {}) {
     let phase = appendArcPhase(arcs, Pp, Tc, side, [su(34) * scale, su(82) * scale], [0.9, 1.5]);
     Pp = phase.P;
     Tc = phase.T;
+    const bodyEndIndex = arcs.length - 1;
 
     let hasReturn = false;
     let sSp = side;
@@ -1398,6 +1575,7 @@ function buildFloating(grid, tier = {}) {
     phase = appendTerminalTransition(arcs, Pp, Tc, sSp, hostRadius, targetRadius, scale, "branch");
     Pp = phase.P;
     Tc = phase.T;
+    const transitionIndex = arcs.length - 1;
     const sp = spiralArcs(
       Pp[0],
       Pp[1],
@@ -1409,6 +1587,7 @@ function buildFloating(grid, tier = {}) {
       terminalQuarterTurns(hasReturn, "branch")
     );
     arcs = arcs.concat(sp.arcs);
+    const terminalStartIndex = transitionIndex + 1;
 
     const samples = sampleArcs(arcs, 3);
     if (!testChain(samples, grid, 0)) {
@@ -1420,6 +1599,8 @@ function buildFloating(grid, tier = {}) {
       arcs,
       depth: 1,
       profile: "branch",
+      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
       wBase: STROKE_WEIGHT,
       wantsOffshoot,
       mustHaveOffshoot: wantsOffshoot,
@@ -1664,14 +1845,34 @@ function mirrorChainX(ch) {
   if (ch.kind === "leaf") {
     return { ...ch, stem: ch.stem.map(mirrorArc), tear: ch.tear.map(mirrorArc) };
   }
-  return { ...ch, arcs: ch.arcs.map(mirrorArc) };
+  return {
+    ...ch,
+    arcs: ch.arcs.map(mirrorArc),
+    terminalLeaf: ch.terminalLeaf
+      ? {
+          ...ch.terminalLeaf,
+          outer: ch.terminalLeaf.outer.map(mirrorArc),
+          inner: ch.terminalLeaf.inner.map(mirrorArc),
+        }
+      : null,
+  };
 }
 
 function mirrorChainY(ch) {
   if (ch.kind === "leaf") {
     return { ...ch, stem: ch.stem.map(mirrorArcY), tear: ch.tear.map(mirrorArcY) };
   }
-  return { ...ch, arcs: ch.arcs.map(mirrorArcY) };
+  return {
+    ...ch,
+    arcs: ch.arcs.map(mirrorArcY),
+    terminalLeaf: ch.terminalLeaf
+      ? {
+          ...ch.terminalLeaf,
+          outer: ch.terminalLeaf.outer.map(mirrorArcY),
+          inner: ch.terminalLeaf.inner.map(mirrorArcY),
+        }
+      : null,
+  };
 }
 
 function reflectedChains(ch) {
@@ -1711,6 +1912,85 @@ function drawRibbon(ch) {
   }
 }
 
+function drawArcPath(arcs, color, weight = 2.2) {
+  if (!arcs || !arcs.length) {
+    return;
+  }
+  const samples = sampleArcs(arcs, 2);
+  drawSamplePath(samples, color, weight);
+}
+
+function drawSamplePath(samples, color, weight = 2.2) {
+  if (!samples || !samples.length) {
+    return;
+  }
+  push();
+  noFill();
+  stroke(color);
+  strokeWeight(Math.max(1, weight * stageScale()));
+  strokeCap(ROUND);
+  strokeJoin(ROUND);
+  beginShape();
+  for (const p of samples) {
+    vertex(p.x, p.y);
+  }
+  endShape();
+  pop();
+}
+
+function drawTerminalLeaf(ch) {
+  if (!ch.terminalLeaf) {
+    return;
+  }
+
+  const outer = sampleArcs(ch.terminalLeaf.outer, 2);
+  const inner = sampleArcs(ch.terminalLeaf.inner, 2);
+  if (outer.length < 2 || inner.length < 2) {
+    return;
+  }
+
+  push();
+  noFill();
+  stroke(appState.invertPreview ? "#161614" : "#e9e7df");
+  strokeWeight(Math.max(1, ch.wBase * 0.7));
+  strokeCap(ROUND);
+  strokeJoin(ROUND);
+  beginShape();
+  for (const p of outer) {
+    vertex(p.x, p.y);
+  }
+  for (let i = inner.length - 1; i >= 0; i--) {
+    vertex(inner[i].x, inner[i].y);
+  }
+  endShape();
+  pop();
+}
+
+function drawDebugChain(ch) {
+  if (ch.kind === "leaf") {
+    drawArcPath(ch.stem, "#5ec8ff", 2.4);
+    drawArcPath([ch.tear[0]], "#ff5e7a", 2.2);
+    drawArcPath([ch.tear[1]], "#ffb85e", 2.2);
+    return;
+  }
+  if (ch.kind !== "stroke") {
+    return;
+  }
+
+  const meta = ch.debugMeta;
+  if (!meta) {
+    drawArcPath(ch.arcs, "#5ec8ff", 2.4);
+    return;
+  }
+
+  drawArcPath(ch.arcs.slice(0, meta.bodyEndIndex + 1), "#5ec8ff", 2.4);
+  drawArcPath(ch.arcs.slice(meta.bodyEndIndex + 1, meta.transitionIndex + 1), "#ffb85e", 2.8);
+  drawArcPath(ch.arcs.slice(meta.terminalStartIndex), "#7dff7a", 2.6);
+  if (ch.terminalLeaf?.inner?.length) {
+    drawArcPath(ch.terminalLeaf.inner, "#ff5ef1", 2.2);
+  }
+}
+
 function drawLeaf(ch) {
   const st = sampleArcs(ch.stem, 2.2);
   const total = st[st.length - 1].s;
@@ -1740,9 +2020,18 @@ function drawLeaf(ch) {
 
 function drawChain(ch) {
   if (ch.kind === "stroke") {
-    drawRibbon(ch);
+    if (appState.debugParts) {
+      drawDebugChain(ch);
+    } else {
+      drawRibbon(ch);
+      drawTerminalLeaf(ch);
+    }
   } else if (ch.kind === "leaf") {
-    drawLeaf(ch);
+    if (appState.debugParts) {
+      drawDebugChain(ch);
+    } else {
+      drawLeaf(ch);
+    }
   }
 }
 
@@ -1795,6 +2084,8 @@ function draw() {
       drawChain(reflected);
     }
   }
+
+  drawVoidMask();
 }
 
 // ============================= UI =============================
@@ -1889,6 +2180,7 @@ function downloadSVG() {
     decay: params.decay,
     invertPreview: appState.invertPreview,
     model,
+    voidMask: params.voidOn ? stageVoid() : null,
     reflectedChains,
     shouldSuppressUnresolvedCurl,
     helpers: {
