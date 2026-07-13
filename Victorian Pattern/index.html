@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Victorian Pattern</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
+    />
+    <style>
+      :root {
+        --panel: 390px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: var(--panel) 1fr;
+        height: 100vh;
+        background: #111417;
+        color: #edf1f5;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      aside {
+        background: #171c21;
+        border-right: 1px solid #28313c;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      main {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+      }
+
+      #wrap {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 16px;
+      }
+
+      #wrap canvas {
+        display: block;
+        max-width: 100%;
+        height: auto !important;
+        border-radius: 10px;
+        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+      }
+
+      .title {
+        margin: 0 0 8px;
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .subtitle {
+        margin: 0 0 12px;
+        color: #b6c0cc;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .seed-chip {
+        margin: 0 0 12px;
+        color: #f7ead3;
+        font-size: 13px;
+      }
+
+      .seed-chip b {
+        color: #fff7ea;
+        font-weight: 700;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        background: #232b34;
+        border: 1px solid #334150;
+        color: #edf1f5;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .hint {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #b8c3ce;
+        margin-top: 12px;
+      }
+
+      code {
+        color: #ffffff;
+      }
+
+      ul {
+        padding-left: 18px;
+        margin: 8px 0 0;
+      }
+
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        padding: 12px 18px 16px;
+        border-top: 1px solid #28313c;
+        color: #b9c4cf;
+        font-size: 13px;
+      }
+
+      .stats b {
+        color: #f4f7fb;
+        font-weight: 600;
+      }
+
+      #pane {
+        margin-bottom: 12px;
+      }
+
+      @media (max-width: 980px) {
+        body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+          height: auto;
+          min-height: 100vh;
+        }
+
+        aside {
+          border-right: 0;
+          border-bottom: 1px solid #28313c;
+        }
+
+        main {
+          min-height: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <h1 class="title">Victorian Pattern</h1>
+      <p class="subtitle">
+        Arc-built flourish generator with mirrored composition, recursive tangential branching,
+        and plotter-ready SVG export.
+      </p>
+      <p class="seed-chip">Seed: <b id="seedLabel">1</b></p>
+      <div id="pane"></div>
+
+      <div class="row">
+        <button id="prevSeedBtn" class="btn">Prev Seed</button>
+        <button id="nextSeedBtn" class="btn">Next Seed</button>
+        <button id="randomSeedBtn" class="btn">Random Seed</button>
+      </div>
+
+      <div class="row">
+        <button id="renderBtn" class="btn">Regenerate</button>
+        <button id="resetBtn" class="btn">Reset</button>
+        <button id="pngBtn" class="btn">Save PNG</button>
+        <button id="svgBtn" class="btn">Export SVG</button>
+      </div>
+
+      <div class="hint">
+        Notes:
+        <ul>
+          <li>Controls rebuild the ornament from the current seed and exact circular-arc model.</li>
+          <li><code>Decay</code> is the radius multiplier per quarter-turn. <code>0.618</code> is golden-spiral-like.</li>
+          <li><code>Invert Preview</code> flips the live preview contrast and will be reflected in saved exports.</li>
+          <li><code>Export SVG</code> writes centerline arc commands suitable for plotter workflows.</li>
+        </ul>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wrap"></div>
+      <div class="stats">
+        <span>Arcs: <b id="stat-arcs">-</b></span>
+        <span>Chains: <b id="stat-chains">-</b></span>
+        <span>Stroke length: <b id="stat-len">-</b></span>
+        <span>G1 continuity: <b id="stat-g1">-</b></span>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="./modules/state.js"></script>
+    <script src="./modules/canvas.js"></script>
+    <script src="./modules/export.js"></script>
+    <script src="./modules/controls.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>

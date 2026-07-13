@@ -1,0 +1,1520 @@
+// ============================= CORE (pure, no rendering deps) =============================
+const TAU = Math.PI * 2;
+const PI = Math.PI;
+const BASE_W = 1500;
+const BASE_H = 900;
+const { CANVAS_PRESETS, createAppState, resetAppState } = window.VictorianPatternState;
+const { bindButtons, buildPane, updateStats } = window.VictorianPatternControls;
+const { downloadPng, downloadSvg } = window.VictorianPatternExport;
+const { resetCanvasView, syncCanvasSize, updateCanvasDisplaySize } = window.VictorianPatternCanvas;
+
+// ---- seeded RNG (mulberry32) ----
+function mulberry32(a) {
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+let R = mulberry32(1);
+const rnd = (a = 1, b) => (b === undefined ? R() * a : a + R() * (b - a));
+const rint = (a, b) => Math.floor(rnd(a, b + 1));
+const chance = (p) => R() < p;
+
+// ---- exact arc primitives ----
+// An arc is {cx, cy, r, a0, da}. Point(t) at angle a0 + da*t, t in [0,1].
+// arcFrom: given start point P, UNIT tangent T, radius r, turn sign s (+1 = center on
+// left of T = counter-clockwise travel), sweep phi (>0) -> returns arc + exact end
+// point/tangent. Tangency is by construction: center sits on the normal through P.
+function arcFrom(px, py, tx, ty, r, s, phi) {
+  const cx = px + s * -ty * r;
+  const cy = py + s * tx * r;
+  const a0 = Math.atan2(py - cy, px - cx);
+  const da = s * phi;
+  const a1 = a0 + da;
+  const ex = cx + Math.cos(a1) * r;
+  const ey = cy + Math.sin(a1) * r;
+  const c = Math.cos(da);
+  const sn = Math.sin(da);
+  return {
+    arc: { cx, cy, r, a0, da },
+    ex,
+    ey,
+    etx: tx * c - ty * sn,
+    ety: tx * sn + ty * c,
+  };
+}
+
+const arcLen = (a) => Math.abs(a.da) * a.r;
+
+function arcPointAt(a, t) {
+  const g = a.a0 + a.da * t;
+  return [a.cx + Math.cos(g) * a.r, a.cy + Math.sin(g) * a.r];
+}
+
+function arcTangentAt(a, t) {
+  const g = a.a0 + a.da * t;
+  const s = Math.sign(a.da) || 1;
+  return [-Math.sin(g) * s, Math.cos(g) * s];
+}
+
+function reverseArcs(arcs) {
+  return arcs
+    .slice()
+    .reverse()
+    .map((a) => ({ cx: a.cx, cy: a.cy, r: a.r, a0: a.a0 + a.da, da: -a.da }));
+}
+
+// ---- logarithmic spiral as chained quarter-arcs (classical construction) ----
+// Each successive quarter-arc's radius is r *= k. The next center lies on the radial
+// line through the join point, so tangency is exact. This is a G1 piecewise-circular
+// approximation of r = r0 * e^(b*theta) with k = e^(b*PI/2).
+function spiralArcs(px, py, tx, ty, s, r0, k, quarters) {
+  const arcs = [];
+  let P = [px, py];
+  let T = [tx, ty];
+  let r = r0;
+
+  for (let i = 0; i < quarters; i++) {
+    if (r < 1.1) {
+      break;
+    }
+    const { arc, ex, ey, etx, ety } = arcFrom(P[0], P[1], T[0], T[1], r, s, PI / 2);
+    arcs.push(arc);
+    P = [ex, ey];
+    T = [etx, ety];
+    r *= k;
+  }
+
+  return { arcs, end: P, endT: T };
+}
+
+// ---- teardrop leaf: two exact circular arcs (vesica), pointed at both ends ----
+function teardropArcs(P, d, L) {
+  const Tp = [P[0] + d[0] * L, P[1] + d[1] * L];
+  const mid = [(P[0] + Tp[0]) / 2, (P[1] + Tp[1]) / 2];
+  const n = [-d[1], d[0]];
+  const sag = L * 0.33;
+  const r = (L * L / 4 + sag * sag) / (2 * sag);
+  const out = [];
+
+  for (const sig of [1, -1]) {
+    const C = [mid[0] + sig * n[0] * (r - sag), mid[1] + sig * n[1] * (r - sag)];
+    const a0 = Math.atan2(P[1] - C[1], P[0] - C[0]);
+    let a1 = Math.atan2(Tp[1] - C[1], Tp[0] - C[0]);
+    let da = a1 - a0;
+    while (da > PI) da -= TAU;
+    while (da < -PI) da += TAU;
+    out.push({ cx: C[0], cy: C[1], r, a0, da });
+  }
+
+  return out;
+}
+
+// ---- sampling a chain of arcs (for collision + rendering) ----
+function sampleArcs(arcs, step) {
+  const out = [];
+  let acc = 0;
+
+  for (const a of arcs) {
+    const L = arcLen(a);
+    const n = Math.max(2, Math.ceil(L / step));
+    for (let i = 0; i <= n; i++) {
+      if (out.length && i === 0) {
+        continue;
+      }
+      const t = i / n;
+      const [x, y] = arcPointAt(a, t);
+      const [tx, ty] = arcTangentAt(a, t);
+      out.push({ x, y, tx, ty, s: acc + L * t, r: a.r, dir: Math.sign(a.da) || 1 });
+    }
+    acc += L;
+  }
+
+  return out;
+}
+
+const chainLen = (arcs) => arcs.reduce((s, a) => s + arcLen(a), 0);
+
+// ---- spatial hash grid ----
+function makeGrid(cell) {
+  const map = new Map();
+  const key = (i, j) => i * 100003 + j;
+
+  return {
+    insert(x, y) {
+      const i = Math.floor(x / cell);
+      const j = Math.floor(y / cell);
+      const k = key(i, j);
+      let bucket = map.get(k);
+      if (!bucket) {
+        bucket = [];
+        map.set(k, bucket);
+      }
+      bucket.push([x, y]);
+    },
+    near(x, y, rad) {
+      const i0 = Math.floor((x - rad) / cell);
+      const i1 = Math.floor((x + rad) / cell);
+      const j0 = Math.floor((y - rad) / cell);
+      const j1 = Math.floor((y + rad) / cell);
+      const r2 = rad * rad;
+
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const bucket = map.get(key(i, j));
+          if (!bucket) {
+            continue;
+          }
+          for (const p of bucket) {
+            const dx = p[0] - x;
+            const dy = p[1] - y;
+            if (dx * dx + dy * dy < r2) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    },
+  };
+}
+
+// ============================= GROWTH SYSTEM =============================
+const appState = createAppState({ canvasWidth: BASE_W, canvasHeight: BASE_H });
+let params = appState.params;
+let model = null;
+let compositionFlow = null;
+let pane;
+let cnv;
+
+const BASE_MARGIN = 30;
+const STROKE_WEIGHT = 2;
+
+function stageWidth() {
+  return appState.designWidth || BASE_W;
+}
+
+function stageHeight() {
+  return appState.designHeight || BASE_H;
+}
+
+function stageScale() {
+  return Math.min(stageWidth() / BASE_W, stageHeight() / BASE_H);
+}
+
+function su(value) {
+  return value * stageScale();
+}
+
+function margin() {
+  return BASE_MARGIN * stageScale();
+}
+
+function stageVoid() {
+  return {
+    cx: stageWidth() / 2,
+    cy: stageHeight() * 0.6,
+    rx: su(190),
+    ry: su(115),
+  };
+}
+
+function inVoid(x, y) {
+  if (!params.voidOn) {
+    return false;
+  }
+  const currentVoid = stageVoid();
+  const dx = (x - currentVoid.cx) / currentVoid.rx;
+  const dy = (y - currentVoid.cy) / currentVoid.ry;
+  return dx * dx + dy * dy < 1;
+}
+
+function inBounds(x, y) {
+  const m = margin();
+  return x > m && x < stageWidth() - m && y > m && y < stageHeight() - m;
+}
+
+function testChain(samples, grid, skipLen) {
+  const cl = params.clearance;
+  const seamX = params.mirror ? stageWidth() / 2 - cl * 0.5 : Infinity;
+  const seamY = params.verticalSymmetry ? stageHeight() / 2 + cl * 0.5 : -Infinity;
+
+  for (const p of samples) {
+    if (!inBounds(p.x, p.y) || inVoid(p.x, p.y) || p.x > seamX || p.y < seamY) {
+      return false;
+    }
+    const rad = skipLen > 0 && p.s < skipLen ? cl * Math.pow(p.s / skipLen, 2) : cl;
+    if (rad > 0.5 && grid.near(p.x, p.y, rad)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function acceptChain(chain, samples, grid) {
+  const width = stageWidth();
+  const height = stageHeight();
+  for (const p of samples) {
+    grid.insert(p.x, p.y);
+    if (params.mirror) {
+      grid.insert(width - p.x, p.y);
+    }
+    if (params.verticalSymmetry) {
+      grid.insert(p.x, height - p.y);
+    }
+    if (params.mirror && params.verticalSymmetry) {
+      grid.insert(width - p.x, height - p.y);
+    }
+  }
+  model.chains.push(chain);
+}
+
+function quartersFromTurns() {
+  return Math.round(params.turns * 4);
+}
+
+function initCompositionFlow() {
+  const baseAngle = rnd(-1.18, -0.72);
+  const spineJitter = rnd(0.14, 0.24);
+  const floatingJitter = spineJitter * 0.65;
+  compositionFlow = {
+    baseAngle,
+    spineJitter,
+    floatingJitter,
+  };
+}
+
+function randomFlowAngle(jitter) {
+  const direction = chance(0.75) ? 1 : -1;
+  return compositionFlow.baseAngle + rnd(-jitter, jitter) * direction;
+}
+
+function appendArcPhase(arcs, P, T, sign, radiusRange, sweepRange) {
+  const { arc, ex, ey, etx, ety } = arcFrom(
+    P[0],
+    P[1],
+    T[0],
+    T[1],
+    rnd(radiusRange[0], radiusRange[1]),
+    sign,
+    rnd(sweepRange[0], sweepRange[1])
+  );
+  arcs.push(arc);
+  return { P: [ex, ey], T: [etx, ety] };
+}
+
+function derivedSpiralRadius(hostRadius, role, scale = 1) {
+  const unit = stageScale();
+  let factor = 0.22;
+  let minRadius = 16 * unit;
+  let maxRadius = 56 * unit;
+
+  if (role === "branch") {
+    factor = 0.42;
+    minRadius = 14 * unit;
+    maxRadius = 44 * unit;
+  } else if (role === "floating") {
+    factor = 0.38;
+    minRadius = 14 * unit;
+    maxRadius = 40 * unit;
+  }
+
+  return Math.max(minRadius * scale, Math.min(maxRadius * scale, hostRadius * factor * rnd(0.85, 1.15)));
+}
+
+function growthBoost(depth, scale, terminalBias = 0.5) {
+  const depthBoost = Math.min(1.4, 1 + depth * 0.16);
+  const scaleBoost = Math.min(1.25, 0.9 + scale * 0.45);
+  const terminalBoost = 0.9 + terminalBias * 0.35;
+  return depthBoost * scaleBoost * terminalBoost;
+}
+
+function appendTerminalTransition(
+  arcs,
+  P,
+  T,
+  sign,
+  hostRadius,
+  targetRadius,
+  scale = 1,
+  role = "spine"
+) {
+  let sweepMin = 0.18;
+  let sweepMax = 0.34;
+  let mix = 0.6;
+
+  if (role === "spine") {
+    sweepMin = 0.16;
+    sweepMax = 0.28;
+    mix = 0.72;
+  }
+
+  const blendedRadius = hostRadius * mix + targetRadius * (1 - mix);
+  const radius = Math.max(targetRadius * 1.18, Math.min(hostRadius * 0.96, blendedRadius));
+  return appendArcPhase(arcs, P, T, sign, [radius, radius * 1.06], [sweepMin, sweepMax]);
+}
+
+function terminalQuarterTurns(hasReversal, role) {
+  if (hasReversal) {
+    return role === "spine" ? 1 : 1;
+  }
+  return role === "spine" ? Math.min(2, quartersFromTurns()) : quartersFromTurns();
+}
+
+function findBranchAnchor(chain, startT = 0.58, endT = 0.82) {
+  const samples = sampleArcs(chain.arcs, 4);
+  const total = samples[samples.length - 1].s;
+  let best = null;
+  let bestScore = -Infinity;
+
+  for (const p of samples) {
+    const t = p.s / total;
+    if (t < startT || t > endT || p.r < 14) {
+      continue;
+    }
+    const lateBias = t;
+    const score = p.r * 0.5 + lateBias * 30;
+    if (score > bestScore) {
+      bestScore = score;
+      best = p;
+    }
+  }
+
+  return best;
+}
+
+function tryRequiredOffshoot(chain, scale, grid, queue) {
+  if (chain.kind !== "stroke" || chain.depth >= params.depth) {
+    return false;
+  }
+
+  const anchor = findBranchAnchor(chain);
+  if (!anchor) {
+    return false;
+  }
+
+  const childScale = scale * params.falloff * 0.68;
+  const anchorSamples = sampleArcs(chain.arcs, 4);
+  const anchorTotal = anchorSamples[anchorSamples.length - 1].s;
+  const terminalBias = anchor.s / anchorTotal;
+  const preferredSides = [-anchor.dir, anchor.dir];
+  for (const side of preferredSides) {
+    const child = buildChild(
+      [anchor.x, anchor.y],
+      [anchor.tx, anchor.ty],
+      side,
+      anchor.r,
+      anchor.dir,
+      chain.depth + 1,
+      childScale,
+      grid,
+      terminalBias
+    );
+    if (child && child.kind === "stroke") {
+      queue.push({ chain: child, scale: childScale });
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function shouldSuppressUnresolvedCurl(chain) {
+  return Boolean(chain && chain.mustHaveOffshoot && !chain.hasOffshoot);
+}
+
+function sourceBounds() {
+  const m = margin();
+  const width = stageWidth();
+  const height = stageHeight();
+  return {
+    xMin: m + su(28),
+    xMax: (params.mirror ? width / 2 : width) - su(38),
+    yMin: params.verticalSymmetry ? height / 2 + su(28) : m + su(28),
+    yMax: height - m - su(28),
+  };
+}
+
+function collectPocketSeeds(grid, count, radius, bounds) {
+  const seeds = [];
+  const step = Math.max(24, Math.floor(radius * 0.8));
+
+  for (let y = bounds.yMin; y <= bounds.yMax; y += step) {
+    for (let x = bounds.xMin; x <= bounds.xMax; x += step) {
+      if (!inBounds(x, y) || inVoid(x, y)) {
+        continue;
+      }
+      if (grid.near(x, y, radius * 0.7)) {
+        continue;
+      }
+
+      let score = 0;
+      const probes = [radius * 0.8, radius * 1.15, radius * 1.5];
+      for (const probe of probes) {
+        if (!grid.near(x, y, probe)) {
+          score += probe;
+        }
+      }
+
+      if (score <= 0) {
+        continue;
+      }
+
+      seeds.push({ x, y, score: score + rnd(0, 0.001) });
+    }
+  }
+
+  seeds.sort((a, b) => b.score - a.score);
+  const chosen = [];
+  for (const seed of seeds) {
+    if (chosen.length >= count) {
+      break;
+    }
+    if (chosen.some((other) => Math.hypot(other.x - seed.x, other.y - seed.y) < radius * 1.5)) {
+      continue;
+    }
+    chosen.push(seed);
+  }
+
+  return chosen;
+}
+
+function findNearbySpawnPoint(points, candidate, threshold) {
+  if (!points || !points.length || !(threshold > 0)) {
+    return null;
+  }
+
+  let nearest = null;
+  let nearestDist = threshold;
+  for (const point of points) {
+    const dist = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+    if (dist <= nearestDist) {
+      nearest = point;
+      nearestDist = dist;
+    }
+  }
+
+  return nearest;
+}
+
+function buildSpine(grid, col, nCols, tier = {}) {
+  const m = margin();
+  const genW = params.mirror ? stageWidth() / 2 : stageWidth();
+  const x0 = m + su(50);
+  const x1 = genW - su(70);
+  const cw = (x1 - x0) / nCols;
+  const rootScale = tier.rootScale ?? 1;
+  const yMin = tier.yMin ?? m + su(50);
+  const yMax = tier.yMax ?? stageHeight() - m - su(50);
+  const bodyChance = tier.bodyChance ?? 0.7;
+  const weightScale = tier.weightScale ?? 1;
+  const preferredPoint = tier.preferredPoint ?? null;
+  const spreadX = tier.spreadX ?? 40;
+  const spreadY = tier.spreadY ?? 40;
+  const sharedSpawnPoints = tier.sharedSpawnPoints ?? null;
+  const sharedSpawnThreshold = tier.sharedSpawnThreshold ?? 0;
+  const sharedSpawnSkip = tier.sharedSpawnSkip ?? 0;
+
+  for (let tries = 0; tries < 30; tries++) {
+    const rawPoint = {
+      x: preferredPoint
+      ? constrain(preferredPoint.x + rnd(-spreadX, spreadX), x0, x1)
+      : x0 + cw * (col + rnd(0.1, 0.9)),
+      y: preferredPoint
+      ? constrain(preferredPoint.y + rnd(-spreadY, spreadY), yMin, yMax)
+      : rnd(yMin, yMax),
+    };
+    const sharedPoint = preferredPoint
+      ? null
+      : findNearbySpawnPoint(sharedSpawnPoints, rawPoint, sharedSpawnThreshold);
+    const px = sharedPoint ? sharedPoint.x : rawPoint.x;
+    const py = sharedPoint ? sharedPoint.y : rawPoint.y;
+    const startClearanceSkip = sharedPoint ? sharedSpawnSkip : 0;
+    const ang = randomFlowAngle(compositionFlow.spineJitter);
+    const T = [Math.cos(ang), Math.sin(ang)];
+    const sA = chance(0.5) ? 1 : -1;
+    const q = quartersFromTurns();
+    const baseRadius = rnd(su(180), su(280)) * rootScale;
+    const launchRadius = baseRadius * rnd(1.06, 1.18);
+    const bodyRadius = baseRadius * rnd(0.82, 0.96);
+    const returnRadius = baseRadius * rnd(0.56, 0.7);
+
+    let arcs = [];
+    let P = [px, py];
+    let Tc = T.slice();
+    let phase = appendArcPhase(
+      arcs,
+      P,
+      Tc,
+      sA,
+      [launchRadius, launchRadius * 1.04],
+      [0.62, 0.96]
+    );
+    P = phase.P;
+    Tc = phase.T;
+
+    if (chance(bodyChance)) {
+      phase = appendArcPhase(
+        arcs,
+        P,
+        Tc,
+        sA,
+        [bodyRadius, bodyRadius * 1.03],
+        [0.42, 0.72]
+      );
+      P = phase.P;
+      Tc = phase.T;
+    }
+
+    const hasReturn = chance(0.55);
+    let sClose = sA;
+    if (hasReturn) {
+      phase = appendArcPhase(
+        arcs,
+        P,
+        Tc,
+        -sA,
+        [returnRadius, returnRadius * 1.03],
+        [0.26, 0.48]
+      );
+      P = phase.P;
+      Tc = phase.T;
+      sClose = -sA;
+    }
+
+    const hostRadius = arcs[arcs.length - 1].r;
+    const closingRadius = Math.max(su(18) * rootScale, Math.min(su(34) * rootScale, hostRadius * 0.22));
+    phase = appendTerminalTransition(
+      arcs,
+      P,
+      Tc,
+      sClose,
+      hostRadius,
+      hasReturn ? closingRadius * 0.82 : closingRadius,
+      rootScale,
+      "spine"
+    );
+    P = phase.P;
+    Tc = phase.T;
+    const sp1 = spiralArcs(
+      P[0],
+      P[1],
+      Tc[0],
+      Tc[1],
+      sClose,
+      hasReturn ? closingRadius * 0.82 : closingRadius,
+      params.decay,
+      terminalQuarterTurns(hasReturn, "spine")
+    );
+    arcs = arcs.concat(sp1.arcs);
+
+    const samples = sampleArcs(arcs, 3);
+    if (!testChain(samples, grid, startClearanceSkip)) {
+      continue;
+    }
+
+    const chain = {
+      kind: "stroke",
+      arcs,
+      depth: 0,
+      profile: "spine",
+      wBase: STROKE_WEIGHT,
+      spawnPoint: { x: px, y: py },
+    };
+    acceptChain(chain, samples, grid);
+    if (
+      sharedSpawnPoints &&
+      !findNearbySpawnPoint(sharedSpawnPoints, chain.spawnPoint, sharedSpawnThreshold * 0.35)
+    ) {
+      sharedSpawnPoints.push(chain.spawnPoint);
+    }
+    return chain;
+  }
+
+  return null;
+}
+
+function buildCornerSpine(grid, side = "left", tier = {}) {
+  const rootScale = tier.rootScale ?? 1.16;
+  const m = margin();
+  const startX =
+    side === "left"
+      ? m + (tier.edgeInset ?? su(12))
+      : stageWidth() - m - (tier.edgeInset ?? su(12));
+  const startY = tier.startY ?? (stageHeight() - m - su(28));
+  const angBase = -PI / 2 + (side === "left" ? 0.08 : -0.08);
+  const ang = angBase + rnd(-0.06, 0.06);
+  const T = [Math.cos(ang), Math.sin(ang)];
+  const sA = side === "left" ? 1 : -1;
+
+  for (let tries = 0; tries < 24; tries++) {
+    const px = startX + rnd(-su(6), su(6));
+    const py = startY + rnd(-su(18), su(18));
+    const baseRadius = rnd(su(240), su(340)) * rootScale;
+    const launchRadius = baseRadius * rnd(1.18, 1.28);
+    const bodyRadius = baseRadius * rnd(0.88, 0.98);
+    const returnRadius = baseRadius * rnd(0.58, 0.7);
+
+    let arcs = [];
+    let P = [px, py];
+    let Tc = T.slice();
+    let phase = appendArcPhase(
+      arcs,
+      P,
+      Tc,
+      sA,
+      [launchRadius, launchRadius * 1.02],
+      [0.24, 0.42]
+    );
+    P = phase.P;
+    Tc = phase.T;
+
+    phase = appendArcPhase(
+      arcs,
+      P,
+      Tc,
+      sA,
+      [bodyRadius, bodyRadius * 1.02],
+      [0.32, 0.56]
+    );
+    P = phase.P;
+    Tc = phase.T;
+
+    const hasReturn = chance(0.45);
+    let sClose = sA;
+    if (hasReturn) {
+      phase = appendArcPhase(
+        arcs,
+        P,
+        Tc,
+        -sA,
+        [returnRadius, returnRadius * 1.02],
+        [0.18, 0.34]
+      );
+      P = phase.P;
+      Tc = phase.T;
+      sClose = -sA;
+    }
+
+    const hostRadius = arcs[arcs.length - 1].r;
+    const closingRadius = Math.max(su(20) * rootScale, Math.min(su(34) * rootScale, hostRadius * 0.2));
+    phase = appendTerminalTransition(
+      arcs,
+      P,
+      Tc,
+      sClose,
+      hostRadius,
+      hasReturn ? closingRadius * 0.82 : closingRadius,
+      rootScale,
+      "spine"
+    );
+    P = phase.P;
+    Tc = phase.T;
+
+    const sp = spiralArcs(
+      P[0],
+      P[1],
+      Tc[0],
+      Tc[1],
+      sClose,
+      hasReturn ? closingRadius * 0.82 : closingRadius,
+      params.decay,
+      terminalQuarterTurns(hasReturn, "spine")
+    );
+    arcs = arcs.concat(sp.arcs);
+
+    const samples = sampleArcs(arcs, 3);
+    if (!testChain(samples, grid, 0)) {
+      continue;
+    }
+
+    const chain = {
+      kind: "stroke",
+      arcs,
+      depth: 0,
+      profile: "spine",
+      wBase: STROKE_WEIGHT,
+    };
+    acceptChain(chain, samples, grid);
+    return chain;
+  }
+
+  return null;
+}
+
+function tangentialSkip(r1, sChild, pr, pdir) {
+  const kRel = Math.abs(sChild / r1 - pdir / pr);
+  if (kRel < (2 * params.clearance) / 3600) {
+    return -1;
+  }
+  return Math.sqrt((2 * params.clearance) / kRel) * 1.1;
+}
+
+function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5) {
+  for (let tries = 0; tries < 10; tries++) {
+    let Tc = T.slice();
+    const r1 = rnd(su(24), su(62)) * scale;
+    const skip = tangentialSkip(r1, side, pr, pdir);
+    if (skip < 0) {
+      continue;
+    }
+
+    let arcs = [];
+    let Pp = P.slice();
+    let phase = appendArcPhase(
+      arcs,
+      Pp,
+      Tc,
+      side,
+      [r1, Math.max(r1 + 1, r1 * 1.25)],
+      [0.55, 1.05]
+    );
+    Pp = phase.P;
+    Tc = phase.T;
+
+    const hasReturn = false;
+    const sSp = side;
+
+    const hostRadius = arcs[arcs.length - 1].r;
+    const spiralScale = growthBoost(depth, scale, terminalBias);
+    const spiralRadius = hasReturn
+      ? derivedSpiralRadius(hostRadius, "branch", scale * spiralScale) * 0.72
+      : derivedSpiralRadius(hostRadius, "branch", scale * spiralScale);
+    phase = appendTerminalTransition(arcs, Pp, Tc, sSp, hostRadius, spiralRadius, scale, "branch");
+    Pp = phase.P;
+    Tc = phase.T;
+
+    const sp = spiralArcs(
+      Pp[0],
+      Pp[1],
+      Tc[0],
+      Tc[1],
+      sSp,
+      spiralRadius,
+      params.decay,
+      terminalQuarterTurns(hasReturn, "branch")
+    );
+    arcs = arcs.concat(sp.arcs);
+
+    const samples = sampleArcs(arcs, 3);
+    if (samples[samples.length - 1].s < skip * 1.4 || !testChain(samples, grid, skip)) {
+      continue;
+    }
+
+    const chain = {
+      kind: "stroke",
+      arcs,
+      depth,
+      profile: "branch",
+      wBase: STROKE_WEIGHT,
+      wantsOffshoot: true,
+    };
+    acceptChain(chain, samples, grid);
+    return chain;
+  }
+
+  return null;
+}
+
+function buildLeaf(P, T, side, pr, pdir, depth, scale, grid) {
+  for (let tries = 0; tries < 4; tries++) {
+    const r1 = rnd(su(26), su(52)) * scale;
+    const skip = tangentialSkip(r1, side, pr, pdir);
+    if (skip < 0) {
+      continue;
+    }
+
+    const { arc, ex, ey, etx, ety } = arcFrom(P[0], P[1], T[0], T[1], r1, side, rnd(0.7, 1.3));
+    const L = rnd(su(9), su(19)) * Math.sqrt(scale) + su(4);
+    const tear = teardropArcs([ex, ey], [etx, ety], L);
+    const samples = sampleArcs([arc], 3).concat(
+      sampleArcs(tear, 3).map((p) => ({ ...p, s: p.s + arcLen(arc) }))
+    );
+
+    if (samples[samples.length - 1].s < skip * 1.3 || !testChain(samples, grid, skip)) {
+      continue;
+    }
+
+    const chain = {
+      kind: "leaf",
+      stem: [arc],
+      tear,
+      depth,
+      wBase: STROKE_WEIGHT,
+    };
+    acceptChain(chain, samples, grid);
+    return chain;
+  }
+
+  return null;
+}
+
+function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5) {
+  for (let tries = 0; tries < 6; tries++) {
+    let Tc = T.slice();
+    const r1 = rnd(su(14), su(28)) * scale;
+    const skip = tangentialSkip(r1, side, pr, pdir);
+    if (skip < 0) {
+      continue;
+    }
+
+    let arcs = [];
+    let Pp = P.slice();
+    let phase = appendArcPhase(arcs, Pp, Tc, side, [r1, Math.max(r1 + 1, r1 * 1.18)], [0.42, 0.82]);
+    Pp = phase.P;
+    Tc = phase.T;
+
+    const hostRadius = arcs[arcs.length - 1].r;
+    const spiralScale = growthBoost(depth, scale, terminalBias) * 0.8;
+    const targetRadius = derivedSpiralRadius(hostRadius, "floating", scale * spiralScale) * 0.62;
+    phase = appendTerminalTransition(arcs, Pp, Tc, side, hostRadius, targetRadius, scale, "branch");
+    Pp = phase.P;
+    Tc = phase.T;
+
+    const sp = spiralArcs(
+      Pp[0],
+      Pp[1],
+      Tc[0],
+      Tc[1],
+      side,
+      targetRadius,
+      params.decay,
+      1
+    );
+    arcs = arcs.concat(sp.arcs);
+
+    const samples = sampleArcs(arcs, 3);
+    if (samples[samples.length - 1].s < skip * 1.05 || !testChain(samples, grid, skip)) {
+      continue;
+    }
+
+    const chain = {
+      kind: "stroke",
+      arcs,
+      depth,
+      profile: "branch",
+      wBase: STROKE_WEIGHT,
+      wantsOffshoot: false,
+      mustHaveOffshoot: false,
+      hasOffshoot: true,
+    };
+    acceptChain(chain, samples, grid);
+    return chain;
+  }
+
+  return null;
+}
+
+function enrichAttachedInfill(grid) {
+  const sourceChains = model.chains.filter(
+    (ch) => ch.kind === "stroke" && ch.profile && !shouldSuppressUnresolvedCurl(ch)
+  );
+  let added = 0;
+
+  for (const chain of sourceChains) {
+    if (added >= params.infillCurls) {
+      break;
+    }
+    if (chain.depth > 1) {
+      continue;
+    }
+
+    const samples = sampleArcs(chain.arcs, 5);
+    const total = samples[samples.length - 1].s;
+    let next = total * rnd(0.24, 0.36);
+
+    for (const p of samples) {
+      if (added >= params.infillCurls) {
+        break;
+      }
+      if (p.s < next || p.s > total * 0.78 || p.r < 18) {
+        continue;
+      }
+
+      next = p.s + params.spacing * rnd(1.15, 1.55);
+      if (!chance(0.32)) {
+        continue;
+      }
+
+      const childScale = Math.pow(params.falloff, chain.depth + 1) * rnd(0.42, 0.62);
+      const side = -p.dir;
+      const infill = buildAttachedInfill(
+        [p.x, p.y],
+        [p.tx, p.ty],
+        side,
+        p.r,
+        p.dir,
+        chain.depth + 1,
+        childScale,
+        grid,
+        p.s / total
+      );
+
+      if (infill) {
+        added++;
+      }
+    }
+  }
+}
+
+function buildFloating(grid, tier = {}) {
+  const m = margin();
+  const genW = params.mirror ? stageWidth() / 2 : stageWidth();
+  const scaleMin = tier.scaleMin ?? 0.5;
+  const scaleMax = tier.scaleMax ?? 0.9;
+  const yMin = tier.yMin ?? m + su(30);
+  const yMax = tier.yMax ?? stageHeight() - m - su(30);
+  const wantsOffshoot = tier.wantsOffshoot ?? true;
+  const weightScale = tier.weightScale ?? 1;
+  const preferredPoint = tier.preferredPoint ?? null;
+  const spreadX = tier.spreadX ?? 30;
+  const spreadY = tier.spreadY ?? 30;
+
+  for (let tries = 0; tries < 10; tries++) {
+    const P = preferredPoint
+      ? [
+          constrain(preferredPoint.x + rnd(-spreadX, spreadX), m + su(30), genW - su(40)),
+          constrain(preferredPoint.y + rnd(-spreadY, spreadY), yMin, yMax),
+        ]
+      : [rnd(m + su(30), genW - su(40)), rnd(yMin, yMax)];
+    const ang = randomFlowAngle(compositionFlow.floatingJitter);
+    const T = [Math.cos(ang), Math.sin(ang)];
+    const side = chance(0.5) ? 1 : -1;
+    const scale = rnd(scaleMin, scaleMax);
+    let arcs = [];
+    let Pp = P.slice();
+    let Tc = T.slice();
+    let phase = appendArcPhase(arcs, Pp, Tc, side, [su(34) * scale, su(82) * scale], [0.9, 1.5]);
+    Pp = phase.P;
+    Tc = phase.T;
+
+    let hasReturn = false;
+    let sSp = side;
+    if (chance(0.35)) {
+      phase = appendArcPhase(arcs, Pp, Tc, -side, [su(24) * scale, su(56) * scale], [0.3, 0.75]);
+      Pp = phase.P;
+      Tc = phase.T;
+      sSp = -side;
+      hasReturn = true;
+    }
+
+    const hostRadius = arcs[arcs.length - 1].r;
+    const targetRadius = hasReturn
+      ? derivedSpiralRadius(hostRadius, "floating", scale) * 0.72
+      : derivedSpiralRadius(hostRadius, "floating", scale);
+    phase = appendTerminalTransition(arcs, Pp, Tc, sSp, hostRadius, targetRadius, scale, "branch");
+    Pp = phase.P;
+    Tc = phase.T;
+
+    const sp = spiralArcs(
+      Pp[0],
+      Pp[1],
+      Tc[0],
+      Tc[1],
+      sSp,
+      targetRadius,
+      params.decay,
+      terminalQuarterTurns(hasReturn, "branch")
+    );
+    arcs = arcs.concat(sp.arcs);
+
+    const samples = sampleArcs(arcs, 3);
+    if (!testChain(samples, grid, 0)) {
+      continue;
+    }
+
+    const chain = {
+      kind: "stroke",
+      arcs,
+      depth: 1,
+      profile: "branch",
+      wBase: STROKE_WEIGHT,
+      wantsOffshoot,
+      mustHaveOffshoot: wantsOffshoot,
+      hasOffshoot: !wantsOffshoot,
+    };
+    acceptChain(chain, samples, grid);
+    return chain;
+  }
+
+  return null;
+}
+
+function generate() {
+  R = mulberry32((appState.seed * 2654435761) >>> 0 || 1);
+  model = { chains: [], stats: {} };
+  initCompositionFlow();
+  const grid = makeGrid(params.clearance);
+  const queue = [];
+  const cornerScale = 1.14;
+  const majorSpawnPoints = [];
+
+  const largeTier = {
+    rootScale: 1.08,
+    yMin: stageHeight() * 0.48,
+    yMax: stageHeight() - margin() - su(45),
+    bodyChance: 0.82,
+    weightScale: 1.08,
+    sharedSpawnPoints: majorSpawnPoints,
+    sharedSpawnThreshold: 78,
+    sharedSpawnSkip: 72,
+  };
+  const mediumTier = {
+    rootScale: 0.78,
+    yMin: stageHeight() * 0.34,
+    yMax: stageHeight() - margin() - su(55),
+    bodyChance: 0.58,
+    weightScale: 0.9,
+  };
+  const smallTier = {
+    scaleMin: 0.34,
+    scaleMax: 0.55,
+    yMin: stageHeight() * 0.22,
+    yMax: stageHeight() - margin() - su(70),
+    wantsOffshoot: true,
+    weightScale: 0.72,
+  };
+
+  const leftCorner = buildCornerSpine(grid, "left", {
+    rootScale: cornerScale,
+    startY: stageHeight() - margin() - su(26),
+    edgeInset: su(10),
+  });
+  if (leftCorner) {
+    queue.push({ chain: leftCorner, scale: cornerScale });
+  }
+
+  if (!params.mirror) {
+    const rightCorner = buildCornerSpine(grid, "right", {
+      rootScale: cornerScale,
+      startY: stageHeight() - margin() - su(26),
+      edgeInset: su(10),
+    });
+    if (rightCorner) {
+      queue.push({ chain: rightCorner, scale: cornerScale });
+    }
+  }
+
+  for (let i = 0; i < params.largeSpines; i++) {
+    const sp = buildSpine(grid, i, Math.max(1, params.largeSpines), largeTier);
+    if (sp) {
+      queue.push({ chain: sp, scale: largeTier.rootScale });
+    }
+  }
+
+  for (let i = 0; i < params.mediumSpines; i++) {
+    const sp = buildSpine(grid, i, Math.max(1, params.mediumSpines), mediumTier);
+    if (sp) {
+      queue.push({ chain: sp, scale: mediumTier.rootScale });
+    }
+  }
+
+  for (let i = 0; i < params.smallSpines; i++) {
+    const sp = buildFloating(grid, smallTier);
+    if (sp) {
+      queue.push({ chain: sp, scale: smallTier.scaleMax });
+    }
+  }
+
+  const pockets = sourceBounds();
+  const mediumPocketSeeds = collectPocketSeeds(grid, 2, su(90), pockets);
+  for (const seed of mediumPocketSeeds) {
+    const sp = buildSpine(grid, 0, 1, {
+      ...mediumTier,
+      rootScale: 0.66,
+      bodyChance: 0.42,
+      weightScale: 0.8,
+      preferredPoint: seed,
+      spreadX: su(26),
+      spreadY: su(34),
+      yMin: pockets.yMin,
+      yMax: pockets.yMax,
+    });
+    if (sp) {
+      queue.push({ chain: sp, scale: 0.66 });
+    }
+  }
+
+  const smallPocketSeeds = collectPocketSeeds(grid, 4, su(54), pockets);
+  for (const seed of smallPocketSeeds) {
+    const sp = buildFloating(grid, {
+      ...smallTier,
+      scaleMin: 0.24,
+      scaleMax: 0.42,
+      weightScale: 0.58,
+      wantsOffshoot: true,
+      preferredPoint: seed,
+      spreadX: su(18),
+      spreadY: su(18),
+      yMin: pockets.yMin,
+      yMax: pockets.yMax,
+    });
+    if (sp) {
+      queue.push({ chain: sp, scale: 0.42 });
+    }
+  }
+
+  growQueue(queue, grid);
+  enrichAttachedInfill(grid);
+  finishStats();
+}
+
+function growQueue(queue, grid) {
+  let guard = 0;
+
+  while (queue.length && model.chains.length < 1400 && guard < 4000) {
+    guard++;
+    const { chain, scale } = queue.shift();
+    if (chain.kind !== "stroke") {
+      continue;
+    }
+
+    const d = chain.depth;
+    if (d >= params.depth) {
+      continue;
+    }
+
+    if (chain.wantsOffshoot) {
+      chain.hasOffshoot = tryRequiredOffshoot(chain, scale, grid, queue) || chain.hasOffshoot;
+    }
+
+    const samples = sampleArcs(chain.arcs, 4);
+    const total = samples[samples.length - 1].s;
+    let next = params.spacing * rnd(0.6, 1.0) + total * 0.08;
+
+    for (const p of samples) {
+      if (p.s < next || p.r < 12 || p.s > total * 0.96) {
+        continue;
+      }
+      next = p.s + params.spacing * rnd(0.8, 1.25);
+      const side = chance(0.75) ? -p.dir : p.dir;
+      const childScale = scale * params.falloff;
+      const terminalBias = p.s / total;
+      let child = null;
+
+      if (chance(params.leafProb)) {
+        child = buildLeaf([p.x, p.y], [p.tx, p.ty], side, p.r, p.dir, d + 1, childScale, grid);
+      } else {
+        child = buildChild(
+          [p.x, p.y],
+          [p.tx, p.ty],
+          side,
+          p.r,
+          p.dir,
+          d + 1,
+          childScale,
+          grid,
+          terminalBias
+        );
+      }
+
+      if (child && child.kind === "stroke") {
+        chain.hasOffshoot = true;
+        queue.push({ chain: child, scale: childScale });
+      }
+    }
+  }
+}
+
+function finishStats() {
+  let nArcs = 0;
+  let len = 0;
+
+  for (const ch of model.chains) {
+    if (shouldSuppressUnresolvedCurl(ch)) {
+      continue;
+    }
+    if (ch.kind === "stroke") {
+      nArcs += ch.arcs.length;
+      len += chainLen(ch.arcs);
+    } else if (ch.kind === "leaf") {
+      nArcs += ch.stem.length + ch.tear.length;
+      len += chainLen(ch.stem) + chainLen(ch.tear);
+    }
+  }
+
+  const m = (params.mirror ? 2 : 1) * (params.verticalSymmetry ? 2 : 1);
+  model.stats = {
+    arcs: nArcs * m,
+    chains: model.chains.length * m,
+    length: Math.round(len * m),
+  };
+}
+
+function verifyG1() {
+  let worst = 0;
+
+  for (const ch of model.chains) {
+    if (shouldSuppressUnresolvedCurl(ch)) {
+      continue;
+    }
+    if (ch.kind !== "stroke") {
+      continue;
+    }
+    for (let i = 0; i < ch.arcs.length - 1; i++) {
+      const [t1x, t1y] = arcTangentAt(ch.arcs[i], 1);
+      const [t2x, t2y] = arcTangentAt(ch.arcs[i + 1], 0);
+      const [p1x, p1y] = arcPointAt(ch.arcs[i], 1);
+      const [p2x, p2y] = arcPointAt(ch.arcs[i + 1], 0);
+      const dot = Math.max(-1, Math.min(1, t1x * t2x + t1y * t2y));
+      worst = Math.max(worst, Math.acos(dot), Math.hypot(p1x - p2x, p1y - p2y) * 0.001);
+    }
+  }
+
+  return worst;
+}
+
+// ============================= RENDERING (p5) =============================
+function widthAt(ch, t) {
+  return ch.wBase;
+}
+
+function mirrorArc(a) {
+  return { cx: stageWidth() - a.cx, cy: a.cy, r: a.r, a0: PI - a.a0, da: -a.da };
+}
+
+function mirrorArcY(a) {
+  return { cx: a.cx, cy: stageHeight() - a.cy, r: a.r, a0: -a.a0, da: -a.da };
+}
+
+function mirrorChainX(ch) {
+  if (ch.kind === "leaf") {
+    return { ...ch, stem: ch.stem.map(mirrorArc), tear: ch.tear.map(mirrorArc) };
+  }
+  return { ...ch, arcs: ch.arcs.map(mirrorArc) };
+}
+
+function mirrorChainY(ch) {
+  if (ch.kind === "leaf") {
+    return { ...ch, stem: ch.stem.map(mirrorArcY), tear: ch.tear.map(mirrorArcY) };
+  }
+  return { ...ch, arcs: ch.arcs.map(mirrorArcY) };
+}
+
+function reflectedChains(ch) {
+  let out = [ch];
+  if (params.mirror) {
+    out.push(mirrorChainX(ch));
+  }
+  if (params.verticalSymmetry) {
+    out = out.concat(out.map((item) => mirrorChainY(item)));
+  }
+  return out;
+}
+
+function drawRibbon(ch) {
+  const samples = sampleArcs(ch.arcs, 2.2);
+  const total = samples[samples.length - 1].s;
+  const left = [];
+  const right = [];
+
+  for (const p of samples) {
+    const w = widthAt(ch, p.s / total) / 2;
+    const nx = -p.ty;
+    const ny = p.tx;
+    left.push([p.x + nx * w, p.y + ny * w]);
+    right.push([p.x - nx * w, p.y - ny * w]);
+  }
+
+  beginShape();
+  for (const v of left) vertex(v[0], v[1]);
+  for (let i = right.length - 1; i >= 0; i--) vertex(right[i][0], right[i][1]);
+  endShape(CLOSE);
+
+  const last = ch.arcs[ch.arcs.length - 1];
+  if (last.r < 6) {
+    const [x, y] = arcPointAt(last, 1);
+    circle(x, y, Math.max(1.6, ch.wBase * 0.35));
+  }
+}
+
+function drawLeaf(ch) {
+  const st = sampleArcs(ch.stem, 2.2);
+  const total = st[st.length - 1].s;
+  const left = [];
+  const right = [];
+
+  for (const p of st) {
+    const w = ch.wBase / 2;
+    const nx = -p.ty;
+    const ny = p.tx;
+    left.push([p.x + nx * w, p.y + ny * w]);
+    right.push([p.x - nx * w, p.y - ny * w]);
+  }
+
+  beginShape();
+  for (const v of left) vertex(v[0], v[1]);
+  for (let i = right.length - 1; i >= 0; i--) vertex(right[i][0], right[i][1]);
+  endShape(CLOSE);
+
+  const s1 = sampleArcs([ch.tear[0]], 2);
+  const s2 = sampleArcs([ch.tear[1]], 2);
+  beginShape();
+  for (const p of s1) vertex(p.x, p.y);
+  for (let i = s2.length - 1; i >= 0; i--) vertex(s2[i].x, s2[i].y);
+  endShape(CLOSE);
+}
+
+function drawChain(ch) {
+  if (ch.kind === "stroke") {
+    drawRibbon(ch);
+  } else if (ch.kind === "leaf") {
+    drawLeaf(ch);
+  }
+}
+
+function setup() {
+  syncDesignSizeFromCanvas();
+  cnv = createCanvas(stageWidth(), stageHeight());
+  cnv.parent("wrap");
+  pixelDensity(2);
+  noLoop();
+  pane = buildPane({
+    state: appState,
+    container: document.getElementById("pane"),
+    onPatternChange: regenerateModel,
+    onCanvasChange: handleCanvasResizeAndRedraw,
+    onViewChange: redraw,
+    onSeedChange: () => setSeed(appState.seed),
+    onResetZoom: resetZoom,
+    onCanvasPresetChange: handleCanvasPresetChange,
+  });
+  bindButtons({
+    onPrevSeed: () => stepSeed(-1),
+    onNextSeed: () => stepSeed(1),
+    onRandomSeed: randomSeed_,
+    onRegenerate: regenerate,
+    onReset: resetParams,
+    onPng: downloadPNG,
+    onSvg: downloadSVG,
+  });
+  window.addEventListener("resize", handleCanvasResize);
+  syncCanvasSize(appState, cnv, resizeCanvas, "wrap");
+  regenerateModel();
+}
+
+function draw() {
+  clear();
+  background(appState.invertPreview ? "#f6f4ee" : "#0e0e10");
+  const m = margin();
+  stroke(appState.invertPreview ? "rgba(22,22,20,0.35)" : "rgba(233,231,223,0.28)");
+  strokeWeight(Math.max(1, stageScale()));
+  noFill();
+  rect(m, m, stageWidth() - m * 2, stageHeight() - m * 2);
+  noStroke();
+  fill(appState.invertPreview ? "#161614" : "#e9e7df");
+
+  for (const ch of model.chains) {
+    if (shouldSuppressUnresolvedCurl(ch)) {
+      continue;
+    }
+    for (const reflected of reflectedChains(ch)) {
+      drawChain(reflected);
+    }
+  }
+}
+
+// ============================= UI =============================
+function handleCanvasChange() {
+  updateCanvasDisplaySize(appState, cnv, "wrap");
+  redraw();
+}
+
+function handleCanvasResizeAndRedraw() {
+  syncDesignSizeFromCanvas();
+  syncCanvasSize(appState, cnv, resizeCanvas, "wrap");
+  regenerateModel();
+}
+
+function handleCanvasResize() {
+  updateCanvasDisplaySize(appState, cnv, "wrap");
+}
+
+function handleCanvasPresetChange() {
+  const preset = CANVAS_PRESETS[appState.canvasPreset];
+  if (preset) {
+    appState.canvasWMM = preset.widthMM;
+    appState.canvasHMM = preset.heightMM;
+  }
+  if (pane) {
+    pane.refresh();
+  }
+  handleCanvasResizeAndRedraw();
+}
+
+function resetZoom() {
+  resetCanvasView(appState);
+  pane.refresh();
+  handleCanvasChange();
+}
+
+function syncDesignSizeFromCanvas() {
+  appState.designWidth = Math.max(1, Math.round((appState.canvasWMM * appState.dpi) / 25.4));
+  appState.designHeight = Math.max(1, Math.round((appState.canvasHMM * appState.dpi) / 25.4));
+}
+
+function regenerateModel() {
+  generate();
+  updateStats({
+    seed: appState.seed,
+    arcs: model.stats.arcs,
+    chains: model.stats.chains,
+    length: model.stats.length,
+    g1: verifyG1(),
+  });
+  redraw();
+}
+
+function setSeed(s) {
+  appState.seed = Math.max(1, Math.floor(s));
+  if (pane) {
+    pane.refresh();
+  }
+  regenerateModel();
+}
+
+function stepSeed(d) {
+  setSeed(appState.seed + d);
+}
+
+function randomSeed_() {
+  setSeed(Math.floor(Math.random() * 99999) + 1);
+}
+
+function regenerate() {
+  regenerateModel();
+}
+
+function resetParams() {
+  resetAppState(appState);
+  params = appState.params;
+  if (pane) {
+    pane.refresh();
+  }
+  handleCanvasResizeAndRedraw();
+}
+
+function downloadPNG() {
+  downloadPng(saveCanvas, appState.seed);
+}
+
+function downloadSVG() {
+  downloadSvg({
+    width: stageWidth(),
+    height: stageHeight(),
+    seed: appState.seed,
+    decay: params.decay,
+    invertPreview: appState.invertPreview,
+    model,
+    reflectedChains,
+    shouldSuppressUnresolvedCurl,
+    helpers: {
+      arcPointAt,
+      reverseArcs,
+    },
+  });
+}
