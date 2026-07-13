@@ -33,9 +33,19 @@
     const availableH = Math.max(1, rect.height - padding);
     const fitScale = Math.min(availableW / size.width, availableH / size.height, 1);
     const scale = state.fitToViewport ? fitScale * state.previewScale : state.previewScale;
+    const displayW = Math.max(1, Math.round(size.width * scale));
+    const displayH = Math.max(1, Math.round(size.height * scale));
+    const elt = canvasInstance.elt || canvasInstance.canvas || canvasInstance;
 
-    canvasInstance.style("width", `${Math.max(1, Math.round(size.width * scale))}px`);
-    canvasInstance.style("height", `${Math.max(1, Math.round(size.height * scale))}px`);
+    if (!elt || !elt.style) {
+      return;
+    }
+
+    elt.style.setProperty("width", `${displayW}px`, "important");
+    elt.style.setProperty("height", `${displayH}px`, "important");
+    elt.style.setProperty("max-width", "none", "important");
+    elt.style.setProperty("max-height", "none", "important");
+    elt.style.setProperty("display", "block");
   }
 
   function syncCanvasSize(state, canvasInstance, resizeCanvasFn, wrapId) {
