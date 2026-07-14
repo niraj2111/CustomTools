@@ -514,52 +514,70 @@ function buildTerminalLeafFromSpiral(terminalArcs, role = "branch") {
   const outerStart = arcPointAt(first, 0);
   const outerStartTangent = arcTangentAt(first, 0);
   const outerTip = arcPointAt(last, 1);
+  const outerTipTangent = arcTangentAt(last, 1);
   const sign = Math.sign(last.da) || 1;
   const inner = [];
   const curveAmount = Math.max(0, Math.min(1, params.leafCurvature ?? 0.62));
-  const outerMaxRadius = terminalArcs.reduce((maxRadius, arc) => Math.max(maxRadius, arc.r), 0);
-  const neckRadius = Math.max(
-    su(3),
-    outerMaxRadius * (role === "spine" ? lerp(0.44, 0.92, curveAmount) : lerp(0.38, 0.84, curveAmount))
+  const innerBaseShift = 0.4;
+  const terminalSamples = sampleArcs(terminalArcs, 2);
+  const terminalTotal = terminalSamples.length ? terminalSamples[terminalSamples.length - 1].s : 0;
+  const innerStartSample =
+    terminalSamples.find((sample) => terminalTotal > 0 && sample.s / terminalTotal >= innerBaseShift) ||
+    terminalSamples[0];
+  const innerStart = innerStartSample ? [innerStartSample.x, innerStartSample.y] : outerStart;
+  const innerStartTangent = innerStartSample
+    ? [innerStartSample.tx, innerStartSample.ty]
+    : outerStartTangent;
+  const innerStartRadius = innerStartSample?.r ?? first.r;
+  const siblingScale =
+    role === "spine" ? lerp(0.18, 0.4, curveAmount) : lerp(0.16, 0.36, curveAmount);
+  const siblingDecay = constrain(params.decay * lerp(0.72, 0.88, curveAmount), 0.15, 0.92);
+  const siblingQuarters = Math.max(
+    1,
+    Math.min(terminalArcs.length + 1, Math.round(terminalArcs.length + lerp(0, 1, curveAmount)))
   );
-  const neckSweep = lerp(0.12, Math.min(Math.abs(last.da) * 0.92, 1.45), curveAmount);
-  const neck = arcFrom(
-    outerStart[0],
-    outerStart[1],
-    outerStartTangent[0],
-    outerStartTangent[1],
-    neckRadius,
+  const siblingSpiral = spiralArcs(
+    innerStart[0],
+    innerStart[1],
+    innerStartTangent[0],
+    innerStartTangent[1],
     sign,
-    neckSweep
+    Math.max(su(3), innerStartRadius * siblingScale),
+    siblingDecay,
+    siblingQuarters
   );
+  const siblingArcs = siblingSpiral.arcs;
 
-  const closingPreferredSign = curveAmount < 0.5 ? -sign : sign;
-  let closingArc = arcToPointWithTangent(
-    neck.ex,
-    neck.ey,
-    neck.etx,
-    neck.ety,
-    outerTip[0],
-    outerTip[1],
-    closingPreferredSign
-  );
-  if (!closingArc) {
-    closingArc = arcToPointWithTangent(
-      neck.ex,
-      neck.ey,
-      neck.etx,
-      neck.ety,
+  if (siblingArcs.length) {
+    const siblingEnd = siblingSpiral.end;
+    const closingPreferredSign = curveAmount < 0.45 ? -sign : sign;
+    let backwardClosingArc = arcToPointWithTangent(
       outerTip[0],
       outerTip[1],
-      -closingPreferredSign
+      -outerTipTangent[0],
+      -outerTipTangent[1],
+      siblingEnd[0],
+      siblingEnd[1],
+      closingPreferredSign
     );
-  }
+    if (!backwardClosingArc) {
+      backwardClosingArc = arcToPointWithTangent(
+        outerTip[0],
+        outerTip[1],
+        -outerTipTangent[0],
+        -outerTipTangent[1],
+        siblingEnd[0],
+        siblingEnd[1],
+        -closingPreferredSign
+      );
+    }
 
-  if (closingArc) {
-    const maxClosingSweep = lerp(1.3, 2.4, curveAmount);
-    if (Math.abs(closingArc.da) <= maxClosingSweep) {
-      inner.push(neck.arc);
-      inner.push(closingArc);
+    if (backwardClosingArc) {
+      const closingArc = reverseArcs([backwardClosingArc])[0];
+      const maxClosingSweep = lerp(1.2, 2.55, curveAmount);
+      if (Math.abs(closingArc.da) <= maxClosingSweep) {
+        inner.push(...siblingArcs, closingArc);
+      }
     }
   }
 
@@ -567,12 +585,12 @@ function buildTerminalLeafFromSpiral(terminalArcs, role = "branch") {
     const chordTangent = normalizeVec(outerTip[0] - outerStart[0], outerTip[1] - outerStart[1]);
     const tangentBias = Math.min(1, curveAmount * 0.75);
     const tangentBlend = normalizeVec(
-      chordTangent[0] * (1 - tangentBias) + outerStartTangent[0] * tangentBias,
-      chordTangent[1] * (1 - tangentBias) + outerStartTangent[1] * tangentBias
+      chordTangent[0] * (1 - tangentBias) + innerStartTangent[0] * tangentBias,
+      chordTangent[1] * (1 - tangentBias) + innerStartTangent[1] * tangentBias
     );
     let fallback = arcToPointWithTangent(
-      outerStart[0],
-      outerStart[1],
+      innerStart[0],
+      innerStart[1],
       tangentBlend[0],
       tangentBlend[1],
       outerTip[0],
@@ -581,8 +599,8 @@ function buildTerminalLeafFromSpiral(terminalArcs, role = "branch") {
     );
     if (!fallback) {
       fallback = arcToPointWithTangent(
-        outerStart[0],
-        outerStart[1],
+        innerStart[0],
+        innerStart[1],
         tangentBlend[0],
         tangentBlend[1],
         outerTip[0],
