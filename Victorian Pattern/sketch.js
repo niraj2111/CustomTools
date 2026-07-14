@@ -331,16 +331,23 @@ function inBounds(x, y) {
   return x > m && x < stageWidth() - m && y > m && y < stageHeight() - m;
 }
 
-function testChain(samples, grid, skipLen) {
+function testChain(samples, grid, skipLen = 0, skipTailLen = 0) {
   const cl = params.clearance;
   const seamX = params.mirror ? stageWidth() / 2 - cl * 0.5 : Infinity;
   const seamY = params.verticalSymmetry ? stageHeight() / 2 + cl * 0.5 : -Infinity;
+  const total = samples.length ? samples[samples.length - 1].s : 0;
 
   for (const p of samples) {
     if (!inBounds(p.x, p.y) || inVoid(p.x, p.y) || p.x > seamX || p.y < seamY) {
       return false;
     }
-    const rad = skipLen > 0 && p.s < skipLen ? cl * Math.pow(p.s / skipLen, 2) : cl;
+    let rad = cl;
+    if (skipLen > 0 && p.s < skipLen) {
+      rad = Math.min(rad, cl * Math.pow(p.s / skipLen, 2));
+    }
+    if (skipTailLen > 0 && total - p.s < skipTailLen) {
+      rad = Math.min(rad, cl * Math.pow((total - p.s) / skipTailLen, 2));
+    }
     if (rad > 0.5 && grid.near(p.x, p.y, rad)) {
       return false;
     }
@@ -681,6 +688,201 @@ function tryRequiredOffshoot(chain, scale, grid, queue) {
 
 function shouldSuppressUnresolvedCurl(chain) {
   return Boolean(chain && chain.mustHaveOffshoot && !chain.hasOffshoot);
+}
+
+function angleBetween(a, b) {
+  let d = a - b;
+  while (d > PI) d -= TAU;
+  while (d < -PI) d += TAU;
+  return d;
+}
+
+function probeClearanceAlongRay(grid, x, y, angle, maxDistance, step = 16, startOffset = 0) {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const limit = Math.max(step, maxDistance);
+
+  for (let dist = Math.max(0, startOffset); dist <= limit; dist += step) {
+    const px = x + dx * dist;
+    const py = y + dy * dist;
+    if (!inBounds(px, py) || inVoid(px, py)) {
+      return dist;
+    }
+    if (dist > startOffset + 2 && grid.near(px, py, params.clearance * 0.92)) {
+      return dist;
+    }
+  }
+
+  return limit;
+}
+
+function findOpenLaunchAngle(grid, spawnPoint, fallbackAngle = 0, avoidAngle = null) {
+  const maxDistance = Math.max(su(180), params.spacing * 5);
+  const step = Math.max(10, params.clearance * 0.9);
+  let bestAngle = fallbackAngle;
+  let bestScore = -Infinity;
+
+  for (let i = 0; i < 24; i++) {
+    const angle = (-PI + (TAU * i) / 24) + rnd(-0.03, 0.03);
+    const forward = probeClearanceAlongRay(grid, spawnPoint.x, spawnPoint.y, angle, maxDistance, step, step);
+    const sideA = probeClearanceAlongRay(grid, spawnPoint.x, spawnPoint.y, angle + 0.42, maxDistance * 0.7, step, step);
+    const sideB = probeClearanceAlongRay(grid, spawnPoint.x, spawnPoint.y, angle - 0.42, maxDistance * 0.7, step, step);
+    const alignScore = Math.cos(angleBetween(angle, fallbackAngle)) * maxDistance * 0.12;
+    const avoidPenalty =
+      avoidAngle === null ? 0 : Math.max(0, Math.cos(angleBetween(angle, avoidAngle))) * maxDistance * 0.28;
+    const upwardBias = Math.max(0, -Math.sin(angle)) * maxDistance * 0.08;
+    const score = forward * 1.4 + Math.min(sideA, sideB) * 0.55 + alignScore + upwardBias - avoidPenalty;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestAngle = angle;
+    }
+  }
+
+  return bestAngle;
+}
+
+function nearestTangentialTarget(spawnPoint, maxDistance = su(96)) {
+  let best = null;
+  let bestDist = maxDistance;
+
+  for (const chain of model.chains) {
+    if (chain.kind === "stroke" && chain.spawnPoint) {
+      if (Math.hypot(chain.spawnPoint.x - spawnPoint.x, chain.spawnPoint.y - spawnPoint.y) < su(6)) {
+        continue;
+      }
+    }
+
+    const arcSets =
+      chain.kind === "stroke"
+        ? [chain.arcs]
+        : chain.kind === "leaf"
+          ? [chain.stem, chain.tear]
+          : [];
+
+    for (const arcs of arcSets) {
+      const samples = sampleArcs(arcs, 5);
+      for (const sample of samples) {
+        const dist = Math.hypot(sample.x - spawnPoint.x, sample.y - spawnPoint.y);
+        if (dist < su(18) || dist > bestDist) {
+          continue;
+        }
+        best = sample;
+        bestDist = dist;
+      }
+    }
+  }
+
+  return best;
+}
+
+function tryAddTangentialSpawnBridge(grid, spawnPoint) {
+  const target = nearestTangentialTarget(spawnPoint);
+  if (!target) {
+    return null;
+  }
+
+  let backwardArc = arcToPointWithTangent(
+    target.x,
+    target.y,
+    -target.tx,
+    -target.ty,
+    spawnPoint.x,
+    spawnPoint.y,
+    target.dir ?? 1
+  );
+  if (!backwardArc) {
+    backwardArc = arcToPointWithTangent(
+      target.x,
+      target.y,
+      -target.tx,
+      -target.ty,
+      spawnPoint.x,
+      spawnPoint.y,
+      -(target.dir ?? 1)
+    );
+  }
+  if (!backwardArc) {
+    return null;
+  }
+
+  const bridgeArc = reverseArcs([backwardArc])[0];
+  if (Math.abs(bridgeArc.da) > PI * 0.92) {
+    return null;
+  }
+
+  const samples = sampleArcs([bridgeArc], 3);
+  const skip = Math.max(params.clearance * 2.2, su(18));
+  if (!testChain(samples, grid, skip, skip)) {
+    return null;
+  }
+
+  const bridge = {
+    kind: "stroke",
+    arcs: [bridgeArc],
+    depth: 0,
+    profile: "bridge",
+    terminalLeaf: null,
+    wBase: STROKE_WEIGHT * 0.92,
+  };
+  acceptChain(bridge, samples, grid);
+  return bridge;
+}
+
+function runSecondPassSpines(grid, queue, bounds, baseTier) {
+  const sourceSpines = model.chains.filter(
+    (chain) => chain.kind === "stroke" && chain.profile === "spine" && chain.spawnPoint
+  );
+
+  for (const source of sourceSpines) {
+    const spawn = source.spawnPoint;
+    if (!spawn || !inBounds(spawn.x, spawn.y) || inVoid(spawn.x, spawn.y)) {
+      continue;
+    }
+
+    const fallbackAngle = flowAngleAt(spawn.x, spawn.y, "spine");
+    const avoidAngle = source.launchAngle ?? fallbackAngle;
+    const launchAngle = findOpenLaunchAngle(grid, spawn, fallbackAngle, avoidAngle);
+    const directSpace = probeClearanceAlongRay(
+      grid,
+      spawn.x,
+      spawn.y,
+      launchAngle,
+      Math.max(su(160), params.spacing * 4.5),
+      Math.max(10, params.clearance * 0.9),
+      Math.max(10, params.clearance * 0.9)
+    );
+
+    if (directSpace < Math.max(su(42), params.spacing * 1.4)) {
+      tryAddTangentialSpawnBridge(grid, spawn);
+      continue;
+    }
+
+    const secondPassScale = (source.rootScale ?? baseTier.rootScale ?? 1) * 0.68;
+    const secondPass = buildSpine(grid, 0, 1, {
+      ...baseTier,
+      rootScale: secondPassScale,
+      bodyChance: 0.46,
+      weightScale: 0.82,
+      preferredPoint: {
+        x: spawn.x,
+        y: spawn.y,
+        launchAngle,
+        lockToGuide: true,
+      },
+      spreadX: 0,
+      spreadY: 0,
+      yMin: bounds.yMin,
+      yMax: bounds.yMax,
+      startClearanceSkip: Math.max(params.clearance * 3.6, su(34)),
+    });
+
+    if (secondPass) {
+      secondPass.pass = 2;
+      queue.push({ chain: secondPass, scale: secondPassScale });
+      tryAddTangentialSpawnBridge(grid, spawn);
+    }
+  }
 }
 
 function sourceBounds() {
@@ -1109,6 +1311,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
   const sharedSpawnPoints = tier.sharedSpawnPoints ?? null;
   const sharedSpawnThreshold = tier.sharedSpawnThreshold ?? 0;
   const sharedSpawnSkip = tier.sharedSpawnSkip ?? 0;
+  const startClearanceSkipOverride = tier.startClearanceSkip ?? null;
 
   for (let tries = 0; tries < 30; tries++) {
     const rawPoint = {
@@ -1128,7 +1331,8 @@ function buildSpine(grid, col, nCols, tier = {}) {
       : findNearbySpawnPoint(sharedSpawnPoints, rawPoint, sharedSpawnThreshold);
     const px = sharedPoint ? sharedPoint.x : rawPoint.x;
     const py = sharedPoint ? sharedPoint.y : rawPoint.y;
-    const startClearanceSkip = sharedPoint ? sharedSpawnSkip : 0;
+    const startClearanceSkip =
+      startClearanceSkipOverride ?? (sharedPoint ? sharedSpawnSkip : 0);
     const launchAngle =
       preferredPoint && preferredPoint.launchAngle !== undefined
         ? preferredPoint.launchAngle
@@ -1228,6 +1432,8 @@ function buildSpine(grid, col, nCols, tier = {}) {
       terminalLeaf: buildTerminalLeafFromSpiral(sp1.arcs, "spine"),
       wBase: STROKE_WEIGHT,
       spawnPoint: { x: px, y: py },
+      launchAngle,
+      rootScale,
     };
     acceptChain(chain, samples, grid);
     if (
@@ -1777,6 +1983,8 @@ function generate() {
     }
   }
 
+  growQueue(queue, grid);
+  runSecondPassSpines(grid, queue, bounds, largeTier);
   growQueue(queue, grid);
   enrichAttachedInfill(grid);
   finishStats();
