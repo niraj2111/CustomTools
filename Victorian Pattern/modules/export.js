@@ -66,6 +66,20 @@
     )}" ry="${fmt(voidMask.ry)}" fill="${fillColor}" stroke="none"/></g>\n`;
   }
 
+  function voidBoundaryToSvg(voidMask) {
+    if (!voidMask) {
+      return "";
+    }
+    if (voidMask.shape === "rect") {
+      return `<rect x="${fmt(voidMask.x)}" y="${fmt(voidMask.y)}" width="${fmt(voidMask.width)}" height="${fmt(
+        voidMask.height
+      )}"/>\n`;
+    }
+    return `<ellipse cx="${fmt(voidMask.cx)}" cy="${fmt(voidMask.cy)}" rx="${fmt(voidMask.rx)}" ry="${fmt(
+      voidMask.ry
+    )}"/>\n`;
+  }
+
   function downloadPng(saveCanvasFn, seed) {
     saveCanvasFn(`victorian-flourish-${seed}`, "png");
   }
@@ -104,6 +118,8 @@
 <g fill="none" stroke="${ink}" stroke-width="1" stroke-linecap="round">
 ${body}</g>
 ${voidMaskToSvg(voidMask, paper)}
+<g id="void-boundary" fill="none" stroke="${ink}" stroke-width="1" stroke-linecap="round">
+${voidBoundaryToSvg(voidMask)}</g>
 </svg>`;
 
     const blob = new Blob([svg], { type: "image/svg+xml" });

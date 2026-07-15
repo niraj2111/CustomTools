@@ -15,6 +15,7 @@
     twinRails: { label: "Twin Rails" },
     medallion: { label: "Medallion" },
     borderFrame: { label: "Border Frame" },
+    voidContour: { label: "Void Contour" },
   };
   const VOID_SHAPES = {
     oval: { label: "Oval" },
