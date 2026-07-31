@@ -38,12 +38,14 @@ const P = {
   showGuide: false,
   shapeInsetMM: 10,
   spiralTurns: 6,
-  thetaStepDeg: 0.1,
+  thetaStepDeg: 0.04,
   frequency: 1,
   widthScale: 0.06,
   heightScale: 0.1,
-  noiseStrengthMM: 18,
-  noiseScale: 0.015,
+  noiseStrengthXMM: 18,
+  noiseStrengthYMM: 18,
+  noiseScaleX: 0.015,
+  noiseScaleY: 0.015,
   radialFlow: 1,
   angularFlow: 14,
   noiseOctaves: 4,
@@ -186,10 +188,16 @@ function buildPane() {
 
   const noiseFolder = pane.addFolder({ title: "Noise" });
   noiseFolder
-    .addInput(P, "noiseStrengthMM", { min: 0, max: 120, step: 0.5, label: "Strength" })
+    .addInput(P, "noiseStrengthXMM", { min: 0, max: 120, step: 0.5, label: "Strength X" })
     .on("change", regenerate);
   noiseFolder
-    .addInput(P, "noiseScale", { min: 0.001, max: 0.08, step: 0.001, label: "Scale" })
+    .addInput(P, "noiseStrengthYMM", { min: 0, max: 120, step: 0.5, label: "Strength Y" })
+    .on("change", regenerate);
+  noiseFolder
+    .addInput(P, "noiseScaleX", { min: 0.001, max: 0.08, step: 0.001, label: "Scale X" })
+    .on("change", regenerate);
+  noiseFolder
+    .addInput(P, "noiseScaleY", { min: 0.001, max: 0.08, step: 0.001, label: "Scale Y" })
     .on("change", regenerate);
   noiseFolder
     .addInput(P, "radialFlow", { min: 0.2, max: 3, step: 0.05, label: "Radial Flow" })
@@ -327,8 +335,18 @@ function drawSpiralStone() {
   strokeJoin(ROUND);
 
   beginShape();
-  for (const point of scene.points) {
-    curveVertex(point.x, point.y);
+  if (P.mode === "split") {
+    for (const point of scene.points) {
+      vertex(point.x, point.y);
+    }
+  } else {
+    const first = scene.points[0];
+    const last = scene.points[scene.points.length - 1];
+    curveVertex(first.x, first.y);
+    for (const point of scene.points) {
+      curveVertex(point.x, point.y);
+    }
+    curveVertex(last.x, last.y);
   }
   endShape();
 }
@@ -342,12 +360,13 @@ function buildNormSpiralPoints() {
   for (let theta = 0; theta < thetaMax && points.length < MAX_POINTS; theta += P.thetaStepDeg) {
     const x = P.widthScale * theta * cos(theta * P.frequency);
     const y = P.heightScale * theta * sin(theta * P.frequency);
-    const basePoint = { x: center.x + x, y: center.y + y };
-    const radialOffset = sampleRadialField(x, y);
-
+    const offset = sampleNormOffset(x, y);
     points.push(
       applyShapeConstraint(
-        tightenOuterEdge(applyRadialNoise(basePoint, center, radialOffset), center),
+        {
+          x: center.x + x + offset.x,
+          y: center.y + y + offset.y,
+        },
         center
       )
     );
@@ -367,20 +386,13 @@ function buildSplitSpiralPoints() {
   for (let theta = 0; theta < thetaMax && points.length < MAX_POINTS; theta += P.splitThetaStepDeg) {
     const x = P.splitWidthScale * theta * cos(theta * P.splitFrequency);
     const y = P.splitHeightScale * theta * sin(theta * P.splitFrequency);
-    const basePoint = { x: center.x + x, y: center.y + y };
-    let radialOffset = 0;
-
-    if (y < -P.splitCutMM) {
-      radialOffset = sampleRadialField(x, y, rand2 + P.splitTopBias) * P.splitTopMultiplier;
-    } else if (y < P.splitCutMM) {
-      radialOffset = sampleRadialField(x, y) * P.splitMidMultiplier;
-    } else {
-      radialOffset = sampleRadialField(x, y, rand1 + P.splitBottomBias) * P.splitBottomMultiplier;
-    }
-
+    const offset = sampleSplitOffset(x, y, rand1, rand2);
     points.push(
       applyShapeConstraint(
-        tightenOuterEdge(applyRadialNoise(basePoint, center, radialOffset), center),
+        {
+          x: center.x + x + offset.x,
+          y: center.y + y + offset.y,
+        },
         center
       )
     );
@@ -431,71 +443,45 @@ function applyShapeConstraint(point, center) {
   };
 }
 
-function sampleRadialField(localX, localY, bias = 0) {
-  const radius = Math.sqrt(localX * localX + localY * localY);
-  const angle = Math.atan2(localY, localX);
-  const radialCoord = radius * P.noiseScale * P.radialFlow;
-  const angularX = Math.cos(angle) * P.angularFlow;
-  const angularY = Math.sin(angle) * P.angularFlow;
-  const primary = map(
-    noise(radialCoord + 11.3 + bias, angularX + P.seed * 0.01, angularY + 7.1),
-    0,
-    1,
-    -1,
-    1
-  );
-  const detail = map(
-    noise(
-      radialCoord * 2.35 + 19.7 + bias,
-      angularX * 1.85 + P.seed * 0.017,
-      angularY * 1.85 + 3.1
-    ),
-    0,
-    1,
-    -1,
-    1
-  );
-  return P.noiseStrengthMM * (primary * 0.75 + detail * 0.35);
-}
-
-function applyRadialNoise(point, center, radialOffset) {
-  const dx = point.x - center.x;
-  const dy = point.y - center.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
-
-  if (len <= 0.000001) {
-    return point;
-  }
+function sampleNormOffset(localX, localY) {
+  const xScale1 = P.noiseScaleX * Math.max(0.5, P.radialFlow);
+  const yScale1 = P.noiseScaleY * Math.max(0.5, P.radialFlow);
+  const xScale2 = P.noiseScaleX * 2;
+  const yScale2 = P.noiseScaleY * Math.max(2, P.angularFlow / 5);
 
   return {
-    x: point.x + (dx / len) * radialOffset,
-    y: point.y + (dy / len) * radialOffset,
+    x: P.noiseStrengthXMM * noise(localX * xScale1, localY * yScale1 + 1),
+    y: P.noiseStrengthYMM * noise(localX * xScale2, localY * yScale2 + 2),
   };
 }
 
-function tightenOuterEdge(point, center) {
-  if (P.outerEdgeTightness <= 0) {
-    return point;
+function sampleSplitOffset(localX, localY, rand1, rand2) {
+  const topScaleX = P.noiseScaleX;
+  const topScaleY = P.noiseScaleY;
+  const midScaleX = P.noiseScaleX * 2;
+  const midScaleY = P.noiseScaleY * 2;
+  const midScaleX2 = P.noiseScaleX * 3;
+  const midScaleY2 = P.noiseScaleY * 3;
+  const bottomScaleX = P.noiseScaleX;
+  const bottomScaleY = P.noiseScaleY * 1.5;
+
+  if (localY < -P.splitCutMM) {
+    return {
+      x: P.noiseStrengthXMM * P.splitTopMultiplier * map(noise(localX * topScaleX, localY * topScaleY) + rand2 + P.splitTopBias, 0, 1, 0, 1),
+      y: P.noiseStrengthYMM * P.splitTopMultiplier * map(noise(localX * topScaleX, localY * topScaleY + 1000), 0, 1, 0, 1),
+    };
   }
 
-  const dx = point.x - center.x;
-  const dy = point.y - center.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  if (dist <= 0.000001) {
-    return point;
+  if (localY < P.splitCutMM) {
+    return {
+      x: P.noiseStrengthXMM * P.splitMidMultiplier * map(noise(localX * midScaleX, localY * midScaleY), 0, 1, 0, 1),
+      y: P.noiseStrengthYMM * P.splitMidMultiplier * map(noise(localX * midScaleX2, localY * midScaleY2 + 1000), 0, 1, 0, 1),
+    };
   }
-
-  const bounds = getShapeBounds();
-  const maxDist = P.shape === "circle"
-    ? Math.min(bounds.halfW, bounds.halfH)
-    : Math.min(bounds.halfW, bounds.halfH) * 1.15;
-  const edgeT = constrain(dist / Math.max(1, maxDist), 0, 1);
-  const outerBand = smoothstep(0.62, 1, edgeT);
-  const compression = 1 - P.outerEdgeTightness * 0.22 * outerBand;
 
   return {
-    x: center.x + dx * compression,
-    y: center.y + dy * compression,
+    x: P.noiseStrengthXMM * P.splitBottomMultiplier * map(noise(localX * bottomScaleX, localY * bottomScaleY) + rand1 + P.splitBottomBias, 0, 1, 0, 1),
+    y: P.noiseStrengthYMM * P.splitBottomMultiplier * map(noise(localX * bottomScaleX, localY * bottomScaleY + 1000), 0, 1, 0, 1),
   };
 }
 
@@ -583,8 +569,10 @@ function normalizeParams() {
   P.frequency = constrain(P.frequency, 1, 40);
   P.widthScale = constrain(P.widthScale, 0.005, 0.2);
   P.heightScale = constrain(P.heightScale, 0.005, 0.2);
-  P.noiseStrengthMM = constrain(P.noiseStrengthMM, 0, 120);
-  P.noiseScale = constrain(P.noiseScale, 0.001, 0.08);
+  P.noiseStrengthXMM = constrain(P.noiseStrengthXMM, 0, 120);
+  P.noiseStrengthYMM = constrain(P.noiseStrengthYMM, 0, 120);
+  P.noiseScaleX = constrain(P.noiseScaleX, 0.001, 0.08);
+  P.noiseScaleY = constrain(P.noiseScaleY, 0.001, 0.08);
   P.radialFlow = constrain(P.radialFlow, 0.2, 3);
   P.angularFlow = constrain(P.angularFlow, 1, 40);
   P.noiseOctaves = constrain(Math.floor(P.noiseOctaves), 1, 8);

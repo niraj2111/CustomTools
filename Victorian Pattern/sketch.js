@@ -3,7 +3,7 @@ const TAU = Math.PI * 2;
 const PI = Math.PI;
 const BASE_W = 1500;
 const BASE_H = 900;
-const { CANVAS_PRESETS, createAppState, resetAppState } = window.VictorianPatternState;
+const { CANVAS_PRESETS, applyMotifPreset, createAppState, resetAppState } = window.VictorianPatternState;
 const { bindButtons, buildPane, updateStats } = window.VictorianPatternControls;
 const { downloadPng, downloadSvg } = window.VictorianPatternExport;
 const { resetCanvasView, syncCanvasSize, updateCanvasDisplaySize } = window.VictorianPatternCanvas;
@@ -17,6 +17,16 @@ function mulberry32(a) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  const text = String(value ?? "");
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 let R = mulberry32(1);
@@ -247,6 +257,8 @@ let model = null;
 let compositionFlow = null;
 let pane;
 let cnv;
+let activeManualSpawnIndex = -1;
+let isDraggingManualSpawnAngle = false;
 
 const BASE_MARGIN = 30;
 const STROKE_WEIGHT = 2;
@@ -269,6 +281,117 @@ function su(value) {
 
 function margin() {
   return BASE_MARGIN * stageScale();
+}
+
+function isPlacedSpawnMotif() {
+  return appState.motifPreset === "placedSpawns";
+}
+
+function reflectedPlacementPoints(point) {
+  const points = [{ x: point.x, y: point.y }];
+
+  if (params.mirror) {
+    points.push({ x: stageWidth() - point.x, y: point.y });
+  }
+  if (params.verticalSymmetry) {
+    points.push(...points.map((item) => ({ x: item.x, y: stageHeight() - item.y })));
+  }
+
+  return points.filter(
+    (item, index, all) =>
+      all.findIndex(
+        (other) => Math.abs(other.x - item.x) < 0.001 && Math.abs(other.y - item.y) < 0.001
+      ) === index
+  );
+}
+
+function pointFromCanvasEvent(event) {
+  if (!cnv?.elt || !event) {
+    return null;
+  }
+
+  const rect = cnv.elt.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / Math.max(1, rect.width)) * stageWidth(),
+    y: ((event.clientY - rect.top) / Math.max(1, rect.height)) * stageHeight(),
+  };
+}
+
+function launchAngleForPoint(point) {
+  return point.launchAngle ?? flowAngleAt(point.x, point.y, "spine");
+}
+
+function mirrorAngleX(angle) {
+  return PI - angle;
+}
+
+function mirrorAngleY(angle) {
+  return -angle;
+}
+
+function reflectedPlacementCopies(point) {
+  const copies = [{ x: point.x, y: point.y, launchAngle: launchAngleForPoint(point), isBase: true }];
+
+  if (params.mirror) {
+    copies.push({
+      x: stageWidth() - point.x,
+      y: point.y,
+      launchAngle: mirrorAngleX(launchAngleForPoint(point)),
+      isBase: false,
+    });
+  }
+  if (params.verticalSymmetry) {
+    copies.push(
+      ...copies.map((item) => ({
+        x: item.x,
+        y: stageHeight() - item.y,
+        launchAngle: mirrorAngleY(item.launchAngle),
+        isBase: false,
+      }))
+    );
+  }
+
+  return copies.filter(
+    (item, index, all) =>
+      all.findIndex(
+        (other) =>
+          Math.abs(other.x - item.x) < 0.001 &&
+          Math.abs(other.y - item.y) < 0.001 &&
+          Math.abs(angleBetween(other.launchAngle, item.launchAngle)) < 0.001
+      ) === index
+  );
+}
+
+function updateManualSpawnLaunchAngle(index, x, y) {
+  const point = appState.manualSpawnPoints[index];
+  if (!point) {
+    return false;
+  }
+
+  const dx = x - point.x;
+  const dy = y - point.y;
+  if (Math.hypot(dx, dy) < su(8)) {
+    return false;
+  }
+
+  point.launchAngle = Math.atan2(dy, dx);
+  return true;
+}
+
+function findManualSpawnIndex(x, y, threshold = su(22)) {
+  let bestIndex = -1;
+  let bestDist = threshold;
+
+  for (let i = 0; i < appState.manualSpawnPoints.length; i++) {
+    const point = appState.manualSpawnPoints[i];
+    const dist = Math.hypot(point.x - x, point.y - y);
+    if (dist <= bestDist) {
+      bestDist = dist;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
 }
 
 function stageVoid() {
@@ -310,6 +433,26 @@ function inVoid(x, y) {
   return dx * dx + dy * dy < 1;
 }
 
+function inVoidWithSymmetry(x, y) {
+  if (inVoid(x, y)) {
+    return true;
+  }
+  if (params.mirror && inVoid(stageWidth() - x, y)) {
+    return true;
+  }
+  if (params.verticalSymmetry && inVoid(x, stageHeight() - y)) {
+    return true;
+  }
+  if (params.mirror && params.verticalSymmetry && inVoid(stageWidth() - x, stageHeight() - y)) {
+    return true;
+  }
+  return false;
+}
+
+function manualSpawnAllowed(point) {
+  return !inVoidWithSymmetry(point.x, point.y);
+}
+
 function drawVoidMask() {
   if (!params.voidOn) {
     return;
@@ -318,16 +461,6 @@ function drawVoidMask() {
   push();
   noStroke();
   fill(appState.invertPreview ? "#f6f4ee" : "#0e0e10");
-  if (currentVoid.shape === "rect") {
-    rect(currentVoid.x, currentVoid.y, currentVoid.width, currentVoid.height);
-  } else {
-    ellipse(currentVoid.cx, currentVoid.cy, currentVoid.rx * 2, currentVoid.ry * 2);
-  }
-  noFill();
-  stroke(appState.invertPreview ? "#161614" : "#e9e7df");
-  strokeWeight(Math.max(1, stageScale()));
-  strokeCap(ROUND);
-  strokeJoin(ROUND);
   if (currentVoid.shape === "rect") {
     rect(currentVoid.x, currentVoid.y, currentVoid.width, currentVoid.height);
   } else {
@@ -348,7 +481,7 @@ function testChain(samples, grid, skipLen = 0, skipTailLen = 0) {
   const total = samples.length ? samples[samples.length - 1].s : 0;
 
   for (const p of samples) {
-    if (!inBounds(p.x, p.y) || inVoid(p.x, p.y) || p.x > seamX || p.y < seamY) {
+    if (!inBounds(p.x, p.y) || inVoidWithSymmetry(p.x, p.y) || p.x > seamX || p.y < seamY) {
       return false;
     }
     let rad = cl;
@@ -381,6 +514,144 @@ function acceptChain(chain, samples, grid) {
     }
   }
   model.chains.push(chain);
+}
+
+function sampleClosedPath(points, closed = true) {
+  if (!points || points.length < 2) {
+    return [];
+  }
+
+  const out = [];
+  let s = 0;
+  for (let i = 0; i < points.length; i++) {
+    const point = points[i];
+    if (i > 0) {
+      s += Math.hypot(point.x - points[i - 1].x, point.y - points[i - 1].y);
+    }
+    out.push({ x: point.x, y: point.y, s });
+  }
+
+  if (closed) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    s += Math.hypot(first.x - last.x, first.y - last.y);
+    out.push({ x: first.x, y: first.y, s });
+  }
+
+  return out;
+}
+
+function sampleOrnamentPaths(paths) {
+  const samples = [];
+  let offset = 0;
+
+  for (const path of paths) {
+    const pathSamples = sampleClosedPath(path, true);
+    for (const sample of pathSamples) {
+      samples.push({ x: sample.x, y: sample.y, s: sample.s + offset });
+    }
+    if (pathSamples.length) {
+      offset = samples[samples.length - 1].s;
+    }
+  }
+
+  return samples;
+}
+
+function rotatePoint(point, angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return {
+    x: point.x * c - point.y * s,
+    y: point.x * s + point.y * c,
+  };
+}
+
+function translatePath(points, cx, cy, angle = 0) {
+  return points.map((point) => {
+    const rotated = angle === 0 ? point : rotatePoint(point, angle);
+    return {
+      x: cx + rotated.x,
+      y: cy + rotated.y,
+    };
+  });
+}
+
+function buildFlowerPetalLocalPoints(rx, ry, count = 32) {
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const t = (i / Math.max(1, count - 1)) * TAU;
+    points.push({
+      x: Math.sin(t) * rx,
+      y: -Math.cos(t) * ry,
+    });
+  }
+  return points;
+}
+
+function buildCurvedDiamondLocalPoints(rx, ry, count = 72) {
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const t = (i / count) * TAU;
+    const x = rx * Math.pow(Math.cos(t), 3);
+    const y = ry * Math.pow(Math.sin(t), 3);
+    const rotated = rotatePoint({ x, y }, PI / 4);
+    points.push(rotated);
+  }
+  return points;
+}
+
+function buildSpaceOrnamentAt(x, y) {
+  const angle = flowAngleAt(x, y, "floating") + rnd(-0.5, 0.5);
+  const type = chance(0.55) ? "flower" : "diamond";
+  const paths = [];
+
+  if (type === "flower") {
+    const petalW = rnd(su(10), su(18));
+    const petalH = rnd(su(18), su(30));
+    const centerOffset = petalH * 0.58;
+    const petal = buildFlowerPetalLocalPoints(petalW, petalH, 28);
+    for (let i = 0; i < 4; i++) {
+      const petalAngle = angle + i * (PI / 2);
+      const center = rotatePoint({ x: 0, y: -centerOffset }, petalAngle);
+      paths.push(
+        translatePath(petal, x + center.x, y + center.y, petalAngle)
+      );
+    }
+  } else {
+    const rx = rnd(su(18), su(30));
+    const ry = rnd(su(18), su(30));
+    paths.push(translatePath(buildCurvedDiamondLocalPoints(rx, ry, 64), x, y, angle));
+  }
+
+  const samples = sampleOrnamentPaths(paths);
+  if (!samples.length) {
+    return null;
+  }
+
+  return {
+    kind: "ornament",
+    ornamentType: type,
+    paths,
+    wBase: STROKE_WEIGHT,
+    samples,
+  };
+}
+
+function tryPlaceSpaceOrnament(grid, seed) {
+  for (let tries = 0; tries < 4; tries++) {
+    const ornament = buildSpaceOrnamentAt(seed.x, seed.y);
+    if (!ornament) {
+      continue;
+    }
+    if (!testChain(ornament.samples, grid, 0)) {
+      continue;
+    }
+    acceptChain(ornament, ornament.samples, grid);
+    return ornament;
+  }
+
+  return null;
 }
 
 function quartersFromTurns() {
@@ -1363,6 +1634,24 @@ function seedVoidContourMotif(grid, queue, tiers, bounds) {
   queuePointsAsFloating(grid, floatingPoints, tiers.small, queue, { spreadX: 0, spreadY: 0, bounds });
 }
 
+function seedPlacedSpawnsMotif(grid, queue, tiers, bounds) {
+  const points = appState.manualSpawnPoints.filter(
+    (point) =>
+      point.x >= bounds.xMin &&
+      point.x <= bounds.xMax &&
+      point.y >= bounds.yMin &&
+      point.y <= bounds.yMax &&
+      !inVoid(point.x, point.y) &&
+      manualSpawnAllowed(point)
+  );
+
+  queuePointsAsSpines(grid, points, tiers.large, queue, {
+    spreadX: 0,
+    spreadY: 0,
+    bounds,
+  });
+}
+
 function seedMotifPreset(grid, queue, tiers, bounds, aspect) {
   switch (appState.motifPreset) {
     case "bottomBaseline":
@@ -1382,6 +1671,9 @@ function seedMotifPreset(grid, queue, tiers, bounds, aspect) {
       break;
     case "voidContour":
       seedVoidContourMotif(grid, queue, tiers, bounds);
+      break;
+    case "placedSpawns":
+      seedPlacedSpawnsMotif(grid, queue, tiers, bounds);
       break;
     case "freeField":
     default:
@@ -1993,7 +2285,9 @@ function buildFloating(grid, tier = {}) {
 }
 
 function generate() {
-  R = mulberry32((appState.seed * 2654435761) >>> 0 || 1);
+  const motifHash = hashString(appState.motifPreset);
+  const combinedSeed = ((appState.seed * 2654435761) ^ motifHash) >>> 0;
+  R = mulberry32(combinedSeed || 1);
   model = { chains: [], stats: {} };
   initCompositionFlow();
   const grid = makeGrid(params.clearance);
@@ -2025,23 +2319,25 @@ function generate() {
     weightScale: 0.72,
   };
 
-  const leftCorner = buildCornerSpine(grid, "left", {
-    rootScale: cornerScale,
-    startY: stageHeight() - margin() - su(26),
-    edgeInset: su(10),
-  });
-  if (leftCorner) {
-    queue.push({ chain: leftCorner, scale: cornerScale });
-  }
-
-  if (!params.mirror) {
-    const rightCorner = buildCornerSpine(grid, "right", {
+  if (!isPlacedSpawnMotif()) {
+    const leftCorner = buildCornerSpine(grid, "left", {
       rootScale: cornerScale,
       startY: stageHeight() - margin() - su(26),
       edgeInset: su(10),
     });
-    if (rightCorner) {
-      queue.push({ chain: rightCorner, scale: cornerScale });
+    if (leftCorner) {
+      queue.push({ chain: leftCorner, scale: cornerScale });
+    }
+
+    if (!params.mirror) {
+      const rightCorner = buildCornerSpine(grid, "right", {
+        rootScale: cornerScale,
+        startY: stageHeight() - margin() - su(26),
+        edgeInset: su(10),
+      });
+      if (rightCorner) {
+        queue.push({ chain: rightCorner, scale: cornerScale });
+      }
     }
   }
 
@@ -2094,6 +2390,19 @@ function generate() {
       if (sp) {
         queue.push({ chain: sp, scale: 0.42 });
       }
+    }
+
+    const ornamentSeeds = collectPocketSeeds(
+      grid,
+      Math.max(2, Math.round((params.smallSpines + params.mediumSpines) * 0.6)),
+      su(42),
+      pockets
+    );
+    for (const seed of ornamentSeeds) {
+      if (!chance(params.spaceMotifProb)) {
+        continue;
+      }
+      tryPlaceSpaceOrnament(grid, seed);
     }
   }
 
@@ -2175,6 +2484,9 @@ function finishStats() {
     } else if (ch.kind === "leaf") {
       nArcs += ch.stem.length + ch.tear.length;
       len += chainLen(ch.stem) + chainLen(ch.tear);
+    } else if (ch.kind === "ornament") {
+      nArcs += ch.paths.reduce((sum, path) => sum + Math.max(0, path.length - 1), 0);
+      len += ch.samples.length ? ch.samples[ch.samples.length - 1].s : 0;
     }
   }
 
@@ -2226,6 +2538,12 @@ function mirrorChainX(ch) {
   if (ch.kind === "leaf") {
     return { ...ch, stem: ch.stem.map(mirrorArc), tear: ch.tear.map(mirrorArc) };
   }
+  if (ch.kind === "ornament") {
+    return {
+      ...ch,
+      paths: ch.paths.map((path) => path.map((point) => ({ x: stageWidth() - point.x, y: point.y }))),
+    };
+  }
   return {
     ...ch,
     arcs: ch.arcs.map(mirrorArc),
@@ -2242,6 +2560,12 @@ function mirrorChainX(ch) {
 function mirrorChainY(ch) {
   if (ch.kind === "leaf") {
     return { ...ch, stem: ch.stem.map(mirrorArcY), tear: ch.tear.map(mirrorArcY) };
+  }
+  if (ch.kind === "ornament") {
+    return {
+      ...ch,
+      paths: ch.paths.map((path) => path.map((point) => ({ x: point.x, y: stageHeight() - point.y }))),
+    };
   }
   return {
     ...ch,
@@ -2354,6 +2678,12 @@ function drawDebugChain(ch) {
     drawArcPath([ch.tear[1]], "#ffb85e", 2.2);
     return;
   }
+  if (ch.kind === "ornament") {
+    for (const path of ch.paths) {
+      drawSamplePath(sampleClosedPath(path, true), "#7dff7a", 2.2);
+    }
+    return;
+  }
   if (ch.kind !== "stroke") {
     return;
   }
@@ -2399,6 +2729,16 @@ function drawLeaf(ch) {
   endShape(CLOSE);
 }
 
+function drawOrnament(ch) {
+  for (const path of ch.paths) {
+    beginShape();
+    for (const point of path) {
+      vertex(point.x, point.y);
+    }
+    endShape(CLOSE);
+  }
+}
+
 function drawChain(ch) {
   if (ch.kind === "stroke") {
     if (appState.debugParts) {
@@ -2413,7 +2753,73 @@ function drawChain(ch) {
     } else {
       drawLeaf(ch);
     }
+  } else if (ch.kind === "ornament") {
+    if (appState.debugParts) {
+      drawDebugChain(ch);
+    } else {
+      drawOrnament(ch);
+    }
   }
+}
+
+function drawPlacedSpawnGuides() {
+  if (!isPlacedSpawnMotif()) {
+    return;
+  }
+
+  const bounds = sourceBounds();
+  push();
+  noFill();
+  stroke(appState.invertPreview ? "rgba(22,22,20,0.22)" : "rgba(233,231,223,0.22)");
+  strokeWeight(Math.max(1, stageScale()));
+  drawingContext.setLineDash([Math.max(6, su(10)), Math.max(4, su(8))]);
+  rect(bounds.xMin, bounds.yMin, bounds.xMax - bounds.xMin, bounds.yMax - bounds.yMin);
+  drawingContext.setLineDash([]);
+
+  const liveColor = appState.invertPreview ? "#161614" : "#e9e7df";
+  const ghostColor = appState.invertPreview ? "rgba(22,22,20,0.34)" : "rgba(233,231,223,0.34)";
+  strokeWeight(Math.max(1.4, stageScale() * 1.4));
+
+  for (let i = 0; i < appState.manualSpawnPoints.length; i++) {
+    const point = appState.manualSpawnPoints[i];
+    if (inVoid(point.x, point.y) || !manualSpawnAllowed(point)) {
+      continue;
+    }
+    const reflected = reflectedPlacementCopies(point);
+    for (const item of reflected) {
+      const isBase = item.isBase;
+      const color = isBase ? liveColor : ghostColor;
+      const handleLen = su(isBase ? 34 : 28);
+      const tipX = item.x + Math.cos(item.launchAngle) * handleLen;
+      const tipY = item.y + Math.sin(item.launchAngle) * handleLen;
+
+      stroke(color);
+      line(item.x, item.y, tipX, tipY);
+      line(
+        tipX,
+        tipY,
+        tipX - Math.cos(item.launchAngle - 0.42) * su(8),
+        tipY - Math.sin(item.launchAngle - 0.42) * su(8)
+      );
+      line(
+        tipX,
+        tipY,
+        tipX - Math.cos(item.launchAngle + 0.42) * su(8),
+        tipY - Math.sin(item.launchAngle + 0.42) * su(8)
+      );
+
+      const isActive = isBase && i === activeManualSpawnIndex;
+      stroke(isActive ? liveColor : color);
+      stroke(isBase ? liveColor : ghostColor);
+      line(item.x - su(8), item.y, item.x + su(8), item.y);
+      line(item.x, item.y - su(8), item.x, item.y + su(8));
+      noStroke();
+      fill(isActive ? liveColor : color);
+      circle(item.x, item.y, su(isActive ? 10 : isBase ? 8 : 6));
+    }
+  }
+
+  pop();
 }
 
 function setup() {
@@ -2426,6 +2832,8 @@ function setup() {
     state: appState,
     container: document.getElementById("pane"),
     onPatternChange: regenerateModel,
+    onMotifPresetChange: handleMotifPresetChange,
+    onClearPlacedSpawns: clearPlacedSpawns,
     onCanvasChange: handleCanvasResizeAndRedraw,
     onViewChange: redraw,
     onSeedChange: () => setSeed(appState.seed),
@@ -2467,6 +2875,7 @@ function draw() {
   }
 
   drawVoidMask();
+  drawPlacedSpawnGuides();
 }
 
 // ============================= UI =============================
@@ -2495,6 +2904,24 @@ function handleCanvasPresetChange() {
     pane.refresh();
   }
   handleCanvasResizeAndRedraw();
+}
+
+function handleMotifPresetChange(motifPreset = appState.motifPreset) {
+  applyMotifPreset(appState, motifPreset);
+  params = appState.params;
+  activeManualSpawnIndex = -1;
+  isDraggingManualSpawnAngle = false;
+  if (pane) {
+    pane.refresh();
+  }
+  regenerateModel();
+}
+
+function clearPlacedSpawns() {
+  appState.manualSpawnPoints = [];
+  activeManualSpawnIndex = -1;
+  isDraggingManualSpawnAngle = false;
+  regenerateModel();
 }
 
 function resetZoom() {
@@ -2543,10 +2970,109 @@ function regenerate() {
 function resetParams() {
   resetAppState(appState);
   params = appState.params;
+  activeManualSpawnIndex = -1;
+  isDraggingManualSpawnAngle = false;
   if (pane) {
     pane.refresh();
   }
   handleCanvasResizeAndRedraw();
+}
+
+function mousePressed(event) {
+  if (!isPlacedSpawnMotif() || !cnv?.elt || !event) {
+    return;
+  }
+
+  const point = pointFromCanvasEvent(event);
+  if (!point) {
+    return;
+  }
+  const { x, y } = point;
+
+  if (x < 0 || x > stageWidth() || y < 0 || y > stageHeight()) {
+    return;
+  }
+
+  const selectedIndex = findManualSpawnIndex(x, y);
+  if (selectedIndex >= 0) {
+    activeManualSpawnIndex = selectedIndex;
+    isDraggingManualSpawnAngle = true;
+    redraw();
+    return false;
+  }
+
+  const bounds = sourceBounds();
+  if (
+    x < bounds.xMin ||
+    x > bounds.xMax ||
+    y < bounds.yMin ||
+    y > bounds.yMax ||
+    !inBounds(x, y) ||
+    inVoid(x, y) ||
+    !manualSpawnAllowed({ x, y })
+  ) {
+    return false;
+  }
+
+  const launchAngle = flowAngleAt(x, y, "spine");
+  appState.manualSpawnPoints.push({ x, y, launchAngle });
+  activeManualSpawnIndex = appState.manualSpawnPoints.length - 1;
+  isDraggingManualSpawnAngle = true;
+  regenerateModel();
+  return false;
+}
+
+function mouseDragged(event) {
+  if (!isPlacedSpawnMotif() || !isDraggingManualSpawnAngle || activeManualSpawnIndex < 0) {
+    return;
+  }
+
+  const point = pointFromCanvasEvent(event);
+  if (!point) {
+    return;
+  }
+
+  if (updateManualSpawnLaunchAngle(activeManualSpawnIndex, point.x, point.y)) {
+    redraw();
+  }
+  return false;
+}
+
+function mouseReleased(event) {
+  if (!isPlacedSpawnMotif() || !isDraggingManualSpawnAngle || activeManualSpawnIndex < 0) {
+    return;
+  }
+
+  const point = pointFromCanvasEvent(event);
+  if (point) {
+    updateManualSpawnLaunchAngle(activeManualSpawnIndex, point.x, point.y);
+  }
+
+  isDraggingManualSpawnAngle = false;
+  regenerateModel();
+  return false;
+}
+
+function doubleClicked(event) {
+  if (!isPlacedSpawnMotif()) {
+    return;
+  }
+
+  const point = pointFromCanvasEvent(event);
+  if (!point) {
+    return;
+  }
+
+  const removeIndex = findManualSpawnIndex(point.x, point.y);
+  if (removeIndex < 0) {
+    return;
+  }
+
+  appState.manualSpawnPoints.splice(removeIndex, 1);
+  activeManualSpawnIndex = -1;
+  isDraggingManualSpawnAngle = false;
+  regenerateModel();
+  return false;
 }
 
 function downloadPNG() {
@@ -2561,7 +3087,7 @@ function downloadSVG() {
     decay: params.decay,
     invertPreview: appState.invertPreview,
     model,
-    voidMask: params.voidOn ? stageVoid() : null,
+    voidMask: params.voidOn && appState.exportVoid ? stageVoid() : null,
     reflectedChains,
     shouldSuppressUnresolvedCurl,
     helpers: {

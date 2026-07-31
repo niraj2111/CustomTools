@@ -6,6 +6,8 @@
       state,
       container,
       onPatternChange,
+      onMotifPresetChange = onPatternChange,
+      onClearPlacedSpawns,
       onCanvasChange,
       onViewChange,
       onSeedChange,
@@ -50,7 +52,7 @@
         ),
         label: "Motif",
       })
-      .on("change", onPatternChange);
+      .on("change", (event) => onMotifPresetChange(event.value));
     structureFolder
       .addInput(state.params, "largeSpines", { min: 1, max: 16, step: 1, label: "Large" })
       .on("change", onPatternChange);
@@ -75,6 +77,9 @@
     structureFolder
       .addInput(state.params, "clearance", { min: 6, max: 26, step: 1, label: "Clearance" })
       .on("change", onPatternChange);
+    if (onClearPlacedSpawns) {
+      structureFolder.addButton({ title: "Clear Placed Spawns" }).on("click", onClearPlacedSpawns);
+    }
 
     const spiralFolder = pane.addFolder({ title: "Spiral" });
     spiralFolder
@@ -94,6 +99,14 @@
         max: 1,
         step: 0.01,
         label: "Leaf Curve",
+      })
+      .on("change", onPatternChange);
+    ornamentFolder
+      .addInput(state.params, "spaceMotifProb", {
+        min: 0,
+        max: 1,
+        step: 0.02,
+        label: "Space Motif",
       })
       .on("change", onPatternChange);
     ornamentFolder.addInput(state.params, "mirror", { label: "Mirror" }).on("change", onPatternChange);
@@ -136,6 +149,7 @@
     exportFolder
       .addInput(state, "seed", { min: 1, max: 99999, step: 1, label: "Seed" })
       .on("change", onSeedChange);
+    exportFolder.addInput(state, "exportVoid", { label: "Export Void" });
     exportFolder.addButton({ title: "Reset Zoom" }).on("click", onResetZoom);
 
     return pane;
