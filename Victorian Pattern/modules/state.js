@@ -21,36 +21,74 @@
   const VOID_SHAPES = {
     oval: { label: "Oval" },
     rect: { label: "Rect" },
+    rectOvalIntersect: { label: "Rect ∩ Oval" },
   };
   const PRESERVED_PARAM_KEYS_ON_PRESET_CHANGE = ["mirror", "verticalSymmetry", "voidOn"];
 
   const DEFAULT_PARAMS = {
     largeSpines: 16,
     mediumSpines: 0,
-    smallSpines: 4,
+    smallSpines: 0,
     infillCurls: 3,
-    spacing: 32,
-    depth: 3,
+    spacing: 30,
+    depth: 4,
     falloff: 1.48,
-    clearance: 13,
-    decay: 0.55,
+    clearance: 15,
+    decay: 0.65,
     turns: 1,
     leafProb: 0.12,
     leafCurvature: 0.62,
-    spaceMotifProb: 0.24,
+    spaceMotifProb: 0.0,
     mirror: true,
-    verticalSymmetry: false,
+    verticalSymmetry: true,
     voidOn: true,
   };
   const MOTIF_PARAM_PRESETS = {
-    freeField: { ...DEFAULT_PARAMS },
-    bottomBaseline: { ...DEFAULT_PARAMS },
-    centerAxis: { ...DEFAULT_PARAMS },
-    twinRails: { ...DEFAULT_PARAMS },
-    medallion: { ...DEFAULT_PARAMS },
-    borderFrame: { ...DEFAULT_PARAMS },
-    voidContour: { ...DEFAULT_PARAMS },
-    placedSpawns: { ...DEFAULT_PARAMS },
+    freeField: {
+      ...DEFAULT_PARAMS,
+      voidOn: true,
+    },
+    bottomBaseline: {
+      ...DEFAULT_PARAMS,
+      voidOn: false,
+    },
+    centerAxis: {
+      ...DEFAULT_PARAMS,
+      voidOn: false,
+    },
+    twinRails: {
+      ...DEFAULT_PARAMS,
+      mirror: false,
+      voidOn: false,
+    },
+    medallion: {
+      ...DEFAULT_PARAMS,
+      voidOn: false,
+    },
+    borderFrame: {
+      ...DEFAULT_PARAMS,
+      voidOn: false,
+    },
+    voidContour: {
+      ...DEFAULT_PARAMS,
+      largeSpines: 5,
+      mediumSpines: 4,
+      smallSpines: 4,
+      infillCurls: 1,
+      spacing: 46,
+      depth: 2,
+      falloff: 1.5,
+      clearance: 16,
+      decay: 0.52,
+      leafProb: 0.08,
+      leafCurvature: 0.6,
+      voidOn: true,
+    },
+    placedSpawns: {
+      ...DEFAULT_PARAMS,
+      verticalSymmetry: true,
+      voidOn: false,
+    },
   };
 
   function resolveMotifPresetKey(motifPreset) {
@@ -113,6 +151,11 @@
         yPct: 50,
         wPct: 25.333,
         hPct: 25.556,
+        rectWPct: 25.333,
+        rectHPct: 25.556,
+        ovalWPct: 25.333,
+        ovalHPct: 25.556,
+        invertRectOval: false,
       },
     };
   }
@@ -136,6 +179,11 @@
       yPct: 50,
       wPct: 25.333,
       hPct: 25.556,
+      rectWPct: 25.333,
+      rectHPct: 25.556,
+      ovalWPct: 25.333,
+      ovalHPct: 25.556,
+      invertRectOval: false,
     };
     if (state.voidMask) {
       Object.assign(state.voidMask, defaultVoidMask);

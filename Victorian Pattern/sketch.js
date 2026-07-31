@@ -37,6 +37,17 @@ const normalizeVec = (x, y) => {
   const mag = Math.hypot(x, y) || 1;
   return [x / mag, y / mag];
 };
+const REVEAL_SPEED_PX_PER_SEC = 3200;
+const REVEAL_PARALLEL_CHAIN_BATCH = 8;
+
+let revealState = {
+  playing: false,
+  startMs: 0,
+  elapsedMs: 0,
+  totalLength: 0,
+  segments: [],
+  rafId: 0,
+};
 
 // ---- exact arc primitives ----
 // An arc is {cx, cy, r, a0, da}. Point(t) at angle a0 + da*t, t in [0,1].
@@ -400,10 +411,15 @@ function stageVoid() {
   const height = stageHeight();
   const w = (width * mask.wPct) / 100;
   const h = (height * mask.hPct) / 100;
+  const rectW = (width * (mask.rectWPct ?? mask.wPct)) / 100;
+  const rectH = (height * (mask.rectHPct ?? mask.hPct)) / 100;
+  const ovalW = (width * (mask.ovalWPct ?? mask.wPct)) / 100;
+  const ovalH = (height * (mask.ovalHPct ?? mask.hPct)) / 100;
   const cx = (width * mask.xPct) / 100;
   const cy = (height * mask.yPct) / 100;
   return {
     shape: mask.shape,
+    invertRectOval: Boolean(mask.invertRectOval),
     cx,
     cy,
     rx: w * 0.5,
@@ -412,7 +428,141 @@ function stageVoid() {
     y: cy - h * 0.5,
     width: w,
     height: h,
+    rectX: cx - rectW * 0.5,
+    rectY: cy - rectH * 0.5,
+    rectWidth: rectW,
+    rectHeight: rectH,
+    rectCx: cx,
+    rectCy: cy,
+    rectRx: rectW * 0.5,
+    rectRy: rectH * 0.5,
+    ovalCx: cx,
+    ovalCy: cy,
+    ovalRx: ovalW * 0.5,
+    ovalRy: ovalH * 0.5,
   };
+}
+
+function pointInsideRectShape(voidShape, x, y) {
+  return (
+    x > voidShape.rectX &&
+    x < voidShape.rectX + voidShape.rectWidth &&
+    y > voidShape.rectY &&
+    y < voidShape.rectY + voidShape.rectHeight
+  );
+}
+
+function pointInsideOvalShape(voidShape, x, y) {
+  const dx = (x - voidShape.ovalCx) / Math.max(voidShape.ovalRx, 1e-6);
+  const dy = (y - voidShape.ovalCy) / Math.max(voidShape.ovalRy, 1e-6);
+  return dx * dx + dy * dy < 1;
+}
+
+function pointInsideRectOvalVoid(voidShape, x, y) {
+  const insideRect = pointInsideRectShape(voidShape, x, y);
+  const insideOval = pointInsideOvalShape(voidShape, x, y);
+  return voidShape.invertRectOval ? insideRect && !insideOval : insideRect && insideOval;
+}
+
+function buildRectBoundarySamples(voidShape, sampleCount = 240) {
+  const points = [];
+  for (let i = 0; i < sampleCount; i++) {
+    const t = i / sampleCount;
+    let x = voidShape.rectX;
+    let y = voidShape.rectY;
+    let tx = 1;
+    let ty = 0;
+    let nx = 0;
+    let ny = -1;
+
+    if (t < 0.25) {
+      x = lerp(voidShape.rectX, voidShape.rectX + voidShape.rectWidth, t / 0.25);
+    } else if (t < 0.5) {
+      x = voidShape.rectX + voidShape.rectWidth;
+      y = lerp(voidShape.rectY, voidShape.rectY + voidShape.rectHeight, (t - 0.25) / 0.25);
+      tx = 0;
+      ty = 1;
+      nx = 1;
+      ny = 0;
+    } else if (t < 0.75) {
+      x = lerp(
+        voidShape.rectX + voidShape.rectWidth,
+        voidShape.rectX,
+        (t - 0.5) / 0.25
+      );
+      y = voidShape.rectY + voidShape.rectHeight;
+      tx = -1;
+      ty = 0;
+      nx = 0;
+      ny = 1;
+    } else {
+      y = lerp(
+        voidShape.rectY + voidShape.rectHeight,
+        voidShape.rectY,
+        (t - 0.75) / 0.25
+      );
+      tx = 0;
+      ty = -1;
+      nx = -1;
+      ny = 0;
+    }
+
+    points.push({
+      x,
+      y,
+      tangentAngle: Math.atan2(ty, tx),
+      outwardNormal: [nx, ny],
+    });
+  }
+  return points;
+}
+
+function buildOvalBoundarySamples(voidShape, sampleCount = 240, invertNormal = false) {
+  const points = [];
+  for (let i = 0; i < sampleCount; i++) {
+    const angle = (TAU * i) / sampleCount;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+    const nx = invertNormal ? -cosA : cosA;
+    const ny = invertNormal ? -sinA : sinA;
+    points.push({
+      x: voidShape.ovalCx + cosA * voidShape.ovalRx,
+      y: voidShape.ovalCy + sinA * voidShape.ovalRy,
+      tangentAngle: angle + HALF_PI,
+      outwardNormal: [nx, ny],
+    });
+  }
+  return points;
+}
+
+function buildRectOvalIntersectionBoundary(voidShape, sampleCount = 240) {
+  const points = [];
+  const addPoint = (point) => {
+    if (points.some((existing) => Math.hypot(existing.x - point.x, existing.y - point.y) < 0.75)) {
+      return;
+    }
+    points.push(point);
+  };
+
+  for (const sample of buildRectBoundarySamples(voidShape, sampleCount)) {
+    if (pointInsideOvalShape(voidShape, sample.x, sample.y)) {
+      addPoint(sample);
+    }
+  }
+
+  for (const sample of buildOvalBoundarySamples(voidShape, sampleCount)) {
+    if (pointInsideRectShape(voidShape, sample.x, sample.y)) {
+      addPoint(sample);
+    }
+  }
+
+  return points
+    .map((point) => ({
+      ...point,
+      sortAngle: Math.atan2(point.y - voidShape.cy, point.x - voidShape.cx),
+      centerAngle: Math.atan2(voidShape.cy - point.y, voidShape.cx - point.x),
+    }))
+    .sort((a, b) => a.sortAngle - b.sortAngle);
 }
 
 function inVoid(x, y) {
@@ -420,6 +570,9 @@ function inVoid(x, y) {
     return false;
   }
   const currentVoid = stageVoid();
+  if (currentVoid.shape === "rectOvalIntersect") {
+    return pointInsideRectOvalVoid(currentVoid, x, y);
+  }
   if (currentVoid.shape === "rect") {
     return (
       x > currentVoid.x &&
@@ -458,14 +611,100 @@ function drawVoidMask() {
     return;
   }
   const currentVoid = stageVoid();
+  const ctx = drawingContext;
+  const paper = appState.invertPreview ? "#f6f4ee" : "#0e0e10";
+  ctx.save();
+  ctx.fillStyle = paper;
+  if (currentVoid.shape === "rectOvalIntersect") {
+    if (currentVoid.invertRectOval) {
+      ctx.beginPath();
+      ctx.rect(
+        currentVoid.rectX,
+        currentVoid.rectY,
+        currentVoid.rectWidth,
+        currentVoid.rectHeight
+      );
+      ctx.ellipse(
+        currentVoid.ovalCx,
+        currentVoid.ovalCy,
+        currentVoid.ovalRx,
+        currentVoid.ovalRy,
+        0,
+        0,
+        TAU
+      );
+      ctx.fill("evenodd");
+    } else {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(
+        currentVoid.rectX,
+        currentVoid.rectY,
+        currentVoid.rectWidth,
+        currentVoid.rectHeight
+      );
+      ctx.clip();
+      ctx.beginPath();
+      ctx.ellipse(
+        currentVoid.ovalCx,
+        currentVoid.ovalCy,
+        currentVoid.ovalRx,
+        currentVoid.ovalRy,
+        0,
+        0,
+        TAU
+      );
+      ctx.fill();
+      ctx.restore();
+    }
+  } else if (currentVoid.shape === "rect") {
+    ctx.fillRect(currentVoid.x, currentVoid.y, currentVoid.width, currentVoid.height);
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(currentVoid.cx, currentVoid.cy, currentVoid.rx, currentVoid.ry, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawVoidOutline() {
+  if (!params.voidOn || !appState.debugParts) {
+    return;
+  }
+
+  const currentVoid = stageVoid();
   push();
-  noStroke();
-  fill(appState.invertPreview ? "#f6f4ee" : "#0e0e10");
-  if (currentVoid.shape === "rect") {
+  noFill();
+  stroke(appState.invertPreview ? "#161614" : "#e9e7df");
+  strokeWeight(Math.max(1, stageScale()));
+  strokeCap(ROUND);
+  strokeJoin(ROUND);
+
+  if (currentVoid.shape === "rectOvalIntersect") {
+    if (currentVoid.invertRectOval) {
+      rect(currentVoid.rectX, currentVoid.rectY, currentVoid.rectWidth, currentVoid.rectHeight);
+      ellipse(
+        currentVoid.ovalCx,
+        currentVoid.ovalCy,
+        currentVoid.ovalRx * 2,
+        currentVoid.ovalRy * 2
+      );
+    } else {
+      const boundary = buildRectOvalIntersectionBoundary(currentVoid, 220);
+      if (boundary.length >= 2) {
+        beginShape();
+        for (const point of boundary) {
+          vertex(point.x, point.y);
+        }
+        endShape(CLOSE);
+      }
+    }
+  } else if (currentVoid.shape === "rect") {
     rect(currentVoid.x, currentVoid.y, currentVoid.width, currentVoid.height);
   } else {
     ellipse(currentVoid.cx, currentVoid.cy, currentVoid.rx * 2, currentVoid.ry * 2);
   }
+
   pop();
 }
 
@@ -513,6 +752,8 @@ function acceptChain(chain, samples, grid) {
       grid.insert(width - p.x, height - p.y);
     }
   }
+  chain.chainId = chain.chainId ?? `chain-${model.nextChainId++}`;
+  chain.createdIndex = chain.createdIndex ?? model.chains.length;
   model.chains.push(chain);
 }
 
@@ -956,7 +1197,8 @@ function tryRequiredOffshoot(chain, scale, grid, queue) {
       chain.depth + 1,
       childScale,
       grid,
-      terminalBias
+      terminalBias,
+      chain.chainId
     );
     if (child && child.kind === "stroke") {
       queue.push({ chain: child, scale: childScale });
@@ -1098,13 +1340,14 @@ function tryAddTangentialSpawnBridge(grid, spawnPoint) {
     return null;
   }
 
-  const bridge = {
-    kind: "stroke",
-    arcs: [bridgeArc],
-    depth: 0,
-    profile: "bridge",
-    terminalLeaf: null,
-    wBase: STROKE_WEIGHT * 0.92,
+    const bridge = {
+      kind: "stroke",
+      arcs: [bridgeArc],
+      depth: 0,
+      parentId: null,
+      profile: "bridge",
+      terminalLeaf: null,
+      wBase: STROKE_WEIGHT * 0.92,
   };
   acceptChain(bridge, samples, grid);
   return bridge;
@@ -1142,6 +1385,7 @@ function runSecondPassSpines(grid, queue, bounds, baseTier) {
     const secondPassScale = (source.rootScale ?? baseTier.rootScale ?? 1) * 0.68;
     const secondPass = buildSpine(grid, 0, 1, {
       ...baseTier,
+      parentId: source.chainId,
       rootScale: secondPassScale,
       bodyChance: 0.46,
       weightScale: 0.82,
@@ -1326,6 +1570,25 @@ function createLineGuidePoints(x0, y0, x1, y1, count, options = {}) {
   return points;
 }
 
+function makeGuidePoint(x, y, launchAngle, options = {}) {
+  const point = {
+    x,
+    y,
+    launchAngle,
+    lockToGuide: options.lockToGuide ?? true,
+  };
+  if (options.preferredSign !== undefined) {
+    point.preferredSign = options.preferredSign;
+  }
+  return point;
+}
+
+function blendAngles(a, b, t) {
+  const x = lerp(Math.cos(a), Math.cos(b), t);
+  const y = lerp(Math.sin(a), Math.sin(b), t);
+  return Math.atan2(y, x);
+}
+
 function createEllipseGuidePoints(cx, cy, rx, ry, count, options = {}) {
   if (count <= 0) {
     return [];
@@ -1352,6 +1615,178 @@ function createEllipseGuidePoints(cx, cy, rx, ry, count, options = {}) {
   return points;
 }
 
+function createEllipseGuidePoint(cx, cy, rx, ry, angle, options = {}) {
+  const x = cx + Math.cos(angle) * rx;
+  const y = cy + Math.sin(angle) * ry;
+  const tangentAngle = Math.atan2(Math.cos(angle) * ry, -Math.sin(angle) * rx);
+  const inwardAngle = Math.atan2(cy - y, cx - x);
+  let launchAngle = options.mode === "tangent" ? tangentAngle : inwardAngle;
+
+  if (options.mode === "blend") {
+    launchAngle = blendAngles(tangentAngle, inwardAngle, options.centerBias ?? 0.5);
+  }
+  if (options.upwardBias) {
+    launchAngle = blendAngles(launchAngle, -PI / 2, options.upwardBias);
+  }
+  if (options.downwardBias) {
+    launchAngle = blendAngles(launchAngle, PI / 2, options.downwardBias);
+  }
+  launchAngle += options.angleOffset ?? 0;
+
+  const nx = Math.cos(angle) / Math.max(rx, 1e-6);
+  const ny = Math.sin(angle) / Math.max(ry, 1e-6);
+  const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
+  const preferredSign = leftNormal[0] * nx + leftNormal[1] * ny >= 0 ? 1 : -1;
+  return makeGuidePoint(x, y, launchAngle, { preferredSign });
+}
+
+function createBaselineFanGuidePoints(x0, x1, y, count, options = {}) {
+  if (count <= 0) {
+    return [];
+  }
+
+  const fractions = options.fractions ?? Array.from({ length: count }, (_, i) => (i + 0.5) / count);
+  const maxFan = options.maxFan ?? 0.42;
+  const direction = options.direction ?? -PI / 2;
+
+  return fractions.slice(0, count).map((fraction) => {
+    const edgeBias = 0.4 + Math.abs(fraction - 0.5) * 1.2;
+    const fan = lerp(maxFan, -maxFan, fraction) * edgeBias;
+    const yOffset = options.yOffsetAtFraction?.(fraction) ?? 0;
+    return makeGuidePoint(lerp(x0, x1, fraction), y + yOffset, direction + fan);
+  });
+}
+
+function createRailGuidePoints(x, y0, y1, count, options = {}) {
+  if (count <= 0) {
+    return [];
+  }
+
+  const fractions = options.fractions ?? Array.from({ length: count }, (_, i) => (i + 0.5) / count);
+  const angleTop = options.angleTop ?? -0.3;
+  const angleBottom = options.angleBottom ?? -1.05;
+  const mirrorX = options.mirrorX ?? false;
+
+  return fractions.slice(0, count).map((fraction) => {
+    const baseAngle = lerp(angleTop, angleBottom, fraction);
+    return makeGuidePoint(x, lerp(y0, y1, fraction), mirrorX ? mirrorAngleX(baseAngle) : baseAngle);
+  });
+}
+
+function voidBoundaryPointAt(progress) {
+  if (!params.voidOn) {
+    return null;
+  }
+
+  const currentVoid = stageVoid();
+  const t = ((progress % 1) + 1) % 1;
+
+  if (currentVoid.shape === "rectOvalIntersect") {
+    if (currentVoid.invertRectOval) {
+      const rectBoundary = buildRectBoundarySamples(currentVoid, 160);
+      const ovalBoundary = buildOvalBoundarySamples(currentVoid, 160, true);
+      const boundary = [...rectBoundary, ...ovalBoundary];
+      if (!boundary.length) {
+        return null;
+      }
+      return boundary[Math.floor(t * boundary.length) % boundary.length];
+    }
+    const boundary = buildRectOvalIntersectionBoundary(currentVoid, 240);
+    if (!boundary.length) {
+      return null;
+    }
+    return boundary[Math.floor(t * boundary.length) % boundary.length];
+  }
+
+  if (currentVoid.shape === "rect") {
+    const perimeter = currentVoid.width * 2 + currentVoid.height * 2;
+    let dist = perimeter * t;
+    let x = currentVoid.x;
+    let y = currentVoid.y;
+    let tx = 1;
+    let ty = 0;
+    let nx = 0;
+    let ny = -1;
+
+    if (dist < currentVoid.width) {
+      x += dist;
+    } else if ((dist -= currentVoid.width) < currentVoid.height) {
+      x += currentVoid.width;
+      y += dist;
+      tx = 0;
+      ty = 1;
+      nx = 1;
+      ny = 0;
+    } else if ((dist -= currentVoid.height) < currentVoid.width) {
+      x += currentVoid.width - dist;
+      y += currentVoid.height;
+      tx = -1;
+      ty = 0;
+      nx = 0;
+      ny = 1;
+    } else {
+      dist -= currentVoid.width;
+      y += currentVoid.height - dist;
+      tx = 0;
+      ty = -1;
+      nx = -1;
+      ny = 0;
+    }
+
+    return {
+      x,
+      y,
+      tangentAngle: Math.atan2(ty, tx),
+      outwardNormal: [nx, ny],
+      centerAngle: Math.atan2(currentVoid.cy - y, currentVoid.cx - x),
+    };
+  }
+
+  const angle = TAU * t;
+  const x = currentVoid.cx + Math.cos(angle) * currentVoid.rx;
+  const y = currentVoid.cy + Math.sin(angle) * currentVoid.ry;
+  const tx = -Math.sin(angle) * currentVoid.rx;
+  const ty = Math.cos(angle) * currentVoid.ry;
+  const nx = Math.cos(angle) / Math.max(currentVoid.rx, 1e-6);
+  const ny = Math.sin(angle) / Math.max(currentVoid.ry, 1e-6);
+  return {
+    x,
+    y,
+    tangentAngle: Math.atan2(ty, tx),
+    outwardNormal: [nx, ny],
+    centerAngle: Math.atan2(currentVoid.cy - y, currentVoid.cx - x),
+  };
+}
+
+function createVoidFrameGuidePoint(progress, role = "spine", options = {}) {
+  const boundary = voidBoundaryPointAt(progress);
+  if (!boundary) {
+    return null;
+  }
+
+  const { x, y, tangentAngle, outwardNormal, centerAngle } = boundary;
+  const bounds = options.bounds ?? sourceBounds();
+  if (x < bounds.xMin || x > bounds.xMax || y < bounds.yMin || y > bounds.yMax) {
+    return null;
+  }
+
+  let launchAngle = chooseBoundaryTangentDirection(x, y, tangentAngle, role);
+  if (options.centerBias) {
+    launchAngle = blendAngles(launchAngle, centerAngle, options.centerBias);
+  }
+  if (options.upwardBias) {
+    launchAngle = blendAngles(launchAngle, -PI / 2, options.upwardBias);
+  }
+  if (options.downwardBias) {
+    launchAngle = blendAngles(launchAngle, PI / 2, options.downwardBias);
+  }
+  launchAngle += options.angleOffset ?? 0;
+
+  const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
+  const preferredSign = leftNormal[0] * outwardNormal[0] + leftNormal[1] * outwardNormal[1] >= 0 ? 1 : -1;
+  return makeGuidePoint(x, y, launchAngle, { preferredSign });
+}
+
 function chooseBoundaryTangentDirection(x, y, tangentAngle, role = "spine") {
   const flowAngle = flowAngleAt(x, y, role);
   const opposite = tangentAngle + PI;
@@ -1368,6 +1803,28 @@ function createVoidBoundaryGuidePoints(count, role = "spine", options = {}) {
   const currentVoid = stageVoid();
   const bounds = options.bounds ?? sourceBounds();
   const points = [];
+
+  if (currentVoid.shape === "rectOvalIntersect") {
+    const boundary = (currentVoid.invertRectOval
+      ? [...buildRectBoundarySamples(currentVoid, 160), ...buildOvalBoundarySamples(currentVoid, 160, true)]
+      : buildRectOvalIntersectionBoundary(currentVoid, 240)
+    ).filter(({ x, y }) => x >= bounds.xMin && x <= bounds.xMax && y >= bounds.yMin && y <= bounds.yMax);
+    if (!boundary.length) {
+      return [];
+    }
+
+    for (let i = 0; i < count; i++) {
+      const index = Math.floor(((i + 0.5) / count) * boundary.length) % boundary.length;
+      const sample = boundary[index];
+      const { x, y, tangentAngle, outwardNormal } = sample;
+      const launchAngle = chooseBoundaryTangentDirection(x, y, tangentAngle, role);
+      const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
+      const preferredSign =
+        leftNormal[0] * outwardNormal[0] + leftNormal[1] * outwardNormal[1] >= 0 ? 1 : -1;
+      points.push({ x, y, launchAngle, preferredSign, lockToGuide: true });
+    }
+    return points;
+  }
 
   if (currentVoid.shape === "rect") {
     const perimeter = currentVoid.width * 2 + currentVoid.height * 2;
@@ -1444,6 +1901,73 @@ function createVoidBoundaryGuidePoints(count, role = "spine", options = {}) {
   return points;
 }
 
+function scoreGuidePointOpenSpace(grid, point, role = "spine") {
+  const maxDistance =
+    role === "floating" ? Math.max(su(120), params.spacing * 3.2) : Math.max(su(180), params.spacing * 4.8);
+  const step = Math.max(10, params.clearance * 0.9);
+  const forward = probeClearanceAlongRay(grid, point.x, point.y, point.launchAngle, maxDistance, step, step);
+  const sideA = probeClearanceAlongRay(
+    grid,
+    point.x,
+    point.y,
+    point.launchAngle + 0.38,
+    maxDistance * 0.7,
+    step,
+    step
+  );
+  const sideB = probeClearanceAlongRay(
+    grid,
+    point.x,
+    point.y,
+    point.launchAngle - 0.38,
+    maxDistance * 0.7,
+    step,
+    step
+  );
+  const upwardBias = Math.max(0, -Math.sin(point.launchAngle)) * maxDistance * 0.08;
+  return forward * 1.35 + Math.min(sideA, sideB) * 0.65 + upwardBias;
+}
+
+function selectVoidContourGuidePoints(grid, count, role = "spine", options = {}) {
+  if (count <= 0) {
+    return [];
+  }
+
+  const candidateCount = Math.max(count * 6, 24);
+  const candidates = createVoidBoundaryGuidePoints(candidateCount, role, options)
+    .map((point) => ({
+      ...point,
+      score: scoreGuidePointOpenSpace(grid, point, role),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const selected = [];
+  const minGap = role === "floating" ? su(28) : su(42);
+
+  for (const candidate of candidates) {
+    if (selected.length >= count) {
+      break;
+    }
+    if (selected.some((point) => Math.hypot(point.x - candidate.x, point.y - candidate.y) < minGap)) {
+      continue;
+    }
+    selected.push(candidate);
+  }
+
+  if (selected.length < count) {
+    for (const candidate of candidates) {
+      if (selected.length >= count) {
+        break;
+      }
+      if (!selected.includes(candidate)) {
+        selected.push(candidate);
+      }
+    }
+  }
+
+  return selected.slice(0, count).map(({ score, ...point }) => point);
+}
+
 function queuePointsAsSpines(grid, points, tier, queue, placement = {}) {
   for (const point of points) {
     pushIfChain(
@@ -1498,36 +2022,67 @@ function seedFreeFieldMotif(grid, queue, tiers, bounds, aspect) {
     yMax: tiers.small.yMax,
   };
 
-  buildDistributedSpines(grid, params.largeSpines, tiers.large, queue, {
-    bounds: largeBounds,
-    rowBias: aspect < 0.85 ? 1.8 : 1.1,
-    spreadX: su(18),
-    spreadY: su(26),
+  const heroPoints = [
+    makeGuidePoint(
+      lerp(bounds.xMin, bounds.xMax, 0.18),
+      lerp(bounds.yMin, bounds.yMax, 0.82),
+      -0.98
+    ),
+    makeGuidePoint(
+      lerp(bounds.xMin, bounds.xMax, 0.34),
+      lerp(bounds.yMin, bounds.yMax, 0.58),
+      -1.14
+    ),
+  ];
+  queuePointsAsSpines(grid, heroPoints.slice(0, Math.min(params.largeSpines, heroPoints.length)), tiers.large, queue, {
+    spreadX: su(10),
+    spreadY: su(12),
+    bounds,
   });
+
+  const remainingLarge = Math.max(0, params.largeSpines - heroPoints.length);
+  if (remainingLarge > 0) {
+    buildDistributedSpines(grid, remainingLarge, tiers.large, queue, {
+      bounds: {
+        ...largeBounds,
+        xMin: lerp(bounds.xMin, bounds.xMax, 0.12),
+        xMax: lerp(bounds.xMin, bounds.xMax, 0.68),
+      },
+      rowBias: aspect < 0.85 ? 1.9 : 1.2,
+      spreadX: su(14),
+      spreadY: su(18),
+    });
+  }
+
   buildDistributedSpines(grid, params.mediumSpines, tiers.medium, queue, {
     bounds: mediumBounds,
-    rowBias: aspect < 0.85 ? 2.2 : 1.3,
-    spreadX: su(20),
-    spreadY: su(28),
+    rowBias: aspect < 0.85 ? 2.1 : 1.35,
+    spreadX: su(18),
+    spreadY: su(24),
   });
   buildDistributedFloating(grid, params.smallSpines, tiers.small, queue, {
     bounds: floatingBounds,
-    rowBias: aspect < 0.85 ? 2.4 : 1.4,
+    rowBias: aspect < 0.85 ? 2.3 : 1.45,
     spreadX: su(16),
-    spreadY: su(20),
+    spreadY: su(18),
   });
 }
 
 function seedBottomBaselineMotif(grid, queue, tiers, bounds) {
   const baselineY = bounds.yMax - su(18);
-  const largePoints = createLineGuidePoints(bounds.xMin, baselineY, bounds.xMax, baselineY, params.largeSpines, {
-    spread: 0.24,
+  const largePoints = createBaselineFanGuidePoints(bounds.xMin, bounds.xMax, baselineY, params.largeSpines, {
+    fractions: [0.16, 0.34, 0.52, 0.72, 0.86, 0.94],
+    maxFan: 0.46,
+    yOffsetAtFraction: (fraction) => -Math.sin(fraction * PI) * su(6),
   });
-  const mediumPoints = createLineGuidePoints(bounds.xMin, baselineY - su(12), bounds.xMax, baselineY - su(12), params.mediumSpines, {
-    spread: 0.36,
+  const mediumPoints = createBaselineFanGuidePoints(bounds.xMin, bounds.xMax, baselineY - su(12), params.mediumSpines, {
+    fractions: [0.12, 0.28, 0.46, 0.64, 0.82, 0.94],
+    maxFan: 0.34,
+    yOffsetAtFraction: (fraction) => -Math.sin(fraction * PI) * su(4),
   });
-  const floatingPoints = createLineGuidePoints(bounds.xMin, baselineY - su(22), bounds.xMax, baselineY - su(22), params.smallSpines, {
-    spread: 0.44,
+  const floatingPoints = createBaselineFanGuidePoints(bounds.xMin, bounds.xMax, baselineY - su(24), params.smallSpines, {
+    fractions: [0.18, 0.42, 0.66, 0.88],
+    maxFan: 0.26,
   });
   queuePointsAsSpines(grid, largePoints, tiers.large, queue, { spreadX: su(12), spreadY: su(10), bounds });
   queuePointsAsSpines(grid, mediumPoints, tiers.medium, queue, { spreadX: su(14), spreadY: su(12), bounds });
@@ -1536,22 +2091,26 @@ function seedBottomBaselineMotif(grid, queue, tiers, bounds) {
 
 function seedCenterAxisMotif(grid, queue, tiers, bounds) {
   const axisX = (bounds.xMin + bounds.xMax) * 0.5;
-  const y0 = lerp(bounds.yMin, bounds.yMax, 0.18);
-  const y1 = lerp(bounds.yMin, bounds.yMax, 0.92);
-  const makeAxisPoints = (count, spreadBase) =>
-    Array.from({ length: count }, (_, i) => {
-      const t = count === 1 ? 0.5 : i / Math.max(1, count - 1);
-      const side = i % 2 === 0 ? -1 : 1;
-      return {
-        x: axisX + side * su(spreadBase),
-        y: lerp(y0, y1, t),
-        launchAngle: -PI / 2 + lerp(-0.12, 0.12, t),
-        lockToGuide: true,
-      };
-    });
-  queuePointsAsSpines(grid, makeAxisPoints(params.largeSpines, 10), tiers.large, queue, { spreadX: su(10), spreadY: su(12), bounds });
-  queuePointsAsSpines(grid, makeAxisPoints(params.mediumSpines, 18), tiers.medium, queue, { spreadX: su(12), spreadY: su(12), bounds });
-  queuePointsAsFloating(grid, makeAxisPoints(params.smallSpines, 24), tiers.small, queue, { spreadX: su(12), spreadY: su(12), bounds });
+  const largePoints = [
+    makeGuidePoint(axisX - su(8), lerp(bounds.yMin, bounds.yMax, 0.82), -1.08),
+    makeGuidePoint(axisX + su(10), lerp(bounds.yMin, bounds.yMax, 0.56), -1.42),
+    makeGuidePoint(axisX - su(14), lerp(bounds.yMin, bounds.yMax, 0.32), -1.02),
+  ].slice(0, params.largeSpines);
+  const mediumPoints = [
+    makeGuidePoint(axisX - su(18), lerp(bounds.yMin, bounds.yMax, 0.7), -0.92),
+    makeGuidePoint(axisX + su(18), lerp(bounds.yMin, bounds.yMax, 0.64), -1.2),
+    makeGuidePoint(axisX - su(24), lerp(bounds.yMin, bounds.yMax, 0.46), -1.02),
+    makeGuidePoint(axisX + su(26), lerp(bounds.yMin, bounds.yMax, 0.38), -1.24),
+  ].slice(0, params.mediumSpines);
+  const floatingPoints = [
+    makeGuidePoint(axisX - su(26), lerp(bounds.yMin, bounds.yMax, 0.76), -0.86),
+    makeGuidePoint(axisX + su(26), lerp(bounds.yMin, bounds.yMax, 0.58), -1.18),
+    makeGuidePoint(axisX - su(32), lerp(bounds.yMin, bounds.yMax, 0.44), -0.94),
+    makeGuidePoint(axisX + su(32), lerp(bounds.yMin, bounds.yMax, 0.3), -1.12),
+  ].slice(0, params.smallSpines);
+  queuePointsAsSpines(grid, largePoints, tiers.large, queue, { spreadX: su(8), spreadY: su(10), bounds });
+  queuePointsAsSpines(grid, mediumPoints, tiers.medium, queue, { spreadX: su(10), spreadY: su(10), bounds });
+  queuePointsAsFloating(grid, floatingPoints, tiers.small, queue, { spreadX: su(10), spreadY: su(10), bounds });
 }
 
 function seedTwinRailsMotif(grid, queue, tiers, bounds) {
@@ -1563,18 +2122,39 @@ function seedTwinRailsMotif(grid, queue, tiers, bounds) {
   const [lLarge, rLarge] = splitCounts(params.largeSpines);
   const [lMedium, rMedium] = splitCounts(params.mediumSpines);
   const [lSmall, rSmall] = splitCounts(params.smallSpines);
-  const leftLarge = createLineGuidePoints(leftX, y0, leftX, y1, lLarge, { spread: 0.18 });
-  const rightLarge = createLineGuidePoints(rightX, y0, rightX, y1, rLarge, { spread: 0.18 });
-  leftLarge.forEach((p) => (p.launchAngle += 0.78));
-  rightLarge.forEach((p) => (p.launchAngle -= 0.78));
-  const leftMedium = createLineGuidePoints(leftX, y0, leftX, y1, lMedium, { spread: 0.28 });
-  const rightMedium = createLineGuidePoints(rightX, y0, rightX, y1, rMedium, { spread: 0.28 });
-  leftMedium.forEach((p) => (p.launchAngle += 0.62));
-  rightMedium.forEach((p) => (p.launchAngle -= 0.62));
-  const leftSmall = createLineGuidePoints(leftX, y0, leftX, y1, lSmall, { spread: 0.34 });
-  const rightSmall = createLineGuidePoints(rightX, y0, rightX, y1, rSmall, { spread: 0.34 });
-  leftSmall.forEach((p) => (p.launchAngle += 0.55));
-  rightSmall.forEach((p) => (p.launchAngle -= 0.55));
+  const leftLarge = createRailGuidePoints(leftX, y0, y1, lLarge, {
+    fractions: [0.24, 0.5, 0.76, 0.9],
+    angleTop: -0.28,
+    angleBottom: -1.08,
+  });
+  const rightLarge = createRailGuidePoints(rightX, y0, y1, rLarge, {
+    fractions: [0.18, 0.46, 0.7, 0.88],
+    angleTop: -0.28,
+    angleBottom: -1.08,
+    mirrorX: true,
+  });
+  const leftMedium = createRailGuidePoints(leftX, y0, y1, lMedium, {
+    fractions: [0.14, 0.34, 0.58, 0.82, 0.94],
+    angleTop: -0.16,
+    angleBottom: -0.94,
+  });
+  const rightMedium = createRailGuidePoints(rightX, y0, y1, rMedium, {
+    fractions: [0.22, 0.42, 0.64, 0.84, 0.96],
+    angleTop: -0.16,
+    angleBottom: -0.94,
+    mirrorX: true,
+  });
+  const leftSmall = createRailGuidePoints(leftX, y0, y1, lSmall, {
+    fractions: [0.2, 0.44, 0.68, 0.9],
+    angleTop: -0.06,
+    angleBottom: -0.86,
+  });
+  const rightSmall = createRailGuidePoints(rightX, y0, y1, rSmall, {
+    fractions: [0.26, 0.48, 0.72, 0.92],
+    angleTop: -0.06,
+    angleBottom: -0.86,
+    mirrorX: true,
+  });
   queuePointsAsSpines(grid, leftLarge.concat(rightLarge), tiers.large, queue, { spreadX: su(12), spreadY: su(14), bounds });
   queuePointsAsSpines(grid, leftMedium.concat(rightMedium), tiers.medium, queue, { spreadX: su(12), spreadY: su(14), bounds });
   queuePointsAsFloating(grid, leftSmall.concat(rightSmall), tiers.small, queue, { spreadX: su(10), spreadY: su(12), bounds });
@@ -1585,21 +2165,43 @@ function seedMedallionMotif(grid, queue, tiers, bounds) {
   const cy = (bounds.yMin + bounds.yMax) * 0.54;
   const width = bounds.xMax - bounds.xMin;
   const height = bounds.yMax - bounds.yMin;
-  const largePoints = createEllipseGuidePoints(cx, cy, width * 0.34, height * 0.24, params.largeSpines, {
-    startAngle: PI * 0.1,
-    endAngle: PI * 0.9,
-    inward: true,
-  });
-  const mediumPoints = createEllipseGuidePoints(cx, cy, width * 0.4, height * 0.3, params.mediumSpines, {
-    startAngle: PI * 0.02,
-    endAngle: PI * 0.98,
-    inward: true,
-  });
-  const floatingPoints = createEllipseGuidePoints(cx, cy, width * 0.46, height * 0.36, params.smallSpines, {
-    startAngle: -PI * 0.1,
-    endAngle: PI * 1.1,
-    inward: true,
-  });
+  const largePoints = [
+    createEllipseGuidePoint(cx, cy, width * 0.34, height * 0.24, PI * 0.62, {
+      mode: "blend",
+      centerBias: 0.42,
+      upwardBias: 0.22,
+      angleOffset: -0.08,
+    }),
+    createEllipseGuidePoint(cx, cy, width * 0.34, height * 0.24, PI * 0.82, {
+      mode: "blend",
+      centerBias: 0.58,
+      upwardBias: 0.08,
+      angleOffset: -0.1,
+    }),
+    createEllipseGuidePoint(cx, cy, width * 0.34, height * 0.24, PI * 0.46, {
+      mode: "blend",
+      centerBias: 0.36,
+      upwardBias: 0.3,
+      angleOffset: 0.06,
+    }),
+  ].slice(0, params.largeSpines);
+  const mediumAngles = [0.56, 0.7, 0.9, 1.02];
+  const mediumPoints = mediumAngles.slice(0, params.mediumSpines).map((multiplier) =>
+    createEllipseGuidePoint(cx, cy, width * 0.4, height * 0.3, PI * multiplier, {
+      mode: "blend",
+      centerBias: 0.52,
+      upwardBias: 0.12,
+      angleOffset: multiplier > 0.9 ? -0.12 : -0.04,
+    })
+  );
+  const floatingAngles = [0.52, 0.66, 0.84, 1.06];
+  const floatingPoints = floatingAngles.slice(0, params.smallSpines).map((multiplier) =>
+    createEllipseGuidePoint(cx, cy, width * 0.46, height * 0.36, PI * multiplier, {
+      mode: "blend",
+      centerBias: 0.38,
+      upwardBias: 0.1,
+    })
+  );
   queuePointsAsSpines(grid, largePoints, tiers.large, queue, { spreadX: su(10), spreadY: su(10), bounds });
   queuePointsAsSpines(grid, mediumPoints, tiers.medium, queue, { spreadX: su(12), spreadY: su(12), bounds });
   queuePointsAsFloating(grid, floatingPoints, tiers.small, queue, { spreadX: su(12), spreadY: su(12), bounds });
@@ -1610,28 +2212,50 @@ function seedBorderFrameMotif(grid, queue, tiers, bounds) {
   const bottomY = bounds.yMax - su(10);
   const leftX = bounds.xMin + su(10);
   const rightX = bounds.xMax - su(10);
-  const largeBottom = createLineGuidePoints(bounds.xMin, bottomY, bounds.xMax, bottomY, Math.ceil(params.largeSpines * 0.6), { spread: 0.22 });
-  const largeTop = createLineGuidePoints(bounds.xMin, topY, bounds.xMax, topY, Math.floor(params.largeSpines * 0.4), { spread: 0.18 });
-  largeTop.forEach((p) => (p.launchAngle += PI));
-  const mediumLeft = createLineGuidePoints(leftX, bounds.yMin, leftX, bounds.yMax, Math.ceil(params.mediumSpines / 2), { spread: 0.24 });
-  const mediumRight = createLineGuidePoints(rightX, bounds.yMin, rightX, bounds.yMax, Math.floor(params.mediumSpines / 2), { spread: 0.24 });
-  mediumLeft.forEach((p) => (p.launchAngle += 0.62));
-  mediumRight.forEach((p) => (p.launchAngle -= 0.62));
-  const floatingTop = createLineGuidePoints(bounds.xMin, topY + su(14), bounds.xMax, topY + su(14), Math.ceil(params.smallSpines / 2), { spread: 0.32 });
-  const floatingBottom = createLineGuidePoints(bounds.xMin, bottomY - su(14), bounds.xMax, bottomY - su(14), Math.floor(params.smallSpines / 2), { spread: 0.32 });
-  floatingTop.forEach((p) => (p.launchAngle += PI));
+  const largeBottom = createBaselineFanGuidePoints(bounds.xMin, bounds.xMax, bottomY, Math.ceil(params.largeSpines * 0.6), {
+    fractions: [0.16, 0.4, 0.68, 0.9],
+    maxFan: 0.42,
+  });
+  const largeTop = createBaselineFanGuidePoints(bounds.xMin, bounds.xMax, topY, Math.floor(params.largeSpines * 0.4), {
+    fractions: [0.24, 0.56, 0.84],
+    maxFan: 0.3,
+    direction: PI / 2,
+  });
+  const mediumLeft = createRailGuidePoints(leftX, bounds.yMin, bounds.yMax, Math.ceil(params.mediumSpines / 2), {
+    fractions: [0.2, 0.44, 0.68, 0.88],
+    angleTop: -0.1,
+    angleBottom: -0.92,
+  });
+  const mediumRight = createRailGuidePoints(rightX, bounds.yMin, bounds.yMax, Math.floor(params.mediumSpines / 2), {
+    fractions: [0.24, 0.48, 0.72, 0.9],
+    angleTop: -0.1,
+    angleBottom: -0.92,
+    mirrorX: true,
+  });
+  const floatingTop = createBaselineFanGuidePoints(bounds.xMin, bounds.xMax, topY + su(14), Math.ceil(params.smallSpines / 2), {
+    fractions: [0.3, 0.62, 0.9],
+    maxFan: 0.24,
+    direction: PI / 2,
+  });
+  const floatingBottom = createBaselineFanGuidePoints(bounds.xMin, bounds.xMax, bottomY - su(14), Math.floor(params.smallSpines / 2), {
+    fractions: [0.18, 0.48, 0.8],
+    maxFan: 0.24,
+  });
   queuePointsAsSpines(grid, largeBottom.concat(largeTop), tiers.large, queue, { spreadX: su(12), spreadY: su(10), bounds });
   queuePointsAsSpines(grid, mediumLeft.concat(mediumRight), tiers.medium, queue, { spreadX: su(10), spreadY: su(10), bounds });
   queuePointsAsFloating(grid, floatingTop.concat(floatingBottom), tiers.small, queue, { spreadX: su(10), spreadY: su(10), bounds });
 }
 
 function seedVoidContourMotif(grid, queue, tiers, bounds) {
-  const largePoints = createVoidBoundaryGuidePoints(params.largeSpines, "spine", { bounds });
-  const mediumPoints = createVoidBoundaryGuidePoints(params.mediumSpines, "spine", { bounds, startAngle: PI / Math.max(3, params.mediumSpines || 3) });
-  const floatingPoints = createVoidBoundaryGuidePoints(params.smallSpines, "floating", { bounds, startAngle: PI / Math.max(5, params.smallSpines || 5) });
-  queuePointsAsSpines(grid, largePoints, tiers.large, queue, { spreadX: 0, spreadY: 0, bounds });
-  queuePointsAsSpines(grid, mediumPoints, tiers.medium, queue, { spreadX: 0, spreadY: 0, bounds });
-  queuePointsAsFloating(grid, floatingPoints, tiers.small, queue, { spreadX: 0, spreadY: 0, bounds });
+  const largePoints = selectVoidContourGuidePoints(grid, params.largeSpines, "spine", { bounds });
+  const mediumPoints = selectVoidContourGuidePoints(grid, params.mediumSpines, "spine", { bounds });
+  const floatingPoints = selectVoidContourGuidePoints(grid, params.smallSpines, "floating", { bounds });
+  const largeTier = { ...tiers.large, rootScale: (tiers.large.rootScale ?? 1) * 0.84, bodyChance: 0.6 };
+  const mediumTier = { ...tiers.medium, rootScale: (tiers.medium.rootScale ?? 1) * 0.88, bodyChance: 0.5 };
+  const floatingTier = { ...tiers.small, scaleMin: 0.26, scaleMax: 0.46, wantsOffshoot: true };
+  queuePointsAsSpines(grid, largePoints, largeTier, queue, { spreadX: 0, spreadY: 0, bounds });
+  queuePointsAsSpines(grid, mediumPoints, mediumTier, queue, { spreadX: su(4), spreadY: su(6), bounds });
+  queuePointsAsFloating(grid, floatingPoints, floatingTier, queue, { spreadX: su(6), spreadY: su(8), bounds });
 }
 
 function seedPlacedSpawnsMotif(grid, queue, tiers, bounds) {
@@ -1718,6 +2342,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
   const sharedSpawnThreshold = tier.sharedSpawnThreshold ?? 0;
   const sharedSpawnSkip = tier.sharedSpawnSkip ?? 0;
   const startClearanceSkipOverride = tier.startClearanceSkip ?? null;
+  const parentId = tier.parentId ?? null;
 
   for (let tries = 0; tries < 30; tries++) {
     const rawPoint = {
@@ -1833,6 +2458,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
       kind: "stroke",
       arcs,
       depth: 0,
+      parentId,
       profile: "spine",
       debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
       terminalLeaf: buildTerminalLeafFromSpiral(sp1.arcs, "spine"),
@@ -1954,6 +2580,7 @@ function buildCornerSpine(grid, side = "left", tier = {}) {
       kind: "stroke",
       arcs,
       depth: 0,
+      parentId: null,
       profile: "spine",
       debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
       terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "spine"),
@@ -1974,7 +2601,7 @@ function tangentialSkip(r1, sChild, pr, pdir) {
   return Math.sqrt((2 * params.clearance) / kRel) * 1.1;
 }
 
-function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5) {
+function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5, parentId = null) {
   for (let tries = 0; tries < 10; tries++) {
     let Tc = T.slice();
     const r1 = rnd(su(24), su(62)) * scale;
@@ -2031,6 +2658,7 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
       kind: "stroke",
       arcs,
       depth,
+      parentId,
       profile: "branch",
       debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
       terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
@@ -2044,7 +2672,7 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
   return null;
 }
 
-function buildLeaf(P, T, side, pr, pdir, depth, scale, grid) {
+function buildLeaf(P, T, side, pr, pdir, depth, scale, grid, parentId = null) {
   for (let tries = 0; tries < 4; tries++) {
     const r1 = rnd(su(26), su(52)) * scale;
     const skip = tangentialSkip(r1, side, pr, pdir);
@@ -2068,6 +2696,7 @@ function buildLeaf(P, T, side, pr, pdir, depth, scale, grid) {
       stem: [arc],
       tear,
       depth,
+      parentId,
       wBase: STROKE_WEIGHT,
     };
     acceptChain(chain, samples, grid);
@@ -2077,7 +2706,7 @@ function buildLeaf(P, T, side, pr, pdir, depth, scale, grid) {
   return null;
 }
 
-function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5) {
+function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5, parentId = null) {
   for (let tries = 0; tries < 6; tries++) {
     let Tc = T.slice();
     const r1 = rnd(su(14), su(28)) * scale;
@@ -2122,6 +2751,7 @@ function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalB
       kind: "stroke",
       arcs,
       depth,
+      parentId,
       profile: "branch",
       debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
       terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
@@ -2179,7 +2809,8 @@ function enrichAttachedInfill(grid) {
         chain.depth + 1,
         childScale,
         grid,
-        p.s / total
+        p.s / total,
+        chain.chainId
       );
 
       if (infill) {
@@ -2201,6 +2832,7 @@ function buildFloating(grid, tier = {}) {
   const preferredPoint = tier.preferredPoint ?? null;
   const spreadX = tier.spreadX ?? 30;
   const spreadY = tier.spreadY ?? 30;
+  const parentId = tier.parentId ?? null;
 
   for (let tries = 0; tries < 10; tries++) {
     const P = preferredPoint
@@ -2269,6 +2901,7 @@ function buildFloating(grid, tier = {}) {
       kind: "stroke",
       arcs,
       depth: 1,
+      parentId,
       profile: "branch",
       debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
       terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
@@ -2288,7 +2921,7 @@ function generate() {
   const motifHash = hashString(appState.motifPreset);
   const combinedSeed = ((appState.seed * 2654435761) ^ motifHash) >>> 0;
   R = mulberry32(combinedSeed || 1);
-  model = { chains: [], stats: {} };
+  model = { chains: [], stats: {}, nextChainId: 1 };
   initCompositionFlow();
   const grid = makeGrid(params.clearance);
   const queue = [];
@@ -2319,7 +2952,11 @@ function generate() {
     weightScale: 0.72,
   };
 
-  if (!isPlacedSpawnMotif()) {
+  const allowCornerSpines =
+    !isPlacedSpawnMotif() &&
+    appState.motifPreset !== "voidContour";
+
+  if (allowCornerSpines) {
     const leftCorner = buildCornerSpine(grid, "left", {
       rootScale: cornerScale,
       startY: stageHeight() - margin() - su(26),
@@ -2447,7 +3084,17 @@ function growQueue(queue, grid) {
       let child = null;
 
       if (chance(params.leafProb)) {
-        child = buildLeaf([p.x, p.y], [p.tx, p.ty], side, p.r, p.dir, d + 1, childScale, grid);
+        child = buildLeaf(
+          [p.x, p.y],
+          [p.tx, p.ty],
+          side,
+          p.r,
+          p.dir,
+          d + 1,
+          childScale,
+          grid,
+          chain.chainId
+        );
       } else {
         child = buildChild(
           [p.x, p.y],
@@ -2458,7 +3105,8 @@ function growQueue(queue, grid) {
           d + 1,
           childScale,
           grid,
-          terminalBias
+          terminalBias,
+          chain.chainId
         );
       }
 
@@ -2641,6 +3289,342 @@ function drawSamplePath(samples, color, weight = 2.2) {
   }
   endShape();
   pop();
+}
+
+function samplePrefix(samples, targetLength) {
+  if (!samples?.length) {
+    return [];
+  }
+  if (targetLength <= 0) {
+    return [samples[0]];
+  }
+
+  const totalLength = samples[samples.length - 1].s ?? 0;
+  if (targetLength >= totalLength) {
+    return samples;
+  }
+
+  const out = [];
+  for (let i = 0; i < samples.length; i++) {
+    const point = samples[i];
+    if (point.s <= targetLength) {
+      out.push(point);
+      continue;
+    }
+    if (!out.length) {
+      out.push(samples[0]);
+    }
+    const prev = samples[Math.max(0, i - 1)];
+    const span = Math.max(1e-6, point.s - prev.s);
+    const t = (targetLength - prev.s) / span;
+    out.push({
+      x: lerp(prev.x, point.x, t),
+      y: lerp(prev.y, point.y, t),
+      s: targetLength,
+    });
+    break;
+  }
+  return out;
+}
+
+function drawSamplePrefix(samples, targetLength, color, weight = 2.2) {
+  const prefix = samplePrefix(samples, targetLength);
+  if (prefix.length < 2) {
+    return;
+  }
+  drawSamplePath(prefix, color, weight);
+}
+
+function orderChainsForGrowth(chains) {
+  const byId = new Map();
+  const childrenByParent = new Map();
+  const ordered = [];
+  const visited = new Set();
+  const chainSizeScore = (chain) => {
+    const arcLength =
+      chain.kind === "stroke"
+        ? chain.arcs.reduce((sum, arc) => sum + Math.abs(arc.da) * arc.r, 0)
+        : chain.kind === "leaf"
+          ? chain.stem.concat(chain.tear).reduce((sum, arc) => sum + Math.abs(arc.da) * arc.r, 0)
+          : 0;
+    return (chain.wBase ?? 0) * 10000 + arcLength;
+  };
+  const sortByHierarchy = (a, b) =>
+    chainSizeScore(b) - chainSizeScore(a) || (a.createdIndex ?? 0) - (b.createdIndex ?? 0);
+
+  for (const chain of chains) {
+    byId.set(chain.chainId, chain);
+  }
+
+  for (const chain of chains) {
+    const parentId = chain.parentId;
+    if (!parentId || !byId.has(parentId)) {
+      continue;
+    }
+    const siblings = childrenByParent.get(parentId) ?? [];
+    siblings.push(chain);
+    childrenByParent.set(parentId, siblings);
+  }
+
+  for (const siblings of childrenByParent.values()) {
+    siblings.sort(sortByHierarchy);
+  }
+
+  const visit = (chain) => {
+    if (!chain || visited.has(chain.chainId)) {
+      return;
+    }
+    visited.add(chain.chainId);
+    ordered.push(chain);
+    for (const child of childrenByParent.get(chain.chainId) ?? []) {
+      visit(child);
+    }
+  };
+
+  const roots = chains
+    .filter((chain) => !chain.parentId || !byId.has(chain.parentId))
+    .sort(sortByHierarchy);
+
+  for (const root of roots) {
+    visit(root);
+  }
+
+  for (const chain of [...chains].sort(sortByHierarchy)) {
+    visit(chain);
+  }
+
+  return ordered;
+}
+
+function revealSegmentsForChain(chain) {
+  const color = appState.invertPreview ? "#161614" : "#e9e7df";
+  const segments = [];
+
+  if (chain.kind === "stroke") {
+    segments.push({
+      samples: sampleArcs(chain.arcs, 2.2),
+      color,
+      weight: Math.max(1.2, chain.wBase * 0.58),
+    });
+    if (chain.terminalLeaf?.outer?.length) {
+      segments.push({
+        samples: sampleArcs(chain.terminalLeaf.outer, 2),
+        color,
+        weight: Math.max(1, chain.wBase * 0.44),
+      });
+    }
+    if (chain.terminalLeaf?.inner?.length) {
+      segments.push({
+        samples: sampleArcs(chain.terminalLeaf.inner, 2),
+        color,
+        weight: Math.max(1, chain.wBase * 0.36),
+      });
+    }
+    return segments;
+  }
+
+  if (chain.kind === "leaf") {
+    segments.push({
+      samples: sampleArcs(chain.stem, 2.2),
+      color,
+      weight: Math.max(1.1, chain.wBase * 0.52),
+    });
+    segments.push({
+      samples: sampleArcs(chain.tear, 2),
+      color,
+      weight: Math.max(1, chain.wBase * 0.38),
+    });
+    return segments;
+  }
+
+  if (chain.kind === "ornament") {
+    for (const path of chain.paths) {
+      segments.push({
+        samples: sampleClosedPath(path, true),
+        color,
+        weight: Math.max(1, STROKE_WEIGHT * 0.42),
+      });
+    }
+  }
+
+  return segments;
+}
+
+function orderChainsForGrowth(chains) {
+  const byId = new Map();
+  const childrenByParent = new Map();
+  const ordered = [];
+  const visited = new Set();
+  const chainSizeScore = (chain) => {
+    const arcLength =
+      chain.kind === "stroke"
+        ? chain.arcs.reduce((sum, arc) => sum + Math.abs(arc.da) * arc.r, 0)
+        : chain.kind === "leaf"
+          ? chain.stem.concat(chain.tear).reduce((sum, arc) => sum + Math.abs(arc.da) * arc.r, 0)
+          : 0;
+    return (chain.wBase ?? 0) * 10000 + arcLength;
+  };
+  const sortByHierarchy = (a, b) =>
+    chainSizeScore(b) - chainSizeScore(a) || (a.createdIndex ?? 0) - (b.createdIndex ?? 0);
+
+  for (const chain of chains) {
+    byId.set(chain.chainId, chain);
+  }
+
+  for (const chain of chains) {
+    const parentId = chain.parentId;
+    if (!parentId || !byId.has(parentId)) {
+      continue;
+    }
+    const siblings = childrenByParent.get(parentId) ?? [];
+    siblings.push(chain);
+    childrenByParent.set(parentId, siblings);
+  }
+
+  for (const siblings of childrenByParent.values()) {
+    siblings.sort(sortByHierarchy);
+  }
+
+  const visit = (chain) => {
+    if (!chain || visited.has(chain.chainId)) {
+      return;
+    }
+    visited.add(chain.chainId);
+    ordered.push(chain);
+    for (const child of childrenByParent.get(chain.chainId) ?? []) {
+      visit(child);
+    }
+  };
+
+  const roots = chains
+    .filter((chain) => !chain.parentId || !byId.has(chain.parentId))
+    .sort(sortByHierarchy);
+
+  for (const root of roots) {
+    visit(root);
+  }
+
+  for (const chain of [...chains].sort(sortByHierarchy)) {
+    visit(chain);
+  }
+
+  return ordered;
+}
+
+function buildRevealSequence() {
+  const segments = [];
+  let totalLength = 0;
+  const orderedChains = orderChainsForGrowth(
+    model.chains.filter((chain) => !shouldSuppressUnresolvedCurl(chain))
+  );
+
+  for (let batchStart = 0; batchStart < orderedChains.length; batchStart += REVEAL_PARALLEL_CHAIN_BATCH) {
+    const batch = orderedChains.slice(batchStart, batchStart + REVEAL_PARALLEL_CHAIN_BATCH);
+    const batchSegments = batch.flatMap((chain) =>
+      reflectedChains(chain).map((reflected) => revealSegmentsForChain(reflected))
+    );
+    const segmentGroups = batchSegments.reduce(
+      (max, chainSegments) => Math.max(max, chainSegments.length),
+      0
+    );
+
+    for (let segmentIndex = 0; segmentIndex < segmentGroups; segmentIndex++) {
+      let groupMaxLength = 0;
+
+      for (const chainSegments of batchSegments) {
+        const segment = chainSegments[segmentIndex];
+        if (!segment) {
+          continue;
+        }
+        const length = segment.samples.length ? segment.samples[segment.samples.length - 1].s : 0;
+        if (length <= 0) {
+          continue;
+        }
+        groupMaxLength = Math.max(groupMaxLength, length);
+        segments.push({ ...segment, start: totalLength, end: totalLength + length });
+      }
+
+      totalLength += groupMaxLength;
+    }
+  }
+
+  return { segments, totalLength };
+}
+
+function setRevealButtonLabel(text) {
+  const button = document.getElementById("revealBtn");
+  if (button) {
+    button.textContent = text;
+  }
+}
+
+function stopRevealAnimation(redrawAfter = true) {
+  if (revealState.rafId) {
+    cancelAnimationFrame(revealState.rafId);
+  }
+  revealState.playing = false;
+  revealState.startMs = 0;
+  revealState.elapsedMs = 0;
+  revealState.rafId = 0;
+  setRevealButtonLabel("Play Reveal");
+  if (redrawAfter) {
+    redraw();
+  }
+}
+
+function tickRevealAnimation() {
+  if (!revealState.playing) {
+    return;
+  }
+  redraw();
+  revealState.rafId = requestAnimationFrame(tickRevealAnimation);
+}
+
+function startRevealAnimation() {
+  const sequence = buildRevealSequence();
+  if (!sequence.totalLength) {
+    return;
+  }
+  revealState = {
+    playing: true,
+    startMs: millis(),
+    elapsedMs: 0,
+    totalLength: sequence.totalLength,
+    segments: sequence.segments,
+    rafId: 0,
+  };
+  setRevealButtonLabel("Stop Reveal");
+  redraw();
+  revealState.rafId = requestAnimationFrame(tickRevealAnimation);
+}
+
+function toggleRevealAnimation() {
+  if (revealState.playing) {
+    stopRevealAnimation(true);
+    return;
+  }
+  startRevealAnimation();
+}
+
+function drawRevealAnimation() {
+  if (!revealState.playing) {
+    return;
+  }
+
+  revealState.elapsedMs = Math.max(0, millis() - revealState.startMs);
+  const progressLength = (revealState.elapsedMs / 1000) * REVEAL_SPEED_PX_PER_SEC;
+
+  for (const segment of revealState.segments) {
+    if (progressLength <= segment.start) {
+      break;
+    }
+    const localLength = Math.min(segment.end, progressLength) - segment.start;
+    drawSamplePrefix(segment.samples, localLength, segment.color, segment.weight);
+  }
+
+  if (progressLength >= revealState.totalLength) {
+    stopRevealAnimation(true);
+  }
 }
 
 function drawTerminalLeaf(ch) {
@@ -2846,6 +3830,7 @@ function setup() {
     onRandomSeed: randomSeed_,
     onRegenerate: regenerate,
     onReset: resetParams,
+    onReveal: toggleRevealAnimation,
     onPng: downloadPNG,
     onSvg: downloadSVG,
   });
@@ -2865,16 +3850,21 @@ function draw() {
   noStroke();
   fill(appState.invertPreview ? "#161614" : "#e9e7df");
 
-  for (const ch of model.chains) {
-    if (shouldSuppressUnresolvedCurl(ch)) {
-      continue;
-    }
-    for (const reflected of reflectedChains(ch)) {
-      drawChain(reflected);
+  if (revealState.playing) {
+    drawRevealAnimation();
+  } else {
+    for (const ch of model.chains) {
+      if (shouldSuppressUnresolvedCurl(ch)) {
+        continue;
+      }
+      for (const reflected of reflectedChains(ch)) {
+        drawChain(reflected);
+      }
     }
   }
 
   drawVoidMask();
+  drawVoidOutline();
   drawPlacedSpawnGuides();
 }
 
@@ -2936,6 +3926,9 @@ function syncDesignSizeFromCanvas() {
 }
 
 function regenerateModel() {
+  if (revealState.playing) {
+    stopRevealAnimation(false);
+  }
   generate();
   updateStats({
     seed: appState.seed,
@@ -2968,6 +3961,9 @@ function regenerate() {
 }
 
 function resetParams() {
+  if (revealState.playing) {
+    stopRevealAnimation(false);
+  }
   resetAppState(appState);
   params = appState.params;
   activeManualSpawnIndex = -1;

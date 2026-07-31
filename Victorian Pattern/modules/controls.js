@@ -136,6 +136,21 @@
     voidFolder
       .addInput(state.voidMask, "hPct", { min: 2, max: 100, step: 0.5, label: "H %" })
       .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "rectWPct", { min: 2, max: 100, step: 0.5, label: "Rect W %" })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "rectHPct", { min: 2, max: 100, step: 0.5, label: "Rect H %" })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "ovalWPct", { min: 2, max: 100, step: 0.5, label: "Oval W %" })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "ovalHPct", { min: 2, max: 100, step: 0.5, label: "Oval H %" })
+      .on("change", onPatternChange);
+    voidFolder
+      .addInput(state.voidMask, "invertRectOval", { label: "Invert 3rd" })
+      .on("change", onPatternChange);
 
     const viewFolder = pane.addFolder({ title: "View" });
     viewFolder
@@ -161,6 +176,7 @@
     document.getElementById("randomSeedBtn").addEventListener("click", config.onRandomSeed);
     document.getElementById("renderBtn").addEventListener("click", config.onRegenerate);
     document.getElementById("resetBtn").addEventListener("click", config.onReset);
+    document.getElementById("revealBtn").addEventListener("click", config.onReveal);
     document.getElementById("pngBtn").addEventListener("click", config.onPng);
     document.getElementById("svgBtn").addEventListener("click", config.onSvg);
   }
