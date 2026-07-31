@@ -17,19 +17,43 @@
     return path;
   }
 
+  function arcsToContinuation(arcs, arcPointAt) {
+    let path = "";
+
+    for (const arc of arcs) {
+      const end = arcPointAt(arc, 1);
+      const large = Math.abs(arc.da) > Math.PI ? 1 : 0;
+      const sweep = arc.da > 0 ? 1 : 0;
+      path += ` A ${fmt(arc.r)} ${fmt(arc.r)} 0 ${large} ${sweep} ${fmt(end[0])} ${fmt(end[1])}`;
+    }
+
+    return path;
+  }
+
   function chainToSvg(chain, helpers) {
     const { arcPointAt, reverseArcs } = helpers;
     let output = "";
 
     if (chain.kind === "stroke") {
-      output += `<path d="${arcsToPath(chain.arcs, arcPointAt)}"/>\n`;
       if (chain.terminalLeaf && chain.terminalLeaf.outer?.length && chain.terminalLeaf.inner?.length) {
+        const outerCount = chain.terminalLeaf.outer.length;
+        const stemArcs = chain.arcs.slice(0, Math.max(0, chain.arcs.length - outerCount));
         const innerReverse = reverseArcs(chain.terminalLeaf.inner);
-        const leafPath = `${arcsToPath(chain.terminalLeaf.outer, arcPointAt)} ${arcsToPath(
-          innerReverse,
-          arcPointAt
-        ).replace(/^M [^A]+/, "L")}`;
+        let leafPath = "";
+
+        if (stemArcs.length) {
+          leafPath = `${arcsToPath(stemArcs, arcPointAt)}${arcsToContinuation(
+            chain.terminalLeaf.outer,
+            arcPointAt
+          )}`;
+        } else {
+          leafPath = arcsToPath(chain.terminalLeaf.outer, arcPointAt);
+        }
+
+        leafPath += arcsToContinuation(innerReverse, arcPointAt);
         output += `<path d="${leafPath}"/>\n`;
+      } else {
+        output += `<path d="${arcsToPath(chain.arcs, arcPointAt)}"/>\n`;
       }
       const last = chain.arcs[chain.arcs.length - 1];
       if (last.r < 6 && !chain.terminalLeaf) {
@@ -52,20 +76,6 @@
     return output;
   }
 
-  function voidMaskToSvg(voidMask, fillColor) {
-    if (!voidMask) {
-      return "";
-    }
-    if (voidMask.shape === "rect") {
-      return `<g id="void-mask"><rect x="${fmt(voidMask.x)}" y="${fmt(voidMask.y)}" width="${fmt(
-        voidMask.width
-      )}" height="${fmt(voidMask.height)}" fill="${fillColor}" stroke="none"/></g>\n`;
-    }
-    return `<g id="void-mask"><ellipse cx="${fmt(voidMask.cx)}" cy="${fmt(voidMask.cy)}" rx="${fmt(
-      voidMask.rx
-    )}" ry="${fmt(voidMask.ry)}" fill="${fillColor}" stroke="none"/></g>\n`;
-  }
-
   function downloadPng(saveCanvasFn, seed) {
     saveCanvasFn(`victorian-flourish-${seed}`, "png");
   }
@@ -78,14 +88,12 @@
       decay,
       invertPreview,
       model,
-      voidMask,
       reflectedChains,
       shouldSuppressUnresolvedCurl,
       helpers,
     } = config;
 
     const ink = invertPreview ? "#141413" : "#e9e7df";
-    const paper = invertPreview ? "#f6f4ee" : "#0e0e10";
     let body = "";
 
     for (const chain of model.chains) {
@@ -103,7 +111,6 @@
 <!-- Centerline geometry: pure circular arcs (A commands) + circles. G1-continuous. -->
 <g fill="none" stroke="${ink}" stroke-width="1" stroke-linecap="round">
 ${body}</g>
-${voidMaskToSvg(voidMask, paper)}
 </svg>`;
 
     const blob = new Blob([svg], { type: "image/svg+xml" });

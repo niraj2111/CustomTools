@@ -1,0 +1,12 @@
+{
+  "name": "customtools-saxi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Vanilla local saxi server project inside CustomTools.",
+  "scripts": {
+    "start": "saxi"
+  },
+  "dependencies": {
+    "saxi": "0.16.0"
+  }
+}

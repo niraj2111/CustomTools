@@ -7,3 +7,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local package installs
+saxi/node_modules/
