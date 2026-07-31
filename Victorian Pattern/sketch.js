@@ -323,6 +323,16 @@ function drawVoidMask() {
   } else {
     ellipse(currentVoid.cx, currentVoid.cy, currentVoid.rx * 2, currentVoid.ry * 2);
   }
+  noFill();
+  stroke(appState.invertPreview ? "#161614" : "#e9e7df");
+  strokeWeight(Math.max(1, stageScale()));
+  strokeCap(ROUND);
+  strokeJoin(ROUND);
+  if (currentVoid.shape === "rect") {
+    rect(currentVoid.x, currentVoid.y, currentVoid.width, currentVoid.height);
+  } else {
+    ellipse(currentVoid.cx, currentVoid.cy, currentVoid.rx * 2, currentVoid.ry * 2);
+  }
   pop();
 }
 
@@ -1071,6 +1081,98 @@ function createEllipseGuidePoints(cx, cy, rx, ry, count, options = {}) {
   return points;
 }
 
+function chooseBoundaryTangentDirection(x, y, tangentAngle, role = "spine") {
+  const flowAngle = flowAngleAt(x, y, role);
+  const opposite = tangentAngle + PI;
+  return Math.abs(angleBetween(tangentAngle, flowAngle)) <= Math.abs(angleBetween(opposite, flowAngle))
+    ? tangentAngle
+    : opposite;
+}
+
+function createVoidBoundaryGuidePoints(count, role = "spine", options = {}) {
+  if (!params.voidOn || count <= 0) {
+    return [];
+  }
+
+  const currentVoid = stageVoid();
+  const bounds = options.bounds ?? sourceBounds();
+  const points = [];
+
+  if (currentVoid.shape === "rect") {
+    const perimeter = currentVoid.width * 2 + currentVoid.height * 2;
+    for (let i = 0; i < count; i++) {
+      const t = (i + 0.5) / count;
+      let dist = perimeter * t;
+      let x = currentVoid.x;
+      let y = currentVoid.y;
+      let tx = 1;
+      let ty = 0;
+      let nx = 0;
+      let ny = -1;
+
+      if (dist < currentVoid.width) {
+        x += dist;
+      } else if ((dist -= currentVoid.width) < currentVoid.height) {
+        x += currentVoid.width;
+        y += dist;
+        tx = 0;
+        ty = 1;
+        nx = 1;
+        ny = 0;
+      } else if ((dist -= currentVoid.height) < currentVoid.width) {
+        x += currentVoid.width - dist;
+        y += currentVoid.height;
+        tx = -1;
+        ty = 0;
+        nx = 0;
+        ny = 1;
+      } else {
+        dist -= currentVoid.width;
+        y += currentVoid.height - dist;
+        tx = 0;
+        ty = -1;
+        nx = -1;
+        ny = 0;
+      }
+
+      if (x < bounds.xMin || x > bounds.xMax || y < bounds.yMin || y > bounds.yMax) {
+        continue;
+      }
+
+      const tangentAngle = Math.atan2(ty, tx);
+      const launchAngle = chooseBoundaryTangentDirection(x, y, tangentAngle, role);
+      const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
+      const preferredSign = leftNormal[0] * nx + leftNormal[1] * ny >= 0 ? 1 : -1;
+      points.push({ x, y, launchAngle, preferredSign, lockToGuide: true });
+    }
+    return points;
+  }
+
+  const startAngle = options.startAngle ?? 0;
+  const sweep = options.sweep ?? TAU;
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const angle = startAngle + sweep * t;
+    const x = currentVoid.cx + Math.cos(angle) * currentVoid.rx;
+    const y = currentVoid.cy + Math.sin(angle) * currentVoid.ry;
+    if (x < bounds.xMin || x > bounds.xMax || y < bounds.yMin || y > bounds.yMax) {
+      continue;
+    }
+
+    const tx = -Math.sin(angle) * currentVoid.rx;
+    const ty = Math.cos(angle) * currentVoid.ry;
+    const tangentAngle = Math.atan2(ty, tx);
+    const nx = Math.cos(angle) / Math.max(currentVoid.rx, 1e-6);
+    const ny = Math.sin(angle) / Math.max(currentVoid.ry, 1e-6);
+    const launchAngle = chooseBoundaryTangentDirection(x, y, tangentAngle, role);
+    const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
+    const preferredSign = leftNormal[0] * nx + leftNormal[1] * ny >= 0 ? 1 : -1;
+    points.push({ x, y, launchAngle, preferredSign, lockToGuide: true });
+  }
+
+  return points;
+}
+
 function queuePointsAsSpines(grid, points, tier, queue, placement = {}) {
   for (const point of points) {
     pushIfChain(
@@ -1252,6 +1354,15 @@ function seedBorderFrameMotif(grid, queue, tiers, bounds) {
   queuePointsAsFloating(grid, floatingTop.concat(floatingBottom), tiers.small, queue, { spreadX: su(10), spreadY: su(10), bounds });
 }
 
+function seedVoidContourMotif(grid, queue, tiers, bounds) {
+  const largePoints = createVoidBoundaryGuidePoints(params.largeSpines, "spine", { bounds });
+  const mediumPoints = createVoidBoundaryGuidePoints(params.mediumSpines, "spine", { bounds, startAngle: PI / Math.max(3, params.mediumSpines || 3) });
+  const floatingPoints = createVoidBoundaryGuidePoints(params.smallSpines, "floating", { bounds, startAngle: PI / Math.max(5, params.smallSpines || 5) });
+  queuePointsAsSpines(grid, largePoints, tiers.large, queue, { spreadX: 0, spreadY: 0, bounds });
+  queuePointsAsSpines(grid, mediumPoints, tiers.medium, queue, { spreadX: 0, spreadY: 0, bounds });
+  queuePointsAsFloating(grid, floatingPoints, tiers.small, queue, { spreadX: 0, spreadY: 0, bounds });
+}
+
 function seedMotifPreset(grid, queue, tiers, bounds, aspect) {
   switch (appState.motifPreset) {
     case "bottomBaseline":
@@ -1268,6 +1379,9 @@ function seedMotifPreset(grid, queue, tiers, bounds, aspect) {
       break;
     case "borderFrame":
       seedBorderFrameMotif(grid, queue, tiers, bounds);
+      break;
+    case "voidContour":
+      seedVoidContourMotif(grid, queue, tiers, bounds);
       break;
     case "freeField":
     default:
@@ -1339,7 +1453,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
         : flowAngleAt(px, py, "spine");
     const ang = launchAngle;
     const T = [Math.cos(ang), Math.sin(ang)];
-    const sA = chance(0.5) ? 1 : -1;
+    const sA = preferredPoint?.preferredSign ?? (chance(0.5) ? 1 : -1);
     const q = quartersFromTurns();
     const baseRadius = rnd(su(180), su(280)) * rootScale;
     const launchRadius = baseRadius * rnd(1.06, 1.18);
@@ -1813,7 +1927,7 @@ function buildFloating(grid, tier = {}) {
         : flowAngleAt(P[0], P[1], "floating");
     const ang = launchAngle;
     const T = [Math.cos(ang), Math.sin(ang)];
-    const side = chance(0.5) ? 1 : -1;
+    const side = preferredPoint?.preferredSign ?? (chance(0.5) ? 1 : -1);
     const scale = rnd(scaleMin, scaleMax);
     let arcs = [];
     let Pp = P.slice();

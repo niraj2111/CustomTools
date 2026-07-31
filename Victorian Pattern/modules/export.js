@@ -76,6 +76,33 @@
     return output;
   }
 
+  function voidMaskToSvg(voidMask, fillColor) {
+    if (!voidMask) {
+      return "";
+    }
+    if (voidMask.shape === "rect") {
+      return `<g id="void-mask"><rect x="${fmt(voidMask.x)}" y="${fmt(voidMask.y)}" width="${fmt(
+        voidMask.width
+      )}" height="${fmt(voidMask.height)}" fill="${fillColor}" stroke="none"/></g>\n`;
+    }
+    return `<g id="void-mask"><ellipse cx="${fmt(voidMask.cx)}" cy="${fmt(voidMask.cy)}" rx="${fmt(
+      voidMask.rx
+    )}" ry="${fmt(voidMask.ry)}" fill="${fillColor}" stroke="none"/></g>\n`;
+  }
+
+  function voidBoundaryToSvg(voidMask) {
+    if (!voidMask) {
+      return "";
+    }
+    if (voidMask.shape === "rect") {
+      return `<rect x="${fmt(voidMask.x)}" y="${fmt(voidMask.y)}" width="${fmt(voidMask.width)}" height="${fmt(
+        voidMask.height
+      )}"/>\n`;
+    }
+    return `<ellipse cx="${fmt(voidMask.cx)}" cy="${fmt(voidMask.cy)}" rx="${fmt(voidMask.rx)}" ry="${fmt(
+      voidMask.ry
+    )}"/>\n`;
+  }
   function downloadPng(saveCanvasFn, seed) {
     saveCanvasFn(`victorian-flourish-${seed}`, "png");
   }
@@ -88,12 +115,14 @@
       decay,
       invertPreview,
       model,
+      voidMask,
       reflectedChains,
       shouldSuppressUnresolvedCurl,
       helpers,
     } = config;
 
     const ink = invertPreview ? "#141413" : "#e9e7df";
+    const paper = invertPreview ? "#f6f4ee" : "#0e0e10";
     let body = "";
 
     for (const chain of model.chains) {
@@ -111,6 +140,9 @@
 <!-- Centerline geometry: pure circular arcs (A commands) + circles. G1-continuous. -->
 <g fill="none" stroke="${ink}" stroke-width="1" stroke-linecap="round">
 ${body}</g>
+${voidMaskToSvg(voidMask, paper)}
+<g id="void-boundary" fill="none" stroke="${ink}" stroke-width="1" stroke-linecap="round">
+${voidBoundaryToSvg(voidMask)}</g>
 </svg>`;
 
     const blob = new Blob([svg], { type: "image/svg+xml" });
