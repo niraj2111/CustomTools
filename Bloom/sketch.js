@@ -2,44 +2,58 @@ let pane;
 let flower;
 let profileEditor;
 let cnv;
+let exportFrameCountInput;
+let exportEasingInput;
+let previewLoopInput;
+let previewButton;
+
+const previewState = {
+  active: false,
+  startMs: 0,
+};
 
 const state = {
   canvasW: 1000,
   canvasH: 1000,
   bg: "#000000",
+  exportMode: "current",
+  exportFrameCount: 24,
+  exportEasing: "linear",
+  previewLoop: true,
 
   originX: 500,
   originY: 610,
-  scale: 1.0,
+  scale: 1.97,
 
-  petalCount: 12,
-  bloomStage: 0.82,
-  goldenAngleDeg: 137.5,
-  maxRadius: 20,
-  radialPower: 0.72,
+  petalCount: 10,
+  bloomStage: 1.0,
+  goldenAngleDeg: 102.4,
+  maxRadius: 0,
+  radialPower: 1.6,
 
-  viewTilt: 1.0,
-  perspective: 0.0007,
-  depthScale: 0.5,
+  viewTilt: 0.32,
+  rotationDeg: -92,
+  perspective: 0.0,
+  depthScale: 0.88,
 
-  innerLength: 220,
-  outerLength: 370,
-  innerWidth: 34,
-  outerWidth: 88,
-  lengthOpenBoost: 0.28,
+  innerLength: 119,
+  outerLength: 158,
+  innerWidth: 40,
+  outerWidth: 40,
+  lengthOpenBoost: 0.0,
 
-  centerHeight: 20,
-  heightPower: 1.65,
-  closedRadiusFactor: 0.22,
-  maxTiltDeg: 78,
-  innerDelay: 0.42,
-  openingSpread: 0.48,
+  centerHeight: 0,
+  heightPower: 3.2,
+  closedRadiusFactor: 0.0,
+  maxTiltDeg: 96,
+  innerDelay: 1.0,
+  openingSpread: 1.0,
 
-  cupClosed: 64,
-  cupOpen: 36,
+  cupClosed: 28,
+  cupOpen: 17,
   sideCurl: 0,
-  tipCurl: 10,
-  twistAmount: 0.36,
+  tipCurl: 6,
+  twistAmount: 0.0,
   invertCupping: true,
 
   showPetalProfileEditor: true,
@@ -49,10 +63,10 @@ const state = {
   profileEditorH: 170,
 
   petalProfile: [
-    { v: 0.0, w: 0.08 },
-    { v: 0.28, w: 0.75 },
-    { v: 0.58, w: 1.0 },
-    { v: 1.0, w: 0.05 },
+    { v: 0.0, w: 0.08, outV: 0.093, outW: 0.303 },
+    { v: 0.28, w: 0.75, inV: 0.187, inW: 0.527, outV: 0.38, outW: 0.833 },
+    { v: 0.58, w: 1.0, inV: 0.48, inW: 0.917, outV: 0.72, outW: 0.683 },
+    { v: 1.0, w: 0.05, inV: 0.86, inW: 0.367 },
   ],
 
   longitudinalLines: 25,
@@ -91,8 +105,19 @@ function setup() {
 function draw() {
   background(state.bg);
 
+  const originalBloomStage = state.bloomStage;
+  const originalRotation = state.rotationDeg;
+  const previewValues = getPreviewAnimationValues();
+  if (previewValues) {
+    state.bloomStage = previewValues.bloomStage;
+    state.rotationDeg = previewValues.rotationDeg;
+  }
+
   flower.draw();
   profileEditor.draw();
+
+  state.bloomStage = originalBloomStage;
+  state.rotationDeg = originalRotation;
 
   drawLabels();
 }
@@ -105,25 +130,56 @@ function setupPane() {
 
   const fView = pane.addFolder({ title: "View / Export", expanded: true });
   fView.addInput(state, "bg", { label: "Background" });
+  const exportModeInput = fView.addInput(state, "exportMode", {
+    label: "export mode",
+    options: {
+      "Current frame": "current",
+      "Bloom animation": "bloom",
+      Rotation: "rotation",
+    },
+  });
+  exportFrameCountInput = fView.addInput(state, "exportFrameCount", {
+    label: "frame count",
+    min: 2,
+    max: 240,
+    step: 1,
+  });
+  exportEasingInput = fView.addInput(state, "exportEasing", {
+    label: "easing",
+    options: {
+      Linear: "linear",
+      Soft: "soft",
+      Medium: "medium",
+      Strong: "strong",
+    },
+  });
+  previewLoopInput = fView.addInput(state, "previewLoop", {
+    label: "loop",
+  });
+  previewButton = fView.addBlade({ view: "button", title: "Preview animation" });
   fView.addInput(state, "originX", { min: 0, max: 1000, step: 1 });
   fView.addInput(state, "originY", { min: 0, max: 1000, step: 1 });
   fView.addInput(state, "scale", { min: 0.2, max: 2.0, step: 0.01 });
   fView.addBlade({ view: "button", title: "Export PNG" }).on("click", () => {
-    saveCanvas("rosette_flower", "png");
+    exportPng();
   });
   fView.addBlade({ view: "button", title: "Export SVG" }).on("click", () => {
     exportSvg();
   });
+  exportModeInput.on("change", updateExportFrameCountVisibility);
+  previewButton.on("click", togglePreviewAnimation);
+  updateExportFrameCountVisibility();
 
   const fRosette = pane.addFolder({ title: "Rosette architecture", expanded: true });
   fRosette.addInput(state, "petalCount", { min: 8, max: 180, step: 1 });
   fRosette.addInput(state, "bloomStage", { min: 0, max: 1, step: 0.01 });
   fRosette.addInput(state, "goldenAngleDeg", { min: 80, max: 180, step: 0.1 });
-  fRosette.addInput(state, "maxRadius", { min: 20, max: 480, step: 1 });
+  fRosette.addInput(state, "maxRadius", { min: 0, max: 480, step: 1 });
   fRosette.addInput(state, "radialPower", { min: 0.25, max: 1.6, step: 0.01 });
 
   const fCamera = pane.addFolder({ title: "3D projection", expanded: true });
   fCamera.addInput(state, "viewTilt", { min: -1.0, max: 1.0, step: 0.01 });
+  fCamera.addInput(state, "rotationDeg", { min: -180, max: 180, step: 1, label: "rotation" });
   fCamera.addInput(state, "perspective", { min: 0, max: 0.003, step: 0.0001 });
   fCamera.addInput(state, "depthScale", { min: -1.0, max: 1.0, step: 0.01 });
 
@@ -241,23 +297,21 @@ function hookUI() {
   const pngBtn = document.getElementById("pngBtn");
   if (pngBtn) {
     pngBtn.addEventListener("click", () => {
-      saveCanvas("rosette_flower", "png");
+      exportPng();
     });
   }
 }
 
 function setPetalProfile(profile) {
-  state.petalProfile = profile.map((p) => ({
-    v: constrain(p.v, 0, 1),
-    w: constrain(p.w, 0.01, 1.5),
-  }));
+  state.petalProfile = normalizePetalProfile(profile);
   sortPetalProfile();
 }
 
 class PetalProfileEditor {
   constructor() {
-    this.dragIndex = -1;
-    this.r = 7;
+    this.dragTarget = null;
+    this.anchorR = 7;
+    this.controlR = 5;
   }
 
   draw() {
@@ -315,44 +369,92 @@ class PetalProfileEditor {
     }
     endShape(CLOSE);
 
-    stroke(120, 190, 255, 80);
-    for (let i = 0; i < state.petalProfile.length - 1; i += 1) {
-      const a = this.handlePos(i);
-      const b = this.handlePos(i + 1);
-      line(a.x, a.y, b.x, b.y);
-    }
-
     for (let i = 0; i < state.petalProfile.length; i += 1) {
-      const hp = this.handlePos(i);
+      const anchor = this.anchorPos(i);
+      const prev = state.petalProfile[i - 1];
+      const next = state.petalProfile[i + 1];
+
+      if (prev) {
+        const ctrlIn = this.controlPos(i, "in");
+        stroke(255, 150, 80, 110);
+        strokeWeight(1);
+        line(anchor.x, anchor.y, ctrlIn.x, ctrlIn.y);
+        fill(this.isDragging(i, "in") ? "#ffd7a6" : "#ff9f45");
+        stroke(255, 210, 160);
+        circle(ctrlIn.x, ctrlIn.y, this.controlR * 2);
+      }
+
+      if (next) {
+        const ctrlOut = this.controlPos(i, "out");
+        stroke(255, 150, 80, 110);
+        strokeWeight(1);
+        line(anchor.x, anchor.y, ctrlOut.x, ctrlOut.y);
+        fill(this.isDragging(i, "out") ? "#ffd7a6" : "#ff9f45");
+        stroke(255, 210, 160);
+        circle(ctrlOut.x, ctrlOut.y, this.controlR * 2);
+      }
+
       stroke(255);
       strokeWeight(1);
-      fill(i === this.dragIndex ? "#ffcc66" : "#ffffff");
-      circle(hp.x, hp.y, this.r * 2);
+      fill(this.isDragging(i, "anchor") ? "#8cd4ff" : "#4bb6ff");
+      circle(anchor.x, anchor.y, this.anchorR * 2);
 
       fill(255, 160);
       noStroke();
       textSize(10);
-      text(i, hp.x + 9, hp.y + 3);
+      text(i, anchor.x + 9, anchor.y + 3);
     }
 
     fill(255, 130);
     noStroke();
     textSize(10);
-    text("Drag right-side handles. Vertical = length position, horizontal = width.", x, y + 16);
+    text("Blue = anchors, orange = bezier controls. Drag vertically for length and horizontally for width.", x, y + 16);
 
     pop();
   }
 
-  handlePos(i) {
+  isDragging(index, type) {
+    return this.dragTarget && this.dragTarget.index === index && this.dragTarget.type === type;
+  }
+
+  anchorPos(i) {
     const x = state.profileEditorX;
     const y = state.profileEditorY;
     const w = state.profileEditorW;
     const h = state.profileEditorH;
     const p = state.petalProfile[i];
 
+    return this.profileToScreen(p.v, p.w);
+  }
+
+  controlPos(i, type) {
+    const p = state.petalProfile[i];
+    const v = type === "in" ? p.inV : p.outV;
+    const w = type === "in" ? p.inW : p.outW;
+    return this.profileToScreen(v, w);
+  }
+
+  profileToScreen(v, wv) {
+    const x = state.profileEditorX;
+    const y = state.profileEditorY;
+    const w = state.profileEditorW;
+    const h = state.profileEditorH;
+
     return {
-      x: x + w / 2 + p.w * w * 0.45,
-      y: y - p.v * h,
+      x: x + w / 2 + wv * w * 0.45,
+      y: y - v * h,
+    };
+  }
+
+  screenToProfile(mx, my) {
+    const x = state.profileEditorX;
+    const y = state.profileEditorY;
+    const w = state.profileEditorW;
+    const h = state.profileEditorH;
+
+    return {
+      v: constrain((y - my) / h, 0, 1),
+      w: constrain((mx - (x + w / 2)) / (w * 0.45), 0.01, 1.5),
     };
   }
 
@@ -362,9 +464,30 @@ class PetalProfileEditor {
     }
 
     for (let i = 0; i < state.petalProfile.length; i += 1) {
-      const hp = this.handlePos(i);
-      if (dist(mx, my, hp.x, hp.y) < this.r + 6) {
-        this.dragIndex = i;
+      const prev = state.petalProfile[i - 1];
+      const next = state.petalProfile[i + 1];
+
+      if (prev) {
+        const cpIn = this.controlPos(i, "in");
+        if (dist(mx, my, cpIn.x, cpIn.y) < this.controlR + 6) {
+          this.dragTarget = { index: i, type: "in" };
+          return true;
+        }
+      }
+
+      if (next) {
+        const cpOut = this.controlPos(i, "out");
+        if (dist(mx, my, cpOut.x, cpOut.y) < this.controlR + 6) {
+          this.dragTarget = { index: i, type: "out" };
+          return true;
+        }
+      }
+    }
+
+    for (let i = 0; i < state.petalProfile.length; i += 1) {
+      const hp = this.anchorPos(i);
+      if (dist(mx, my, hp.x, hp.y) < this.anchorR + 6) {
+        this.dragTarget = { index: i, type: "anchor" };
         return true;
       }
     }
@@ -373,49 +496,50 @@ class PetalProfileEditor {
   }
 
   mouseDragged(mx, my) {
-    if (this.dragIndex < 0) {
+    if (!this.dragTarget) {
       return false;
     }
 
-    const x = state.profileEditorX;
-    const y = state.profileEditorY;
-    const w = state.profileEditorW;
-    const h = state.profileEditorH;
-    const p = state.petalProfile[this.dragIndex];
+    const p = state.petalProfile[this.dragTarget.index];
+    const target = this.screenToProfile(mx, my);
 
-    let newV = constrain((y - my) / h, 0, 1);
-    const newW = constrain((mx - (x + w / 2)) / (w * 0.45), 0.01, 1.5);
+    if (this.dragTarget.type === "anchor") {
+      let newV = target.v;
+      const newW = target.w;
 
-    if (this.dragIndex === 0) {
-      newV = 0;
+      if (this.dragTarget.index === 0) {
+        newV = 0;
+      }
+      if (this.dragTarget.index === state.petalProfile.length - 1) {
+        newV = 1;
+      }
+
+      const dv = newV - p.v;
+      const dw = newW - p.w;
+
+      p.v = newV;
+      p.w = newW;
+      p.inV += dv;
+      p.inW += dw;
+      p.outV += dv;
+      p.outW += dw;
+    } else if (this.dragTarget.type === "in") {
+      const prev = state.petalProfile[this.dragTarget.index - 1];
+      p.inV = constrain(target.v, prev.v, p.v);
+      p.inW = target.w;
+    } else if (this.dragTarget.type === "out") {
+      const next = state.petalProfile[this.dragTarget.index + 1];
+      p.outV = constrain(target.v, p.v, next.v);
+      p.outW = target.w;
     }
-    if (this.dragIndex === state.petalProfile.length - 1) {
-      newV = 1;
-    }
-
-    p.v = newV;
-    p.w = newW;
 
     sortPetalProfile();
-
-    let closest = 0;
-    let best = Infinity;
-
-    for (let i = 0; i < state.petalProfile.length; i += 1) {
-      const hp = this.handlePos(i);
-      const d = dist(mx, my, hp.x, hp.y);
-      if (d < best) {
-        best = d;
-        closest = i;
-      }
-    }
-
-    this.dragIndex = closest;
+    this.dragTarget.index = state.petalProfile.indexOf(p);
     return true;
   }
 
   mouseReleased() {
-    this.dragIndex = -1;
+    this.dragTarget = null;
   }
 }
 
@@ -425,6 +549,7 @@ function sortPetalProfile() {
     state.petalProfile[0].v = 0;
     state.petalProfile[state.petalProfile.length - 1].v = 1;
   }
+  clampProfileControls();
 }
 
 function getProfileWidth(v) {
@@ -446,12 +571,101 @@ function getProfileWidth(v) {
     const b = pts[i + 1];
 
     if (v >= a.v && v <= b.v) {
-      const t = smoothstep(a.v, b.v, v);
-      return lerp(a.w, b.w, t);
+      const t = solveBezierTForV(a, b, v);
+      return cubicBezier(a.w, a.outW, b.inW, b.w, t);
     }
   }
 
   return Math.pow(Math.sin(Math.PI * v), 0.78);
+}
+
+function normalizePetalProfile(profile) {
+  const sorted = [...profile]
+    .map((p) => ({
+      v: constrain(p.v, 0, 1),
+      w: constrain(p.w, 0.01, 1.5),
+      inV: p.inV,
+      inW: p.inW,
+      outV: p.outV,
+      outW: p.outW,
+    }))
+    .sort((a, b) => a.v - b.v);
+
+  for (let i = 0; i < sorted.length; i += 1) {
+    const p = sorted[i];
+    const prev = sorted[i - 1];
+    const next = sorted[i + 1];
+
+    if (prev) {
+      const defaultInV = lerp(p.v, prev.v, 1 / 3);
+      const defaultInW = lerp(p.w, prev.w, 1 / 3);
+      p.inV = constrain(p.inV ?? defaultInV, prev.v, p.v);
+      p.inW = constrain(p.inW ?? defaultInW, 0.01, 1.5);
+    } else {
+      p.inV = p.v;
+      p.inW = p.w;
+    }
+
+    if (next) {
+      const defaultOutV = lerp(p.v, next.v, 1 / 3);
+      const defaultOutW = lerp(p.w, next.w, 1 / 3);
+      p.outV = constrain(p.outV ?? defaultOutV, p.v, next.v);
+      p.outW = constrain(p.outW ?? defaultOutW, 0.01, 1.5);
+    } else {
+      p.outV = p.v;
+      p.outW = p.w;
+    }
+  }
+
+  return sorted;
+}
+
+function clampProfileControls() {
+  for (let i = 0; i < state.petalProfile.length; i += 1) {
+    const p = state.petalProfile[i];
+    const prev = state.petalProfile[i - 1];
+    const next = state.petalProfile[i + 1];
+
+    p.w = constrain(p.w, 0.01, 1.5);
+
+    if (prev) {
+      p.inV = constrain(p.inV, prev.v, p.v);
+      p.inW = constrain(p.inW, 0.01, 1.5);
+    } else {
+      p.inV = p.v;
+      p.inW = p.w;
+    }
+
+    if (next) {
+      p.outV = constrain(p.outV, p.v, next.v);
+      p.outW = constrain(p.outW, 0.01, 1.5);
+    } else {
+      p.outV = p.v;
+      p.outW = p.w;
+    }
+  }
+}
+
+function cubicBezier(a, b, c, d, t) {
+  const mt = 1 - t;
+  return mt * mt * mt * a + 3 * mt * mt * t * b + 3 * mt * t * t * c + t * t * t * d;
+}
+
+function solveBezierTForV(a, b, targetV) {
+  let low = 0;
+  let high = 1;
+
+  for (let i = 0; i < 20; i += 1) {
+    const mid = (low + high) * 0.5;
+    const v = cubicBezier(a.v, a.outV, b.inV, b.v, mid);
+    if (v < targetV) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return (low + high) * 0.5;
 }
 
 function mousePressed() {
@@ -765,14 +979,25 @@ class RosetteFlower {
 }
 
 function project3D(p) {
-  const persp = 1 / (1 + p.z * state.perspective);
+  const rotated = rotateAroundYAxis(p, radians(state.rotationDeg));
+  const persp = 1 / (1 + rotated.z * state.perspective);
 
   return {
-    x: state.originX + p.x * state.scale * persp,
+    x: state.originX + rotated.x * state.scale * persp,
     y:
       state.originY -
-      p.y * state.scale * persp +
-      p.z * state.depthScale * state.viewTilt * state.scale,
+      rotated.y * state.scale * persp +
+      rotated.z * state.depthScale * state.viewTilt * state.scale,
+  };
+}
+
+function rotateAroundYAxis(p, angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return {
+    x: p.x * c - p.z * s,
+    y: p.y,
+    z: p.x * s + p.z * c,
   };
 }
 
@@ -789,6 +1014,206 @@ function drawProjectedPolyline(line, ox, oy) {
 }
 
 function exportSvg() {
+  if (state.exportMode !== "current") {
+    exportSequenceAsZip("svg", async (frame) =>
+      createZipEntry(
+        `rosette_flower_frame_${nf(frame, 2)}.svg`,
+        buildSvgMarkup(),
+        "text"
+      )
+    );
+    return;
+  }
+
+  downloadSvg("rosette_flower.svg");
+}
+
+function exportPng() {
+  if (state.exportMode !== "current") {
+    exportSequenceAsZip("png", async (frame) =>
+      createZipEntry(
+        `rosette_flower_frame_${nf(frame, 2)}.png`,
+        await getCanvasBlob(),
+        "blob"
+      )
+    );
+    return;
+  }
+
+  saveCanvas("rosette_flower", "png");
+}
+
+function updateExportFrameCountVisibility() {
+  const isCurrent = state.exportMode === "current";
+  if (exportFrameCountInput) {
+    exportFrameCountInput.hidden = isCurrent;
+  }
+  if (exportEasingInput) {
+    exportEasingInput.hidden = isCurrent;
+  }
+  if (previewLoopInput) {
+    previewLoopInput.hidden = isCurrent;
+  }
+  if (previewButton) {
+    previewButton.hidden = isCurrent;
+  }
+  if (isCurrent) {
+    stopPreviewAnimation();
+  }
+}
+
+async function exportSequenceAsZip(kind, buildEntry) {
+  const entries = [];
+
+  await exportAnimationFrames(async (frame) => {
+    entries.push(await buildEntry(frame));
+  });
+
+  const zipBlob = await buildZip(entries);
+  downloadBlob(zipBlob, `rosette_flower_frames_${kind}.zip`);
+}
+
+async function exportAnimationFrames(exportFrame) {
+  const frameCount = Math.max(2, Math.floor(state.exportFrameCount));
+  const originalBloomStage = state.bloomStage;
+  const originalRotation = state.rotationDeg;
+
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const progress =
+      state.exportMode === "rotation"
+        ? frame / frameCount
+        : frameCount <= 1
+          ? 0
+          : frame / (frameCount - 1);
+    applyExportFrameState(progress);
+    await waitForNextFrame();
+    await exportFrame(frame);
+    await waitForNextFrame();
+  }
+
+  state.bloomStage = originalBloomStage;
+  state.rotationDeg = originalRotation;
+}
+
+function applyExportFrameState(progress) {
+  const values = getAnimationValues(progress);
+  state.bloomStage = values.bloomStage;
+  state.rotationDeg = values.rotationDeg;
+}
+
+function getAnimationValues(progress) {
+  const originalBloomStage = state.bloomStage;
+  const originalRotation = state.rotationDeg;
+
+  if (state.exportMode === "bloom") {
+    return {
+      bloomStage: applyBloomEasing(progress),
+      rotationDeg: originalRotation,
+    };
+  }
+
+  if (state.exportMode === "rotation") {
+    return {
+      bloomStage: originalBloomStage,
+      rotationDeg: lerp(-180, 180, applyRotationEasing(progress)),
+    };
+  }
+
+  return {
+    bloomStage: originalBloomStage,
+    rotationDeg: originalRotation,
+  };
+}
+
+function applyBloomEasing(t) {
+  if (state.exportEasing === "soft") {
+    return easeInOutSine(t);
+  }
+  if (state.exportEasing === "medium") {
+    return smootherstep01(t);
+  }
+  if (state.exportEasing === "strong") {
+    return easeInOutCubic(t);
+  }
+  return t;
+}
+
+function applyRotationEasing(t) {
+  if (state.exportEasing === "soft") {
+    return cyclicEasePhase(t, 0.35);
+  }
+  if (state.exportEasing === "medium") {
+    return cyclicEasePhase(t, 0.6);
+  }
+  if (state.exportEasing === "strong") {
+    return cyclicEasePhase(t, 0.82);
+  }
+  return t;
+}
+
+function cyclicEasePhase(t, amount) {
+  return t - (amount * Math.sin(TWO_PI * t)) / TWO_PI;
+}
+
+function easeInOutSine(t) {
+  return 0.5 - 0.5 * Math.cos(Math.PI * t);
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function smootherstep01(t) {
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function togglePreviewAnimation() {
+  if (previewState.active) {
+    stopPreviewAnimation();
+    return;
+  }
+
+  previewState.active = true;
+  previewState.startMs = millis();
+}
+
+function stopPreviewAnimation() {
+  previewState.active = false;
+}
+
+function getPreviewAnimationValues() {
+  if (!previewState.active || state.exportMode === "current") {
+    return null;
+  }
+
+  const durationMs = (Math.max(2, Math.floor(state.exportFrameCount)) / 24) * 1000;
+  const elapsed = millis() - previewState.startMs;
+
+  if (!state.previewLoop && elapsed >= durationMs) {
+    stopPreviewAnimation();
+    return getAnimationValues(1);
+  }
+
+  const rawProgress = durationMs <= 0 ? 0 : elapsed / durationMs;
+  const progress = state.previewLoop ? rawProgress % 1 : constrain(rawProgress, 0, 1);
+  return getAnimationValues(progress);
+}
+
+function waitForNextFrame() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function downloadSvg(filename) {
+  downloadText(
+    buildSvgMarkup(),
+    filename,
+    "image/svg+xml;charset=utf-8"
+  );
+}
+
+function buildSvgMarkup() {
   const paths = flower.getSvgPaths();
   const col = hexToRgb(state.strokeCol);
   const strokeHex = rgbToHex(col);
@@ -829,11 +1254,7 @@ function exportSvg() {
   svg.push("</g>");
   svg.push("</svg>");
 
-  downloadText(
-    svg.join("\n"),
-    `rosette_flower_${Date.now()}.svg`,
-    "image/svg+xml;charset=utf-8"
-  );
+  return svg.join("\n");
 }
 
 function drawLabels() {
@@ -921,6 +1342,10 @@ function escapeSvg(s) {
 
 function downloadText(text, filename, mime) {
   const blob = new Blob([text], { type: mime });
+  downloadBlob(blob, filename);
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -929,6 +1354,126 @@ function downloadText(text, filename, mime) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function getCanvasBlob() {
+  return new Promise((resolve, reject) => {
+    const canvas = cnv && cnv.elt;
+    if (!canvas) {
+      reject(new Error("Canvas is not available for PNG export."));
+      return;
+    }
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+      reject(new Error("Failed to create PNG blob."));
+    }, "image/png");
+  });
+}
+
+async function createZipEntry(filename, content, kind) {
+  let bytes;
+  if (kind === "text") {
+    bytes = new TextEncoder().encode(content);
+  } else {
+    bytes = new Uint8Array(await content.arrayBuffer());
+  }
+
+  return {
+    filename,
+    bytes,
+  };
+}
+
+async function buildZip(entries) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBytes = new TextEncoder().encode(entry.filename);
+    const crc = crc32(entry.bytes);
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, 0, true);
+    localView.setUint16(12, 0, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, entry.bytes.length, true);
+    localView.setUint32(22, entry.bytes.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    localParts.push(localHeader, entry.bytes);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, 0, true);
+    centralView.setUint16(14, 0, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, entry.bytes.length, true);
+    centralView.setUint32(24, entry.bytes.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+    centralParts.push(centralHeader);
+
+    offset += localHeader.length + entry.bytes.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const endHeader = new Uint8Array(22);
+  const endView = new DataView(endHeader.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, offset, true);
+  endView.setUint16(20, 0, true);
+
+  return new Blob([...localParts, ...centralParts, endHeader], {
+    type: "application/zip",
+  });
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let j = 0; j < 8; j += 1) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function hexToRgb(hex) {
