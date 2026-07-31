@@ -1,0 +1,56 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.4/schema.json",
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 120
+  },
+  "css": { "formatter": { "enabled": false } },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": {},
+      "correctness": {
+        "noInvalidUseBeforeDeclaration": "off",
+        "noUndeclaredVariables": "off"
+      },
+      "style": {
+        "noNamespace": "error",
+        "useNumberNamespace": "off",
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error"
+      },
+      "security": { "noBlankTarget": "error" },
+      "suspicious": { "noEqualsToNull": "warn", "noUnknownAttribute": "error" },
+      "nursery": {
+        "noUndeclaredClasses": "warn",
+        "noRestrictedDependencies": "warn"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/__tests__/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    }
+  ],
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  }
+}
