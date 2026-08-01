@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Image Processor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
+    />
+    <style>
+      :root {
+        --panel: 400px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: var(--panel) 1fr;
+        height: 100vh;
+        background: #10151d;
+        color: #eef3f8;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      aside {
+        background: #161d27;
+        border-right: 1px solid #273341;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      main {
+        display: grid;
+      }
+
+      #wrap {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 14px;
+      }
+
+      .card {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        background: #0f141b;
+        border: 1px solid #243241;
+      }
+
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .card-title {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .card-sub {
+        font-size: 11px;
+        color: #aeb9c8;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        background: #202b39;
+        border: 1px solid #304052;
+        color: #edf3fb;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 14px;
+        user-select: none;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .hint {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #b8c4d3;
+        margin-top: 10px;
+      }
+
+      ul {
+        padding-left: 18px;
+        margin: 8px 0 0;
+      }
+
+      code {
+        color: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <div id="pane"></div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Source Image</div>
+            <div class="card-sub">Load or drop an image into the preview</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="uploadBtn" class="btn">Load Image</button>
+          <button id="clearBtn" class="btn">Clear Image</button>
+        </div>
+
+        <input id="fileInput" type="file" accept="image/*" hidden />
+
+        <div class="hint">
+          Notes:
+          <ul>
+            <li>The same cached geometry is used for preview and SVG export.</li>
+            <li><code>DPI</code>, <code>Zoom</code>, and <code>Fit View</code> come from the shared paper module.</li>
+            <li>Use <code>Mode</code> to switch between squiggle, line hatch, and arc hatch without leaving the tool.</li>
+          </ul>
+        </div>
+      </section>
+
+      <div class="row">
+        <button id="regenBtn" class="btn">Rebuild</button>
+        <button id="pngBtn" class="btn">Export PNG</button>
+        <button id="svgBtn" class="btn">Export SVG</button>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wrap"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="../shared/paper.js"></script>
+    <script src="../shared/export.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>
