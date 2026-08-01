@@ -3,6 +3,7 @@ const MAX_POINTS = 24000;
 const MODE_OPTIONS = {
   "Norm Spiral": "norm",
   "Split Spiral": "split",
+  Stretch: "stretch",
 };
 
 const SHAPE_OPTIONS = {
@@ -16,7 +17,11 @@ let redrawTimer = null;
 
 const scene = {
   points: [],
+  paths: [],
   seedOffsets: { rand1: 0, rand2: 0 },
+  stretchLines: [],
+  activeStretchLineIndex: -1,
+  stretchDrag: null,
 };
 
 const P = {
@@ -62,6 +67,7 @@ const P = {
   splitTopBias: -0.2,
   splitBottomBias: 0.2,
   splitUseRandomBias: true,
+  stretchStrengthMM: 18,
   smoothIterations: 0,
   svgIncludeBackground: true,
   svgFilename: "Spiral-Stone.svg",
@@ -248,6 +254,17 @@ function buildPane() {
     .on("change", regenerate);
   splitFolder.addInput(P, "splitUseRandomBias", { label: "Rnd Bias" }).on("change", regenerate);
 
+  const stretchFolder = pane.addFolder({ title: "Stretch" });
+  stretchFolder
+    .addInput(P, "stretchStrengthMM", { min: 0, max: 120, step: 0.5, label: "Strength" })
+    .on("change", regenerate);
+  stretchFolder.addButton({ title: "Delete Active Line" }).on("click", () => {
+    deleteActiveStretchLine();
+  });
+  stretchFolder.addButton({ title: "Clear Stretch Lines" }).on("click", () => {
+    clearStretchLines();
+  });
+
   const styleFolder = pane.addFolder({ title: "Style / Export" });
   styleFolder.addInput(P, "bg", { label: "BG" }).on("change", redrawScene);
   styleFolder.addInput(P, "paperColor", { label: "Paper" }).on("change", redrawScene);
@@ -307,7 +324,16 @@ function regenerate() {
     rand1: random(-0.5, 0.5),
     rand2: random(-0.5, 0.5),
   };
-  scene.points = P.mode === "split" ? buildSplitSpiralPoints() : buildNormSpiralPoints();
+  if (P.mode === "split") {
+    scene.points = buildSplitSpiralPoints();
+    scene.paths = scene.points.length >= 2 ? [scene.points] : [];
+  } else if (P.mode === "stretch") {
+    scene.paths = buildStretchSpiralPaths();
+    scene.points = scene.paths[0] || [];
+  } else {
+    scene.points = buildNormSpiralPoints();
+    scene.paths = scene.points.length >= 2 ? [scene.points] : [];
+  }
   redrawScene();
 }
 
@@ -324,7 +350,7 @@ function drawSpiralStone() {
     drawShapeGuide(center);
   }
 
-  if (!scene.points || scene.points.length < 2) {
+  if (!scene.paths || scene.paths.length === 0) {
     return;
   }
 
@@ -334,21 +360,31 @@ function drawSpiralStone() {
   strokeCap(ROUND);
   strokeJoin(ROUND);
 
-  beginShape();
-  if (P.mode === "split") {
-    for (const point of scene.points) {
-      vertex(point.x, point.y);
+  for (const path of scene.paths) {
+    if (!path || path.length < 2) {
+      continue;
     }
-  } else {
-    const first = scene.points[0];
-    const last = scene.points[scene.points.length - 1];
-    curveVertex(first.x, first.y);
-    for (const point of scene.points) {
-      curveVertex(point.x, point.y);
+
+    beginShape();
+    if (P.mode === "split" || P.mode === "stretch") {
+      for (const point of path) {
+        vertex(point.x, point.y);
+      }
+    } else {
+      const first = path[0];
+      const last = path[path.length - 1];
+      curveVertex(first.x, first.y);
+      for (const point of path) {
+        curveVertex(point.x, point.y);
+      }
+      curveVertex(last.x, last.y);
     }
-    curveVertex(last.x, last.y);
+    endShape();
   }
-  endShape();
+
+  if (P.mode === "stretch") {
+    drawStretchGuides();
+  }
 }
 
 function buildNormSpiralPoints() {
@@ -401,6 +437,51 @@ function buildSplitSpiralPoints() {
   return smoothPoints(removeDuplicatePoints(points), P.smoothIterations);
 }
 
+function buildStretchSpiralPaths() {
+  const center = getCenterPoint();
+  const basePoints = buildNormSpiralPoints();
+  if (!basePoints.length) {
+    return [];
+  }
+
+  const path = [];
+
+  const startSigns = getStretchSigns(basePoints[0], basePoints[1] || null);
+  path.push(applyShapeConstraint(displacePointWithSigns(basePoints[0], startSigns), center));
+
+  for (let i = 0; i < basePoints.length - 1; i += 1) {
+    const a = basePoints[i];
+    const b = basePoints[i + 1];
+    const startSignsForSegment = getStretchSigns(a, b);
+    const endSignsForSegment = getStretchSigns(b, a);
+    const crossings = collectStretchCrossings(a, b, startSignsForSegment, endSignsForSegment);
+
+    let activeSigns = { ...startSignsForSegment };
+
+    for (const crossing of crossings) {
+      const beforePoint = applyShapeConstraint(
+        displacePointWithSigns(crossing.point, activeSigns),
+        center
+      );
+      path.push(beforePoint);
+
+      activeSigns[crossing.lineIndex] = -activeSigns[crossing.lineIndex];
+      const afterPoint = applyShapeConstraint(
+        displacePointWithSigns(crossing.point, activeSigns),
+        center
+      );
+      path.push(afterPoint);
+    }
+
+    path.push(
+      applyShapeConstraint(displacePointWithSigns(b, endSignsForSegment), center)
+    );
+  }
+
+  const cleaned = removeDuplicatePoints(path);
+  return cleaned.length >= 2 ? [cleaned] : [];
+}
+
 function getCenterPoint() {
   return {
     x: P.canvasWMM * 0.5,
@@ -443,6 +524,139 @@ function applyShapeConstraint(point, center) {
   };
 }
 
+function applyStretchToPoint(point) {
+  if (!scene.stretchLines.length || P.stretchStrengthMM <= 0) {
+    return point;
+  }
+
+  let nextX = point.x;
+  let nextY = point.y;
+
+  for (const line of scene.stretchLines) {
+    if (!line) {
+      continue;
+    }
+
+    const dx = line.x2 - line.x1;
+    const dy = line.y2 - line.y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len <= 0.0001) {
+      continue;
+    }
+
+    const invLen = 1 / len;
+    const tx = dx * invLen;
+    const ty = dy * invLen;
+    const nx = -ty;
+    const ny = tx;
+    const px = nextX - line.x1;
+    const py = nextY - line.y1;
+    const signedDist = px * nx + py * ny;
+    if (Math.abs(signedDist) <= 0.000001) {
+      continue;
+    }
+
+    const side = signedDist > 0 ? 1 : -1;
+    const amount = P.stretchStrengthMM * side;
+    nextX += nx * amount;
+    nextY += ny * amount;
+  }
+
+  return { x: nextX, y: nextY };
+}
+
+function signedDistanceToStretchLine(point, line) {
+  const dx = line.x2 - line.x1;
+  const dy = line.y2 - line.y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len <= 0.0001) {
+    return 0;
+  }
+
+  const nx = -dy / len;
+  const ny = dx / len;
+  return (point.x - line.x1) * nx + (point.y - line.y1) * ny;
+}
+
+function getStretchSigns(point, fallbackPoint = null) {
+  const signs = {};
+
+  for (let i = 0; i < scene.stretchLines.length; i += 1) {
+    const line = scene.stretchLines[i];
+    let dist = signedDistanceToStretchLine(point, line);
+    if (Math.abs(dist) <= 0.000001 && fallbackPoint) {
+      dist = signedDistanceToStretchLine(fallbackPoint, line);
+    }
+    signs[i] = dist < 0 ? -1 : 1;
+  }
+
+  return signs;
+}
+
+function displacePointWithSigns(point, signs) {
+  if (!scene.stretchLines.length || P.stretchStrengthMM <= 0) {
+    return point;
+  }
+
+  let nextX = point.x;
+  let nextY = point.y;
+
+  for (let i = 0; i < scene.stretchLines.length; i += 1) {
+    const line = scene.stretchLines[i];
+    const dx = line.x2 - line.x1;
+    const dy = line.y2 - line.y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len <= 0.0001) {
+      continue;
+    }
+
+    const nx = -dy / len;
+    const ny = dx / len;
+    const side = signs[i] || 1;
+    nextX += nx * P.stretchStrengthMM * side;
+    nextY += ny * P.stretchStrengthMM * side;
+  }
+
+  return { x: nextX, y: nextY };
+}
+
+function collectStretchCrossings(a, b, signsA, signsB) {
+  const crossings = [];
+  const abX = b.x - a.x;
+  const abY = b.y - a.y;
+
+  for (let i = 0; i < scene.stretchLines.length; i += 1) {
+    if (signsA[i] === signsB[i]) {
+      continue;
+    }
+
+    const line = scene.stretchLines[i];
+    const da = signedDistanceToStretchLine(a, line);
+    const db = signedDistanceToStretchLine(b, line);
+    const denom = da - db;
+    if (Math.abs(denom) <= 0.000001) {
+      continue;
+    }
+
+    const t = da / denom;
+    if (t <= 0 || t >= 1) {
+      continue;
+    }
+
+    crossings.push({
+      lineIndex: i,
+      t,
+      point: {
+        x: a.x + abX * t,
+        y: a.y + abY * t,
+      },
+    });
+  }
+
+  crossings.sort((left, right) => left.t - right.t);
+  return crossings;
+}
+
 function sampleNormOffset(localX, localY) {
   const xScale1 = P.noiseScaleX * Math.max(0.5, P.radialFlow);
   const yScale1 = P.noiseScaleY * Math.max(0.5, P.radialFlow);
@@ -450,8 +664,8 @@ function sampleNormOffset(localX, localY) {
   const yScale2 = P.noiseScaleY * Math.max(2, P.angularFlow / 5);
 
   return {
-    x: P.noiseStrengthXMM * noise(localX * xScale1, localY * yScale1 + 1),
-    y: P.noiseStrengthYMM * noise(localX * xScale2, localY * yScale2 + 2),
+    x: P.noiseStrengthXMM * map(noise(localX * xScale1, localY * yScale1 + 1), 0, 1, -1, 1),
+    y: P.noiseStrengthYMM * map(noise(localX * xScale2, localY * yScale2 + 2), 0, 1, -1, 1),
   };
 }
 
@@ -467,21 +681,21 @@ function sampleSplitOffset(localX, localY, rand1, rand2) {
 
   if (localY < -P.splitCutMM) {
     return {
-      x: P.noiseStrengthXMM * P.splitTopMultiplier * map(noise(localX * topScaleX, localY * topScaleY) + rand2 + P.splitTopBias, 0, 1, 0, 1),
-      y: P.noiseStrengthYMM * P.splitTopMultiplier * map(noise(localX * topScaleX, localY * topScaleY + 1000), 0, 1, 0, 1),
+      x: P.noiseStrengthXMM * P.splitTopMultiplier * map(noise(localX * topScaleX, localY * topScaleY) + rand2 + P.splitTopBias, 0, 1, -1, 1),
+      y: P.noiseStrengthYMM * P.splitTopMultiplier * map(noise(localX * topScaleX, localY * topScaleY + 1000), 0, 1, -1, 1),
     };
   }
 
   if (localY < P.splitCutMM) {
     return {
-      x: P.noiseStrengthXMM * P.splitMidMultiplier * map(noise(localX * midScaleX, localY * midScaleY), 0, 1, 0, 1),
-      y: P.noiseStrengthYMM * P.splitMidMultiplier * map(noise(localX * midScaleX2, localY * midScaleY2 + 1000), 0, 1, 0, 1),
+      x: P.noiseStrengthXMM * P.splitMidMultiplier * map(noise(localX * midScaleX, localY * midScaleY), 0, 1, -1, 1),
+      y: P.noiseStrengthYMM * P.splitMidMultiplier * map(noise(localX * midScaleX2, localY * midScaleY2 + 1000), 0, 1, -1, 1),
     };
   }
 
   return {
-    x: P.noiseStrengthXMM * P.splitBottomMultiplier * map(noise(localX * bottomScaleX, localY * bottomScaleY) + rand1 + P.splitBottomBias, 0, 1, 0, 1),
-    y: P.noiseStrengthYMM * P.splitBottomMultiplier * map(noise(localX * bottomScaleX, localY * bottomScaleY + 1000), 0, 1, 0, 1),
+    x: P.noiseStrengthXMM * P.splitBottomMultiplier * map(noise(localX * bottomScaleX, localY * bottomScaleY) + rand1 + P.splitBottomBias, 0, 1, -1, 1),
+    y: P.noiseStrengthYMM * P.splitBottomMultiplier * map(noise(localX * bottomScaleX, localY * bottomScaleY + 1000), 0, 1, -1, 1),
   };
 }
 
@@ -500,6 +714,36 @@ function drawShapeGuide(center) {
   rectMode(CENTER);
   rect(center.x, center.y, bounds.halfW * 2, bounds.halfH * 2);
   rectMode(CORNER);
+}
+
+function drawStretchGuides() {
+  push();
+  const activeColor = "#ff7b72";
+  const idleColor = "#6cb6ff";
+  strokeWeight(Math.max(0.3, P.strokeWeightMM * 1.8));
+  noFill();
+
+  for (let i = 0; i < scene.stretchLines.length; i += 1) {
+    const line = scene.stretchLines[i];
+    const active = i === scene.activeStretchLineIndex;
+    stroke(active ? activeColor : idleColor);
+    lineSegment(line.x1, line.y1, line.x2, line.y2);
+    fill(active ? activeColor : idleColor);
+    noStroke();
+    circle(line.x1, line.y1, active ? 3.5 : 2.4);
+    circle(line.x2, line.y2, active ? 3.5 : 2.4);
+    noFill();
+    stroke(active ? activeColor : idleColor);
+  }
+
+  pop();
+}
+
+function lineSegment(x1, y1, x2, y2) {
+  beginShape();
+  vertex(x1, y1);
+  vertex(x2, y2);
+  endShape();
 }
 
 function smoothPoints(points, iterations) {
@@ -563,6 +807,159 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3 - 2 * t);
 }
 
+function mousePressed() {
+  if (P.mode !== "stretch") {
+    return;
+  }
+
+  const point = getMousePointMM();
+  if (!point) {
+    return;
+  }
+
+  const hit = findStretchLineHit(point);
+  if (hit) {
+    scene.activeStretchLineIndex = hit.index;
+    if (hit.part === "start" || hit.part === "end") {
+      scene.stretchDrag = { index: hit.index, part: hit.part };
+    } else {
+      scene.stretchDrag = null;
+    }
+    redrawScene();
+    return false;
+  }
+
+  const line = {
+    x1: point.x,
+    y1: point.y,
+    x2: point.x,
+    y2: point.y,
+  };
+  scene.stretchLines.push(line);
+  scene.activeStretchLineIndex = scene.stretchLines.length - 1;
+  scene.stretchDrag = { index: scene.activeStretchLineIndex, part: "end" };
+  regenerate();
+  return false;
+}
+
+function mouseDragged() {
+  if (P.mode !== "stretch" || !scene.stretchDrag) {
+    return;
+  }
+
+  const point = getMousePointMM();
+  if (!point) {
+    return;
+  }
+
+  updateStretchLinePoint(scene.stretchDrag.index, scene.stretchDrag.part, point);
+  regenerate();
+  return false;
+}
+
+function mouseReleased() {
+  if (P.mode !== "stretch" || !scene.stretchDrag) {
+    return;
+  }
+
+  const drag = scene.stretchDrag;
+  scene.stretchDrag = null;
+  const line = scene.stretchLines[drag.index];
+  if (line && Math.sqrt(distSq(line.x1, line.y1, line.x2, line.y2)) < 1) {
+    scene.stretchLines.splice(drag.index, 1);
+    scene.activeStretchLineIndex = Math.min(scene.activeStretchLineIndex, scene.stretchLines.length - 1);
+  }
+  regenerate();
+  return false;
+}
+
+function getMousePointMM() {
+  const pxPerMM = PaperUtils.getPxPerMM(P);
+  if (!Number.isFinite(pxPerMM) || pxPerMM <= 0) {
+    return null;
+  }
+
+  const x = mouseX / pxPerMM;
+  const y = mouseY / pxPerMM;
+  if (x < 0 || x > P.canvasWMM || y < 0 || y > P.canvasHMM) {
+    return null;
+  }
+
+  return { x, y };
+}
+
+function findStretchLineHit(point) {
+  const endpointRadius = 6;
+  const segmentRadius = 4;
+
+  for (let i = scene.stretchLines.length - 1; i >= 0; i -= 1) {
+    const line = scene.stretchLines[i];
+    if (Math.sqrt(distSq(point.x, point.y, line.x1, line.y1)) <= endpointRadius) {
+      return { index: i, part: "start" };
+    }
+    if (Math.sqrt(distSq(point.x, point.y, line.x2, line.y2)) <= endpointRadius) {
+      return { index: i, part: "end" };
+    }
+    if (distanceToSegment(point, line) <= segmentRadius) {
+      return { index: i, part: "segment" };
+    }
+  }
+
+  return null;
+}
+
+function distanceToSegment(point, line) {
+  const dx = line.x2 - line.x1;
+  const dy = line.y2 - line.y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq <= 0.000001) {
+    return Math.sqrt(distSq(point.x, point.y, line.x1, line.y1));
+  }
+
+  const t = constrain(((point.x - line.x1) * dx + (point.y - line.y1) * dy) / lenSq, 0, 1);
+  const projX = line.x1 + dx * t;
+  const projY = line.y1 + dy * t;
+  return Math.sqrt(distSq(point.x, point.y, projX, projY));
+}
+
+function updateStretchLinePoint(index, part, point) {
+  const line = scene.stretchLines[index];
+  if (!line) {
+    return;
+  }
+
+  if (part === "start") {
+    line.x1 = point.x;
+    line.y1 = point.y;
+    return;
+  }
+
+  line.x2 = point.x;
+  line.y2 = point.y;
+}
+
+function deleteActiveStretchLine() {
+  if (scene.activeStretchLineIndex < 0 || scene.activeStretchLineIndex >= scene.stretchLines.length) {
+    return;
+  }
+
+  scene.stretchLines.splice(scene.activeStretchLineIndex, 1);
+  scene.activeStretchLineIndex = Math.min(scene.activeStretchLineIndex, scene.stretchLines.length - 1);
+  scene.stretchDrag = null;
+  regenerate();
+}
+
+function clearStretchLines() {
+  if (!scene.stretchLines.length) {
+    return;
+  }
+
+  scene.stretchLines = [];
+  scene.activeStretchLineIndex = -1;
+  scene.stretchDrag = null;
+  regenerate();
+}
+
 function normalizeParams() {
   P.spiralTurns = constrain(P.spiralTurns, 0.5, 16);
   P.thetaStepDeg = constrain(P.thetaStepDeg, 0.01, 1);
@@ -586,6 +983,7 @@ function normalizeParams() {
   P.splitTopMultiplier = constrain(P.splitTopMultiplier, 0, 2);
   P.splitMidMultiplier = constrain(P.splitMidMultiplier, 0, 2);
   P.splitBottomMultiplier = constrain(P.splitBottomMultiplier, 0, 2);
+  P.stretchStrengthMM = constrain(P.stretchStrengthMM, 0, 120);
   P.smoothIterations = constrain(Math.floor(P.smoothIterations), 0, 4);
   pane.refresh();
 }
@@ -613,12 +1011,17 @@ function exportSVG() {
     );
   }
 
-  if (scene.points.length >= 2) {
-    svg.push(
-      `<path d="${buildPathD(scene.points)}" fill="none" stroke="${ExportUtils.escapeXML(
-        P.strokeColor
-      )}" stroke-width="${ExportUtils.fmt(Math.max(0.0001, P.strokeWeightMM))}" stroke-linecap="round" stroke-linejoin="round"/>`
-    );
+  if (scene.paths.length) {
+    for (const path of scene.paths) {
+      if (!path || path.length < 2) {
+        continue;
+      }
+      svg.push(
+        `<path d="${buildPathD(path)}" fill="none" stroke="${ExportUtils.escapeXML(
+          P.strokeColor
+        )}" stroke-width="${ExportUtils.fmt(Math.max(0.0001, P.strokeWeightMM))}" stroke-linecap="round" stroke-linejoin="round"/>`
+      );
+    }
   }
 
   svg.push("</svg>");
