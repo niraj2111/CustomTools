@@ -2454,6 +2454,22 @@ function buildPane() {
       invalidateGeometry();
       redraw();
     });
+  defaultSpringFolder
+    .addButton({ title: "Apply Defaults To All Springs" })
+    .on("click", () => {
+      if (spineStyles.length === 0) {
+        return;
+      }
+      for (const style of spineStyles) {
+        if (!style) {
+          continue;
+        }
+        applyDefaultSpringSettingsToStyle(style);
+      }
+      refreshAnchorMonitor();
+      invalidateGeometry();
+      redraw();
+    });
 
   anchorFolder = pane.addFolder({ title: "Spine" });
   refreshAnchorMonitor();
@@ -2708,16 +2724,21 @@ function exportSVG() {
       if (!style.showSpring) {
         continue;
       }
-      for (const springPath of cachedSpringPaths[segmentIndex]) {
-        if (springPath.length < 2) {
-          continue;
-        }
+      const springPaths = cachedSpringPaths[segmentIndex].filter((springPath) => springPath.length >= 2);
+      if (springPaths.length === 0) {
+        continue;
+      }
+      svg.push(
+        `<g id="spring-${segmentIndex + 1}" data-spine-index="${segmentIndex}" fill="none" stroke="${escapeXML(
+          style.springColor
+        )}" stroke-width="${fmt(P.springStrokeMM)}">`
+      );
+      for (const springPath of springPaths) {
         svg.push(
-          `<path d="${polylineToPath(springPath)}" fill="none" stroke="${escapeXML(
-            style.springColor
-          )}" stroke-width="${fmt(P.springStrokeMM)}"/>`
+          `<path d="${polylineToPath(springPath)}"/>`
         );
       }
+      svg.push("</g>");
     }
   }
 
