@@ -119,9 +119,12 @@ const P = {
   bg: "#eef2f6",
   paperColor: "#ffffff",
   showPaperBounds: true,
+  multiplyMode: true,
   showImage: false,
   imageOpacity: 0.22,
   fitMode: "cover",
+  imageGamma: 1,
+  invertBrightness: false,
   sampleGridPx: 1,
   traceStepMM: 0.8,
   mode: "lineHatch",
@@ -285,6 +288,8 @@ function buildPane() {
       label: "Fit",
     })
     .on("change", rebuildScene);
+  imageFolder.addInput(P, "imageGamma", { min: 0.2, max: 3, step: 0.05, label: "Gamma" }).on("change", rebuildScene);
+  imageFolder.addInput(P, "invertBrightness", { label: "Invert Bright" }).on("change", rebuildScene);
   imageFolder.addInput(P, "sampleGridPx", { min: 1, max: 32, step: 1, label: "Sample Grid" }).on("change", rebuildScene);
   imageFolder.addInput(P, "traceStepMM", { min: 0.2, max: 8, step: 0.1, label: "Trace Step" }).on("change", rebuildScene);
   imageFolder.addInput(P, "showImage", { label: "Show Image" }).on("change", redraw);
@@ -391,6 +396,7 @@ function buildPane() {
   styleFolder.addInput(P, "bg", { label: "BG" }).on("change", redraw);
   styleFolder.addInput(P, "paperColor", { label: "Paper" }).on("change", redraw);
   styleFolder.addInput(P, "showPaperBounds", { label: "Paper Bounds" }).on("change", redraw);
+  styleFolder.addInput(P, "multiplyMode", { label: "Multiply Layers" }).on("change", redraw);
 
   const exportFolder = pane.addFolder({ title: "Export" });
   exportFolder.addInput(P, "svgIncludeBackground", { label: "SVG BG" });
@@ -608,7 +614,7 @@ function drawImageBounds() {
 function drawSceneLayers() {
   const ctx = drawingContext;
   ctx.save();
-  ctx.globalCompositeOperation = "multiply";
+  ctx.globalCompositeOperation = P.multiplyMode ? "multiply" : "source-over";
 
   noFill();
   strokeCap(ROUND);
@@ -1025,7 +1031,13 @@ function sampleBrightnessAtMM(xMM, yMM, imageMapping) {
   const r = img.pixels[idx] ?? 255;
   const g = img.pixels[idx + 1] ?? 255;
   const b = img.pixels[idx + 2] ?? 255;
-  return 0.299 * r + 0.587 * g + 0.114 * b;
+  let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const safeGamma = Math.max(0.0001, Number(P.imageGamma || 1));
+  brightness = Math.pow(constrain(brightness, 0, 1), safeGamma);
+  if (P.invertBrightness) {
+    brightness = 1 - brightness;
+  }
+  return brightness * 255;
 }
 
 function pointInRect(x, y, rect) {
