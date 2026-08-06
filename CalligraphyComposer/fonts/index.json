@@ -1,0 +1,9 @@
+{
+  "fonts": [
+    {
+      "id": "italics",
+      "name": "italics",
+      "path": "./fonts/italics.json"
+    }
+  ]
+}
