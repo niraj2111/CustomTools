@@ -115,7 +115,7 @@ const P = {
   dpi: 96,
   previewScale: 1,
   fitToViewport: true,
-  marginMM: 14,
+  marginMM: 15,
   bg: "#eef2f6",
   paperColor: "#ffffff",
   showPaperBounds: true,
