@@ -1,0 +1,8534 @@
+{
+ "meta": {
+  "familyName": "Untitled Stroke Font",
+  "savedAt": ""
+ },
+ "metrics": {
+  "ascender": 750,
+  "capHeight": 700,
+  "xHeight": 500,
+  "descender": -200,
+  "overshoot": 12,
+  "lineGap": 120,
+  "hheaAscender": 750,
+  "hheaDescender": -200,
+  "typoAscender": 750,
+  "typoDescender": -200,
+  "typoLineGap": 120,
+  "winAscent": 820,
+  "winDescent": 260
+ },
+ "physicalEmMm": 22,
+ "pens": [
+  {
+   "id": "p1",
+   "name": "Micron 03",
+   "model": "round",
+   "mm": 0.35,
+   "ratio": 1,
+   "angle": 0,
+   "cap": "natural",
+   "colour": "#1E3F9E"
+  },
+  {
+   "id": "p2",
+   "name": "Micron 05",
+   "model": "round",
+   "mm": 0.45,
+   "ratio": 1,
+   "angle": 0,
+   "cap": "natural",
+   "colour": "#245C8C"
+  },
+  {
+   "id": "p3",
+   "name": "Plotter 0.7",
+   "model": "round",
+   "mm": 0.7,
+   "ratio": 1,
+   "angle": 0,
+   "cap": "natural",
+   "colour": "#0F5C4E"
+  },
+  {
+   "id": "p4",
+   "name": "Parallel 2.4",
+   "model": "broad",
+   "mm": 2.4,
+   "ratio": 0.07,
+   "angle": 30,
+   "cap": "natural",
+   "colour": "#7A2E6D"
+  },
+  {
+   "id": "p5",
+   "name": "Parallel 3.8",
+   "model": "broad",
+   "mm": 3.8,
+   "ratio": 0.07,
+   "angle": 30,
+   "cap": "natural",
+   "colour": "#8C2340"
+  },
+  {
+   "id": "p6",
+   "name": "Speedball C2",
+   "model": "broad",
+   "mm": 3.2,
+   "ratio": 0.09,
+   "angle": 20,
+   "cap": "natural",
+   "colour": "#A03D1E"
+  },
+  {
+   "id": "p7",
+   "name": "Stub 1.1",
+   "model": "oval",
+   "mm": 1.1,
+   "ratio": 0.5,
+   "angle": 0,
+   "cap": "natural",
+   "colour": "#4A5A22"
+  },
+  {
+   "id": "p8",
+   "name": "Folded pen",
+   "model": "broad",
+   "mm": 4,
+   "ratio": 0.04,
+   "angle": 45,
+   "cap": "natural",
+   "colour": "#2B2B33"
+  }
+ ],
+ "activePen": "p4",
+ "primitives": {
+  "stem": {
+   "id": "stem",
+   "name": "Stem",
+   "desc": "vertical spine for a b d h l",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": -400,
+       "y": 840,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": -390,
+       "y": 790,
+       "in": [
+        -388.9140831150382,
+        866.2662600283154
+       ],
+       "out": [
+        -391.0859168849618,
+        713.7337399716846
+       ],
+       "w": 1
+      },
+      {
+       "x": -410,
+       "y": 130,
+       "in": [
+        -406.82838595781544,
+        200.20442509644795
+       ],
+       "out": [
+        -413.17161404218456,
+        59.79557490355208
+       ],
+       "w": 1
+      },
+      {
+       "x": -360,
+       "y": 100,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-v31285uk"
+    }
+   ]
+  },
+  "shoulder": {
+   "id": "shoulder",
+   "name": "Shoulder",
+   "desc": "single shoulder for n h m",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 0,
+       "y": 330,
+       "in": null,
+       "out": [
+        0,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 175,
+       "y": 500,
+       "in": [
+        65,
+        500
+       ],
+       "out": [
+        285,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 350,
+       "y": 330,
+       "in": [
+        350,
+        470
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 350,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-olvvzjbu"
+    }
+   ]
+  },
+  "double-shoulder": {
+   "id": "double-shoulder",
+   "name": "Double shoulder",
+   "desc": "paired arches for m",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 0,
+       "y": 330,
+       "in": null,
+       "out": [
+        0,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 140,
+       "y": 500,
+       "in": [
+        55,
+        500
+       ],
+       "out": [
+        225,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 330,
+       "in": [
+        280,
+        470
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-rt3igkyg"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 0,
+       "y": 330,
+       "in": null,
+       "out": [
+        0,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 140,
+       "y": 500,
+       "in": [
+        55,
+        500
+       ],
+       "out": [
+        225,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 330,
+       "in": [
+        280,
+        470
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-ixz5kr9r"
+    }
+   ]
+  },
+  "bowl-right": {
+   "id": "bowl-right",
+   "name": "Right bowl",
+   "desc": "counter and return for a b p",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 0,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 0,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-8v2kwf0z"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 0,
+       "y": 330,
+       "in": null,
+       "out": [
+        0,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 160,
+       "y": 500,
+       "in": [
+        60,
+        500
+       ],
+       "out": [
+        275,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 350,
+       "y": 320,
+       "in": [
+        350,
+        470
+       ],
+       "out": [
+        350,
+        145
+       ],
+       "w": 1
+      },
+      {
+       "x": 175,
+       "y": 0,
+       "in": [
+        270,
+        0
+       ],
+       "out": [
+        60,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 0,
+       "y": 110,
+       "in": [
+        0,
+        20
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-9klxf0ui"
+    }
+   ]
+  },
+  "bowl-left": {
+   "id": "bowl-left",
+   "name": "Left bowl",
+   "desc": "mirrored counter for d q",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 140,
+       "y": 430,
+       "in": null,
+       "out": [
+        74.21276228292055,
+        386.20211756703407
+       ],
+       "w": 1
+      },
+      {
+       "x": -80,
+       "y": 420,
+       "in": [
+        -28.179843096156105,
+        452.65435522017174
+       ],
+       "out": [
+        -131.8201569038439,
+        387.34564477982826
+       ],
+       "w": 1
+      },
+      {
+       "x": -170,
+       "y": 240,
+       "in": [
+        -170,
+        390
+       ],
+       "out": [
+        -170,
+        65
+       ],
+       "w": 1
+      },
+      {
+       "x": -70,
+       "y": -50,
+       "in": [
+        -165,
+        -50
+       ],
+       "out": [
+        45,
+        -50
+       ],
+       "w": 1
+      },
+      {
+       "x": 120,
+       "y": 180,
+       "in": [
+        120,
+        90
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-9l3487i0"
+    }
+   ]
+  },
+  "ring": {
+   "id": "ring",
+   "name": "Ring",
+   "desc": "closed counter for o O Q",
+   "strokes": [
+    {
+     "closed": true,
+     "nodes": [
+      {
+       "x": 0,
+       "y": 500,
+       "in": [
+        -110.46000000000001,
+        500
+       ],
+       "out": [
+        110.46000000000001,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 200,
+       "y": 250,
+       "in": [
+        200,
+        388.07500000000005
+       ],
+       "out": [
+        200,
+        111.92499999999998
+       ],
+       "w": 1
+      },
+      {
+       "x": 0,
+       "y": 0,
+       "in": [
+        110.46000000000001,
+        0
+       ],
+       "out": [
+        -110.46000000000001,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": -200,
+       "y": 250,
+       "in": [
+        -200,
+        111.92499999999998
+       ],
+       "out": [
+        -200,
+        388.07500000000005
+       ],
+       "w": 1
+      }
+     ],
+     "_id": "stroke-tvbk1mse"
+    }
+   ]
+  },
+  "crossbar": {
+   "id": "crossbar",
+   "name": "Crossbar",
+   "desc": "horizontal bar for A E F H t",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": -180,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 180,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-s51cfgfd"
+    }
+   ]
+  },
+  "diagonal": {
+   "id": "diagonal",
+   "name": "Diagonal",
+   "desc": "slanted stroke for v w x y z",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": -140,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 0,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 140,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-vdpqq723"
+    }
+   ]
+  },
+  "dot": {
+   "id": "dot",
+   "name": "Dot",
+   "desc": "punctuation dot or i j tittle",
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 0,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 0,
+       "y": 22,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-hlo887t2"
+    }
+   ]
+  }
+ },
+ "glyphs": {
+  "space": {
+   "advance": 250,
+   "strokes": [],
+   "primitiveInstances": [],
+   "strokeOrder": [],
+   "lsb": 0,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 250,
+     "lsb": 0
+    }
+   }
+  },
+  "a": {
+   "advance": 470,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 441,
+       "y": 520,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 391,
+       "y": 440,
+       "in": [
+        392.0859168849618,
+        516.2662600283154
+       ],
+       "out": [
+        389.9140831150382,
+        363.7337399716846
+       ],
+       "w": 1
+      },
+      {
+       "x": 391,
+       "y": 60,
+       "in": [
+        394.17161404218456,
+        130.20442509644795
+       ],
+       "out": [
+        387.82838595781544,
+        -10.20442509644792
+       ],
+       "w": 1
+      },
+      {
+       "x": 441,
+       "y": 30,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-l0y9ay28"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 411,
+       "y": 500,
+       "in": null,
+       "out": [
+        345.21276228292055,
+        456.20211756703407
+       ],
+       "w": 1
+      },
+      {
+       "x": 191,
+       "y": 490,
+       "in": [
+        242.8201569038439,
+        522.6543552201717
+       ],
+       "out": [
+        139.1798430961561,
+        457.34564477982826
+       ],
+       "w": 1
+      },
+      {
+       "x": 101,
+       "y": 310,
+       "in": [
+        101,
+        460
+       ],
+       "out": [
+        101,
+        135
+       ],
+       "w": 1
+      },
+      {
+       "x": 201,
+       "y": 20,
+       "in": [
+        106,
+        20
+       ],
+       "out": [
+        316,
+        20
+       ],
+       "w": 1
+      },
+      {
+       "x": 391,
+       "y": 250,
+       "in": [
+        391,
+        160
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "inst-l15eq3n2:stroke-9l3487i0",
+     "_link": {
+      "sourceId": "bowl-left",
+      "instanceId": "inst-l15eq3n2",
+      "sourceStrokeId": "stroke-9l3487i0",
+      "strokeIndex": 0
+     }
+    }
+   ],
+   "primitiveInstances": [
+    {
+     "id": "inst-l15eq3n2",
+     "sourceId": "bowl-left",
+     "tx": 271,
+     "ty": 70,
+     "sx": 1,
+     "sy": 1
+    }
+   ],
+   "strokeOrder": [
+    "stroke-l0y9ay28",
+    "inst-l15eq3n2:stroke-9l3487i0"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 441,
+         "y": 520,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 391,
+         "y": 440,
+         "in": [
+          392.0859168849618,
+          516.2662600283154
+         ],
+         "out": [
+          389.9140831150382,
+          363.7337399716846
+         ],
+         "w": 1
+        },
+        {
+         "x": 391,
+         "y": 60,
+         "in": [
+          394.17161404218456,
+          130.20442509644795
+         ],
+         "out": [
+          387.82838595781544,
+          -10.20442509644792
+         ],
+         "w": 1
+        },
+        {
+         "x": 441,
+         "y": 30,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ],
+       "_id": "stroke-l0y9ay28"
+      }
+     ],
+     "primitiveInstances": [
+      {
+       "id": "inst-l15eq3n2",
+       "sourceId": "bowl-left",
+       "tx": 271,
+       "ty": 70,
+       "sx": 1,
+       "sy": 1
+      }
+     ],
+     "strokeOrder": [
+      "stroke-l0y9ay28",
+      "inst-l15eq3n2:stroke-9l3487i0"
+     ],
+     "advance": 470,
+     "lsb": 60
+    }
+   }
+  },
+  "b": {
+   "advance": 500,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 750,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-zx9ie0wl"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 330,
+       "in": null,
+       "out": [
+        60,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 220,
+       "y": 500,
+       "in": [
+        120,
+        500
+       ],
+       "out": [
+        335,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 320,
+       "in": [
+        410,
+        470
+       ],
+       "out": [
+        410,
+        145
+       ],
+       "w": 1
+      },
+      {
+       "x": 235,
+       "y": 0,
+       "in": [
+        330,
+        0
+       ],
+       "out": [
+        120,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 110,
+       "in": [
+        60,
+        20
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-adgytr48"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-zx9ie0wl",
+    "stroke-adgytr48"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 750,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 330,
+         "in": null,
+         "out": [
+          60,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 220,
+         "y": 500,
+         "in": [
+          120,
+          500
+         ],
+         "out": [
+          335,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 320,
+         "in": [
+          410,
+          470
+         ],
+         "out": [
+          410,
+          145
+         ],
+         "w": 1
+        },
+        {
+         "x": 235,
+         "y": 0,
+         "in": [
+          330,
+          0
+         ],
+         "out": [
+          120,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 110,
+         "in": [
+          60,
+          20
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 500,
+     "lsb": 60
+    }
+   }
+  },
+  "c": {
+   "advance": 480,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 180,
+       "y": 490,
+       "in": [
+        231.8201569038439,
+        522.6543552201717
+       ],
+       "out": [
+        128.1798430961561,
+        457.34564477982826
+       ],
+       "w": 1
+      },
+      {
+       "x": 90,
+       "y": 310,
+       "in": [
+        90,
+        460
+       ],
+       "out": [
+        90,
+        135
+       ],
+       "w": 1
+      },
+      {
+       "x": 210,
+       "y": 20,
+       "in": [
+        139.11867696453032,
+        32.7660972031955
+       ],
+       "out": [
+        280.8813230354697,
+        7.233902796804499
+       ],
+       "w": 1
+      },
+      {
+       "x": 350,
+       "y": 60,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-zbgdorf1"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 200,
+       "y": 500,
+       "in": [
+        131.8616694794263,
+        497.6829033043393
+       ],
+       "out": [
+        268.13833052057373,
+        502.3170966956607
+       ],
+       "w": 1
+      },
+      {
+       "x": 340,
+       "y": 460,
+       "in": [
+        359.6836960692888,
+        489.70775238500016
+       ],
+       "out": [
+        320.3163039307112,
+        430.29224761499984
+       ],
+       "w": 1
+      }
+     ],
+     "_id": "stroke-sau7b53j"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-zbgdorf1",
+    "stroke-sau7b53j"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 180,
+         "y": 490,
+         "in": [
+          231.8201569038439,
+          522.6543552201717
+         ],
+         "out": [
+          128.1798430961561,
+          457.34564477982826
+         ],
+         "w": 1
+        },
+        {
+         "x": 90,
+         "y": 310,
+         "in": [
+          90,
+          460
+         ],
+         "out": [
+          90,
+          135
+         ],
+         "w": 1
+        },
+        {
+         "x": 210,
+         "y": 20,
+         "in": [
+          139.11867696453032,
+          32.7660972031955
+         ],
+         "out": [
+          280.8813230354697,
+          7.233902796804499
+         ],
+         "w": 1
+        },
+        {
+         "x": 350,
+         "y": 60,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ],
+       "_id": "stroke-zbgdorf1"
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 200,
+         "y": 500,
+         "in": [
+          131.8616694794263,
+          497.6829033043393
+         ],
+         "out": [
+          268.13833052057373,
+          502.3170966956607
+         ],
+         "w": 1
+        },
+        {
+         "x": 340,
+         "y": 460,
+         "in": [
+          359.6836960692888,
+          489.70775238500016
+         ],
+         "out": [
+          320.3163039307112,
+          430.29224761499984
+         ],
+         "w": 1
+        }
+       ],
+       "_id": "stroke-sau7b53j"
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [
+      "stroke-zbgdorf1",
+      "stroke-sau7b53j"
+     ],
+     "advance": 480,
+     "lsb": 60
+    }
+   }
+  },
+  "d": {
+   "advance": 500,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 435,
+       "y": 500,
+       "in": null,
+       "out": [
+        369.21276228292055,
+        456.20211756703407
+       ],
+       "w": 1
+      },
+      {
+       "x": 215,
+       "y": 490,
+       "in": [
+        266.8201569038439,
+        522.6543552201717
+       ],
+       "out": [
+        163.1798430961561,
+        457.34564477982826
+       ],
+       "w": 1
+      },
+      {
+       "x": 125,
+       "y": 310,
+       "in": [
+        125,
+        460
+       ],
+       "out": [
+        125,
+        135
+       ],
+       "w": 1
+      },
+      {
+       "x": 225,
+       "y": 20,
+       "in": [
+        130,
+        20
+       ],
+       "out": [
+        340,
+        20
+       ],
+       "w": 1
+      },
+      {
+       "x": 415,
+       "y": 250,
+       "in": [
+        415,
+        160
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "inst-ic98ohac:stroke-9l3487i0",
+     "_link": {
+      "sourceId": "bowl-left",
+      "instanceId": "inst-ic98ohac",
+      "sourceStrokeId": "stroke-9l3487i0",
+      "strokeIndex": 0
+     }
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 420,
+       "y": 770,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 430,
+       "y": 720,
+       "in": [
+        431.0859168849618,
+        796.2662600283154
+       ],
+       "out": [
+        428.9140831150382,
+        643.7337399716846
+       ],
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 60,
+       "in": [
+        413.17161404218456,
+        130.20442509644795
+       ],
+       "out": [
+        406.82838595781544,
+        -10.20442509644792
+       ],
+       "w": 1
+      },
+      {
+       "x": 460,
+       "y": 30,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "inst-9x8ibu3z:stroke-v31285uk",
+     "_link": {
+      "sourceId": "stem",
+      "instanceId": "inst-9x8ibu3z",
+      "sourceStrokeId": "stroke-v31285uk",
+      "strokeIndex": 0
+     }
+    }
+   ],
+   "primitiveInstances": [
+    {
+     "id": "inst-ic98ohac",
+     "sourceId": "bowl-left",
+     "tx": 295,
+     "ty": 70,
+     "sx": 1,
+     "sy": 1
+    },
+    {
+     "id": "inst-9x8ibu3z",
+     "sourceId": "stem",
+     "tx": 820,
+     "ty": -70,
+     "sx": 1,
+     "sy": 1
+    }
+   ],
+   "strokeOrder": [
+    "inst-ic98ohac:stroke-9l3487i0",
+    "inst-9x8ibu3z:stroke-v31285uk"
+   ],
+   "lsb": 60,
+   "activeVariant": "long stem",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [],
+     "primitiveInstances": [
+      {
+       "id": "inst-ic98ohac",
+       "sourceId": "bowl-left",
+       "tx": 290,
+       "ty": 70,
+       "sx": 1,
+       "sy": 1
+      },
+      {
+       "id": "inst-9x8ibu3z",
+       "sourceId": "stem",
+       "tx": 820,
+       "ty": -70,
+       "sx": 1,
+       "sy": 1
+      }
+     ],
+     "strokeOrder": [
+      "inst-ic98ohac:stroke-9l3487i0",
+      "inst-9x8ibu3z:stroke-v31285uk"
+     ],
+     "advance": 500,
+     "lsb": 60
+    },
+    "long stem": {
+     "name": "long stem",
+     "strokes": [],
+     "primitiveInstances": [
+      {
+       "id": "inst-ic98ohac",
+       "sourceId": "bowl-left",
+       "tx": 295,
+       "ty": 70,
+       "sx": 1,
+       "sy": 1
+      },
+      {
+       "id": "inst-9x8ibu3z",
+       "sourceId": "stem",
+       "tx": 820,
+       "ty": -70,
+       "sx": 1,
+       "sy": 1
+      }
+     ],
+     "strokeOrder": [
+      "inst-ic98ohac:stroke-9l3487i0",
+      "inst-9x8ibu3z:stroke-v31285uk"
+     ],
+     "advance": 500,
+     "lsb": 60
+    }
+   }
+  },
+  "e": {
+   "advance": 480,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 180,
+       "y": 490,
+       "in": [
+        231.8201569038439,
+        522.6543552201717
+       ],
+       "out": [
+        128.1798430961561,
+        457.34564477982826
+       ],
+       "w": 1
+      },
+      {
+       "x": 90,
+       "y": 310,
+       "in": [
+        90,
+        460
+       ],
+       "out": [
+        90,
+        135
+       ],
+       "w": 1
+      },
+      {
+       "x": 210,
+       "y": 20,
+       "in": [
+        139.11867696453032,
+        32.7660972031955
+       ],
+       "out": [
+        280.8813230354697,
+        7.233902796804499
+       ],
+       "w": 1
+      },
+      {
+       "x": 350,
+       "y": 60,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-zbgdorf1"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 200,
+       "y": 500,
+       "in": [
+        131.8616694794263,
+        497.6829033043393
+       ],
+       "out": [
+        268.13833052057373,
+        502.3170966956607
+       ],
+       "w": 1
+      },
+      {
+       "x": 300,
+       "y": 450,
+       "in": [
+        289.449979987456,
+        465.5169812624821
+       ],
+       "out": [
+        310.550020012544,
+        434.4830187375179
+       ],
+       "w": 1
+      },
+      {
+       "x": 320,
+       "y": 340,
+       "in": [
+        322.1575456574843,
+        388.1588794832224
+       ],
+       "out": [
+        317.8424543425157,
+        291.8411205167776
+       ],
+       "w": 1
+      },
+      {
+       "x": 140,
+       "y": 210,
+       "in": [
+        160.96534735174208,
+        226.4857611781406
+       ],
+       "out": [
+        119.03465264825792,
+        193.5142388218594
+       ],
+       "w": 1
+      }
+     ],
+     "_id": "stroke-sau7b53j"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-zbgdorf1",
+    "stroke-sau7b53j"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 180,
+         "y": 490,
+         "in": [
+          231.8201569038439,
+          522.6543552201717
+         ],
+         "out": [
+          128.1798430961561,
+          457.34564477982826
+         ],
+         "w": 1
+        },
+        {
+         "x": 90,
+         "y": 310,
+         "in": [
+          90,
+          460
+         ],
+         "out": [
+          90,
+          135
+         ],
+         "w": 1
+        },
+        {
+         "x": 210,
+         "y": 20,
+         "in": [
+          139.11867696453032,
+          32.7660972031955
+         ],
+         "out": [
+          280.8813230354697,
+          7.233902796804499
+         ],
+         "w": 1
+        },
+        {
+         "x": 350,
+         "y": 60,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ],
+       "_id": "stroke-zbgdorf1"
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 200,
+         "y": 500,
+         "in": [
+          131.8616694794263,
+          497.6829033043393
+         ],
+         "out": [
+          268.13833052057373,
+          502.3170966956607
+         ],
+         "w": 1
+        },
+        {
+         "x": 300,
+         "y": 450,
+         "in": [
+          289.449979987456,
+          465.5169812624821
+         ],
+         "out": [
+          310.550020012544,
+          434.4830187375179
+         ],
+         "w": 1
+        },
+        {
+         "x": 320,
+         "y": 340,
+         "in": [
+          322.1575456574843,
+          388.1588794832224
+         ],
+         "out": [
+          317.8424543425157,
+          291.8411205167776
+         ],
+         "w": 1
+        },
+        {
+         "x": 140,
+         "y": 210,
+         "in": [
+          160.96534735174208,
+          226.4857611781406
+         ],
+         "out": [
+          119.03465264825792,
+          193.5142388218594
+         ],
+         "w": 1
+        }
+       ],
+       "_id": "stroke-sau7b53j"
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [
+      "stroke-zbgdorf1",
+      "stroke-sau7b53j"
+     ],
+     "advance": 480,
+     "lsb": 60
+    }
+   }
+  },
+  "f": {
+   "advance": 310,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 165,
+       "y": 750,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 165,
+       "y": 110,
+       "in": null,
+       "out": [
+        165,
+        30
+       ],
+       "w": 1
+      },
+      {
+       "x": 285,
+       "y": 20,
+       "in": [
+        215,
+        20
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-w7zzinpu"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 55,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 260,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-xrj8oqyv"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-w7zzinpu",
+    "stroke-xrj8oqyv"
+   ],
+   "lsb": 55,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 165,
+         "y": 750,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 165,
+         "y": 110,
+         "in": null,
+         "out": [
+          165,
+          30
+         ],
+         "w": 1
+        },
+        {
+         "x": 285,
+         "y": 20,
+         "in": [
+          215,
+          20
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 55,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 260,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 310,
+     "lsb": 55
+    }
+   }
+  },
+  "g": {
+   "advance": 500,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 410,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": -180,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-dpqcrcnz"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 400,
+       "y": 462,
+       "in": null,
+       "out": [
+        315,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 195,
+       "y": 500,
+       "in": [
+        255,
+        500
+       ],
+       "out": [
+        110,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 295,
+       "in": [
+        60,
+        425
+       ],
+       "out": [
+        60,
+        145
+       ],
+       "w": 1
+      },
+      {
+       "x": 215,
+       "y": 0,
+       "in": [
+        110,
+        0
+       ],
+       "out": [
+        320,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 85,
+       "in": [
+        400,
+        15
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-i1j17yo4"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 410,
+       "y": -60,
+       "in": null,
+       "out": [
+        385,
+        -165
+       ],
+       "w": 1
+      },
+      {
+       "x": 250,
+       "y": -200,
+       "in": [
+        330,
+        -200
+       ],
+       "out": [
+        150,
+        -200
+       ],
+       "w": 1
+      },
+      {
+       "x": 90,
+       "y": -150,
+       "in": [
+        110,
+        -200
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-c1wasopy"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-dpqcrcnz",
+    "stroke-i1j17yo4",
+    "stroke-c1wasopy"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 410,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": -180,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 400,
+         "y": 462,
+         "in": null,
+         "out": [
+          315,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 195,
+         "y": 500,
+         "in": [
+          255,
+          500
+         ],
+         "out": [
+          110,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 295,
+         "in": [
+          60,
+          425
+         ],
+         "out": [
+          60,
+          145
+         ],
+         "w": 1
+        },
+        {
+         "x": 215,
+         "y": 0,
+         "in": [
+          110,
+          0
+         ],
+         "out": [
+          320,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 85,
+         "in": [
+          400,
+          15
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 410,
+         "y": -60,
+         "in": null,
+         "out": [
+          385,
+          -165
+         ],
+         "w": 1
+        },
+        {
+         "x": 250,
+         "y": -200,
+         "in": [
+          330,
+          -200
+         ],
+         "out": [
+          150,
+          -200
+         ],
+         "w": 1
+        },
+        {
+         "x": 90,
+         "y": -150,
+         "in": [
+          110,
+          -200
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 500,
+     "lsb": 60
+    }
+   }
+  },
+  "h": {
+   "advance": 470,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 750,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-meaeflk1"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 330,
+       "in": null,
+       "out": [
+        60,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 235,
+       "y": 500,
+       "in": [
+        125,
+        500
+       ],
+       "out": [
+        345,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 330,
+       "in": [
+        410,
+        470
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-z7zktdyc"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-meaeflk1",
+    "stroke-z7zktdyc"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 750,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 330,
+         "in": null,
+         "out": [
+          60,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 235,
+         "y": 500,
+         "in": [
+          125,
+          500
+         ],
+         "out": [
+          345,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 330,
+         "in": [
+          410,
+          470
+         ],
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 470,
+     "lsb": 60
+    }
+   }
+  },
+  "i": {
+   "advance": 190,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 65,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 65,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-pz5annv0"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 65,
+       "y": 620,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 65,
+       "y": 645,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-9fksv0yf"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-pz5annv0",
+    "stroke-9fksv0yf"
+   ],
+   "lsb": 65,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 65,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 65,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 65,
+         "y": 620,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 65,
+         "y": 645,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 190,
+     "lsb": 65
+    }
+   }
+  },
+  "j": {
+   "advance": 210,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 145,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 145,
+       "y": -120,
+       "in": null,
+       "out": [
+        145,
+        -185
+       ],
+       "w": 1
+      },
+      {
+       "x": 80,
+       "y": -200,
+       "in": [
+        105,
+        -200
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-uundomt2"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 145,
+       "y": 620,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 145,
+       "y": 645,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-yjudu6az"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-uundomt2",
+    "stroke-yjudu6az"
+   ],
+   "lsb": 80,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 145,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 145,
+         "y": -120,
+         "in": null,
+         "out": [
+          145,
+          -185
+         ],
+         "w": 1
+        },
+        {
+         "x": 80,
+         "y": -200,
+         "in": [
+          105,
+          -200
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 145,
+         "y": 620,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 145,
+         "y": 645,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 210,
+     "lsb": 80
+    }
+   }
+  },
+  "k": {
+   "advance": 420,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 750,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-mqjozzsm"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 380,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 175,
+       "y": 250,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 385,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-eci5j8dm"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 250,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 175,
+       "y": 250,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-wyf0dgpg"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-mqjozzsm",
+    "stroke-eci5j8dm",
+    "stroke-wyf0dgpg"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 750,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 380,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 175,
+         "y": 250,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 385,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 250,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 175,
+         "y": 250,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 420,
+     "lsb": 60
+    }
+   }
+  },
+  "l": {
+   "advance": 190,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 65,
+       "y": 750,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 65,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-ttrnpx0e"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-ttrnpx0e"
+   ],
+   "lsb": 65,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 65,
+         "y": 750,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 65,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 190,
+     "lsb": 65
+    }
+   }
+  },
+  "m": {
+   "advance": 690,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-04rpm736"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 330,
+       "in": null,
+       "out": [
+        60,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 200,
+       "y": 500,
+       "in": [
+        115,
+        500
+       ],
+       "out": [
+        285,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 340,
+       "y": 330,
+       "in": [
+        340,
+        470
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 340,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-57pusrmh"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 340,
+       "y": 330,
+       "in": null,
+       "out": [
+        340,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 480,
+       "y": 500,
+       "in": [
+        395,
+        500
+       ],
+       "out": [
+        565,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 620,
+       "y": 330,
+       "in": [
+        620,
+        470
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 620,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-2tspd1qc"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-04rpm736",
+    "stroke-57pusrmh",
+    "stroke-2tspd1qc"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 330,
+         "in": null,
+         "out": [
+          60,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 200,
+         "y": 500,
+         "in": [
+          115,
+          500
+         ],
+         "out": [
+          285,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 340,
+         "y": 330,
+         "in": [
+          340,
+          470
+         ],
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 340,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 340,
+         "y": 330,
+         "in": null,
+         "out": [
+          340,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 480,
+         "y": 500,
+         "in": [
+          395,
+          500
+         ],
+         "out": [
+          565,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 620,
+         "y": 330,
+         "in": [
+          620,
+          470
+         ],
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 620,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 690,
+     "lsb": 60
+    }
+   }
+  },
+  "n": {
+   "advance": 470,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-m25u36f9"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 330,
+       "in": null,
+       "out": [
+        60,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 235,
+       "y": 500,
+       "in": [
+        125,
+        500
+       ],
+       "out": [
+        345,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 330,
+       "in": [
+        410,
+        470
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-7mzcyssy"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-m25u36f9",
+    "stroke-7mzcyssy"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 330,
+         "in": null,
+         "out": [
+          60,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 235,
+         "y": 500,
+         "in": [
+          125,
+          500
+         ],
+         "out": [
+          345,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 330,
+         "in": [
+          410,
+          470
+         ],
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 470,
+     "lsb": 60
+    }
+   }
+  },
+  "o": {
+   "advance": 500,
+   "strokes": [
+    {
+     "closed": true,
+     "nodes": [
+      {
+       "x": 250,
+       "y": 500,
+       "in": [
+        139.54,
+        500
+       ],
+       "out": [
+        360.46000000000004,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 450,
+       "y": 250,
+       "in": [
+        450,
+        388.07500000000005
+       ],
+       "out": [
+        450,
+        111.92499999999998
+       ],
+       "w": 1
+      },
+      {
+       "x": 250,
+       "y": 0,
+       "in": [
+        360.46000000000004,
+        0
+       ],
+       "out": [
+        139.54,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 50,
+       "y": 250,
+       "in": [
+        50,
+        111.92499999999998
+       ],
+       "out": [
+        50,
+        388.07500000000005
+       ],
+       "w": 1
+      }
+     ],
+     "_id": "stroke-1km5ytfq"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-1km5ytfq"
+   ],
+   "lsb": 50,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": true,
+       "nodes": [
+        {
+         "x": 250,
+         "y": 500,
+         "in": [
+          139.54,
+          500
+         ],
+         "out": [
+          360.46000000000004,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 450,
+         "y": 250,
+         "in": [
+          450,
+          388.07500000000005
+         ],
+         "out": [
+          450,
+          111.92499999999998
+         ],
+         "w": 1
+        },
+        {
+         "x": 250,
+         "y": 0,
+         "in": [
+          360.46000000000004,
+          0
+         ],
+         "out": [
+          139.54,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 50,
+         "y": 250,
+         "in": [
+          50,
+          111.92499999999998
+         ],
+         "out": [
+          50,
+          388.07500000000005
+         ],
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 500,
+     "lsb": 50
+    }
+   }
+  },
+  "p": {
+   "advance": 500,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": -200,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-zd14yg2a"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 330,
+       "in": null,
+       "out": [
+        60,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 220,
+       "y": 500,
+       "in": [
+        120,
+        500
+       ],
+       "out": [
+        335,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 320,
+       "in": [
+        410,
+        470
+       ],
+       "out": [
+        410,
+        145
+       ],
+       "w": 1
+      },
+      {
+       "x": 235,
+       "y": 0,
+       "in": [
+        330,
+        0
+       ],
+       "out": [
+        120,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 110,
+       "in": [
+        60,
+        20
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-ins8gcnd"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-zd14yg2a",
+    "stroke-ins8gcnd"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": -200,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 330,
+         "in": null,
+         "out": [
+          60,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 220,
+         "y": 500,
+         "in": [
+          120,
+          500
+         ],
+         "out": [
+          335,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 320,
+         "in": [
+          410,
+          470
+         ],
+         "out": [
+          410,
+          145
+         ],
+         "w": 1
+        },
+        {
+         "x": 235,
+         "y": 0,
+         "in": [
+          330,
+          0
+         ],
+         "out": [
+          120,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 110,
+         "in": [
+          60,
+          20
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 500,
+     "lsb": 60
+    }
+   }
+  },
+  "q": {
+   "advance": 500,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 410,
+       "y": 500,
+       "in": null,
+       "out": [
+        344.21276228292055,
+        456.20211756703407
+       ],
+       "w": 1
+      },
+      {
+       "x": 190,
+       "y": 490,
+       "in": [
+        241.8201569038439,
+        522.6543552201717
+       ],
+       "out": [
+        138.1798430961561,
+        457.34564477982826
+       ],
+       "w": 1
+      },
+      {
+       "x": 100,
+       "y": 310,
+       "in": [
+        100,
+        460
+       ],
+       "out": [
+        100,
+        135
+       ],
+       "w": 1
+      },
+      {
+       "x": 200,
+       "y": 20,
+       "in": [
+        105,
+        20
+       ],
+       "out": [
+        315,
+        20
+       ],
+       "w": 1
+      },
+      {
+       "x": 390,
+       "y": 250,
+       "in": [
+        390,
+        160
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "inst-vsuzspk0:stroke-9l3487i0",
+     "_link": {
+      "sourceId": "bowl-left",
+      "instanceId": "inst-vsuzspk0",
+      "sourceStrokeId": "stroke-9l3487i0",
+      "strokeIndex": 0
+     }
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 385,
+       "y": 490,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 395,
+       "y": 440,
+       "in": [
+        396.0859168849618,
+        516.2662600283154
+       ],
+       "out": [
+        393.9140831150382,
+        363.7337399716846
+       ],
+       "w": 1
+      },
+      {
+       "x": 375,
+       "y": -220,
+       "in": [
+        378.17161404218456,
+        -149.79557490355205
+       ],
+       "out": [
+        371.82838595781544,
+        -290.20442509644795
+       ],
+       "w": 1
+      },
+      {
+       "x": 425,
+       "y": -250,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "inst-wywm5q98:stroke-v31285uk",
+     "_link": {
+      "sourceId": "stem",
+      "instanceId": "inst-wywm5q98",
+      "sourceStrokeId": "stroke-v31285uk",
+      "strokeIndex": 0
+     }
+    }
+   ],
+   "primitiveInstances": [
+    {
+     "id": "inst-vsuzspk0",
+     "sourceId": "bowl-left",
+     "tx": 270,
+     "ty": 70,
+     "sx": 1,
+     "sy": 1
+    },
+    {
+     "id": "inst-wywm5q98",
+     "sourceId": "stem",
+     "tx": 785,
+     "ty": -350,
+     "sx": 1,
+     "sy": 1
+    }
+   ],
+   "strokeOrder": [
+    "inst-vsuzspk0:stroke-9l3487i0",
+    "inst-wywm5q98:stroke-v31285uk"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [],
+     "primitiveInstances": [
+      {
+       "id": "inst-vsuzspk0",
+       "sourceId": "bowl-left",
+       "tx": 270,
+       "ty": 70,
+       "sx": 1,
+       "sy": 1
+      },
+      {
+       "id": "inst-wywm5q98",
+       "sourceId": "stem",
+       "tx": 785,
+       "ty": -350,
+       "sx": 1,
+       "sy": 1
+      }
+     ],
+     "strokeOrder": [
+      "inst-vsuzspk0:stroke-9l3487i0",
+      "inst-wywm5q98:stroke-v31285uk"
+     ],
+     "advance": 500,
+     "lsb": 60
+    }
+   }
+  },
+  "r": {
+   "advance": 350,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-8ljoxff8"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 340,
+       "in": null,
+       "out": [
+        60,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 230,
+       "y": 500,
+       "in": [
+        120,
+        500
+       ],
+       "out": [
+        320,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 330,
+       "y": 440,
+       "in": [
+        320,
+        490
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-e73jjrvr"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-8ljoxff8",
+    "stroke-e73jjrvr"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 340,
+         "in": null,
+         "out": [
+          60,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 230,
+         "y": 500,
+         "in": [
+          120,
+          500
+         ],
+         "out": [
+          320,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 330,
+         "y": 440,
+         "in": [
+          320,
+          490
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 350,
+     "lsb": 60
+    }
+   }
+  },
+  "s": {
+   "advance": 450,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 395,
+       "y": 410,
+       "in": null,
+       "out": [
+        375,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 205,
+       "y": 500,
+       "in": [
+        305,
+        500
+       ],
+       "out": [
+        85,
+        500
+       ],
+       "w": 1
+      },
+      {
+       "x": 120,
+       "y": 330,
+       "in": [
+        120,
+        425
+       ],
+       "out": [
+        120,
+        245
+       ],
+       "w": 1
+      },
+      {
+       "x": 345,
+       "y": 200,
+       "in": [
+        265,
+        240
+       ],
+       "out": [
+        425,
+        160
+       ],
+       "w": 1
+      },
+      {
+       "x": 385,
+       "y": 80,
+       "in": [
+        405,
+        130
+       ],
+       "out": [
+        345,
+        10
+       ],
+       "w": 1
+      },
+      {
+       "x": 165,
+       "y": 0,
+       "in": [
+        265,
+        0
+       ],
+       "out": [
+        65,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 55,
+       "y": 90,
+       "in": [
+        55,
+        20
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-kbm8dr35"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-kbm8dr35"
+   ],
+   "lsb": 55,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 395,
+         "y": 410,
+         "in": null,
+         "out": [
+          375,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 205,
+         "y": 500,
+         "in": [
+          305,
+          500
+         ],
+         "out": [
+          85,
+          500
+         ],
+         "w": 1
+        },
+        {
+         "x": 120,
+         "y": 330,
+         "in": [
+          120,
+          425
+         ],
+         "out": [
+          120,
+          245
+         ],
+         "w": 1
+        },
+        {
+         "x": 345,
+         "y": 200,
+         "in": [
+          265,
+          240
+         ],
+         "out": [
+          425,
+          160
+         ],
+         "w": 1
+        },
+        {
+         "x": 385,
+         "y": 80,
+         "in": [
+          405,
+          130
+         ],
+         "out": [
+          345,
+          10
+         ],
+         "w": 1
+        },
+        {
+         "x": 165,
+         "y": 0,
+         "in": [
+          265,
+          0
+         ],
+         "out": [
+          65,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 55,
+         "y": 90,
+         "in": [
+          55,
+          20
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 450,
+     "lsb": 55
+    }
+   }
+  },
+  "t": {
+   "advance": 290,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 105,
+       "y": 650,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 105,
+       "y": 110,
+       "in": null,
+       "out": [
+        105,
+        35
+       ],
+       "w": 1
+      },
+      {
+       "x": 245,
+       "y": 20,
+       "in": [
+        170,
+        20
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-kg97xd8p"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 20,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 230,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-42f0eedg"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-kg97xd8p",
+    "stroke-42f0eedg"
+   ],
+   "lsb": 20,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 105,
+         "y": 650,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 105,
+         "y": 110,
+         "in": null,
+         "out": [
+          105,
+          35
+         ],
+         "w": 1
+        },
+        {
+         "x": 245,
+         "y": 20,
+         "in": [
+          170,
+          20
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 20,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 230,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 290,
+     "lsb": 20
+    }
+   }
+  },
+  "u": {
+   "advance": 470,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 165,
+       "in": [
+        60,
+        65
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-0c12aey5"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 165,
+       "in": null,
+       "out": [
+        80,
+        30
+       ],
+       "w": 1
+      },
+      {
+       "x": 235,
+       "y": 0,
+       "in": [
+        120,
+        0
+       ],
+       "out": [
+        350,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 170,
+       "in": [
+        410,
+        55
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-fdnz0ju7"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-0c12aey5",
+    "stroke-fdnz0ju7"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 165,
+         "in": [
+          60,
+          65
+         ],
+         "out": null,
+         "w": 1
+        }
+       ],
+       "_id": "stroke-0c12aey5"
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 165,
+         "in": null,
+         "out": [
+          80,
+          30
+         ],
+         "w": 1
+        },
+        {
+         "x": 235,
+         "y": 0,
+         "in": [
+          120,
+          0
+         ],
+         "out": [
+          350,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 170,
+         "in": [
+          410,
+          55
+         ],
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ],
+       "_id": "stroke-fdnz0ju7"
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [
+      "stroke-0c12aey5",
+      "stroke-fdnz0ju7"
+     ],
+     "advance": 470,
+     "lsb": 60
+    }
+   }
+  },
+  "v": {
+   "advance": 430,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 215,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 370,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-whxh0tmz"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-whxh0tmz"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 215,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 370,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 430,
+     "lsb": 60
+    }
+   }
+  },
+  "w": {
+   "advance": 650,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 170,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 325,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 480,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 590,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-kun6v63e"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-kun6v63e"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 170,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 325,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 480,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 590,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 650,
+     "lsb": 60
+    }
+   }
+  },
+  "x": {
+   "advance": 430,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 370,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-tlujrih5"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 370,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-l1tnsy7m"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-tlujrih5",
+    "stroke-l1tnsy7m"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 370,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 370,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 430,
+     "lsb": 60
+    }
+   }
+  },
+  "y": {
+   "advance": 430,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 215,
+       "y": 120,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 320,
+       "y": -120,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 370,
+       "y": -200,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-qujxfxa4"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 370,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 215,
+       "y": 120,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-7anyxpda"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-qujxfxa4",
+    "stroke-7anyxpda"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 215,
+         "y": 120,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 320,
+         "y": -120,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 370,
+         "y": -200,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 370,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 215,
+         "y": 120,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 430,
+     "lsb": 60
+    }
+   }
+  },
+  "z": {
+   "advance": 430,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 70,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 370,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 70,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 370,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-dfupao0s"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-dfupao0s"
+   ],
+   "lsb": 70,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 70,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 370,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 70,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 370,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 430,
+     "lsb": 70
+    }
+   }
+  },
+  "A": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 70,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 490,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-k8iptine"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 150,
+       "y": 270,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 410,
+       "y": 270,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-vee4gqvf"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-k8iptine",
+    "stroke-vee4gqvf"
+   ],
+   "lsb": 70,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 70,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 280,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 490,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 150,
+         "y": 270,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 410,
+         "y": 270,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 70
+    }
+   }
+  },
+  "B": {
+   "advance": 540,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-oianjyn2"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": [
+        210,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 470,
+       "y": 560,
+       "in": [
+        390,
+        700
+       ],
+       "out": [
+        470,
+        470
+       ],
+       "w": 1
+      },
+      {
+       "x": 470,
+       "y": 360,
+       "in": [
+        470,
+        430
+       ],
+       "out": [
+        370,
+        360
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-0q082plo"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 360,
+       "in": null,
+       "out": [
+        220,
+        360
+       ],
+       "w": 1
+      },
+      {
+       "x": 480,
+       "y": 230,
+       "in": [
+        400,
+        360
+       ],
+       "out": [
+        480,
+        120
+       ],
+       "w": 1
+      },
+      {
+       "x": 220,
+       "y": 0,
+       "in": [
+        400,
+        0
+       ],
+       "out": [
+        90,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-j364qyo2"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-oianjyn2",
+    "stroke-0q082plo",
+    "stroke-j364qyo2"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": [
+          210,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 470,
+         "y": 560,
+         "in": [
+          390,
+          700
+         ],
+         "out": [
+          470,
+          470
+         ],
+         "w": 1
+        },
+        {
+         "x": 470,
+         "y": 360,
+         "in": [
+          470,
+          430
+         ],
+         "out": [
+          370,
+          360
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 360,
+         "in": null,
+         "out": [
+          220,
+          360
+         ],
+         "w": 1
+        },
+        {
+         "x": 480,
+         "y": 230,
+         "in": [
+          400,
+          360
+         ],
+         "out": [
+          480,
+          120
+         ],
+         "w": 1
+        },
+        {
+         "x": 220,
+         "y": 0,
+         "in": [
+          400,
+          0
+         ],
+         "out": [
+          90,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 540,
+     "lsb": 60
+    }
+   }
+  },
+  "C": {
+   "advance": 540,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 490,
+       "y": 600,
+       "in": null,
+       "out": [
+        450,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 270,
+       "y": 700,
+       "in": [
+        390,
+        700
+       ],
+       "out": [
+        110,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 350,
+       "in": [
+        60,
+        595
+       ],
+       "out": [
+        60,
+        110
+       ],
+       "w": 1
+      },
+      {
+       "x": 270,
+       "y": 0,
+       "in": [
+        110,
+        0
+       ],
+       "out": [
+        390,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 490,
+       "y": 100,
+       "in": [
+        450,
+        0
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-aako9af4"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-aako9af4"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 490,
+         "y": 600,
+         "in": null,
+         "out": [
+          450,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 270,
+         "y": 700,
+         "in": [
+          390,
+          700
+         ],
+         "out": [
+          110,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 350,
+         "in": [
+          60,
+          595
+         ],
+         "out": [
+          60,
+          110
+         ],
+         "w": 1
+        },
+        {
+         "x": 270,
+         "y": 0,
+         "in": [
+          110,
+          0
+         ],
+         "out": [
+          390,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 490,
+         "y": 100,
+         "in": [
+          450,
+          0
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 540,
+     "lsb": 60
+    }
+   }
+  },
+  "D": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-uxh73jkx"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": [
+        280,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 500,
+       "y": 350,
+       "in": [
+        500,
+        700
+       ],
+       "out": [
+        500,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": [
+        280,
+        0
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-wo4vrf0w"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-uxh73jkx",
+    "stroke-wo4vrf0w"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": [
+          280,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 500,
+         "y": 350,
+         "in": [
+          500,
+          700
+         ],
+         "out": [
+          500,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": [
+          280,
+          0
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 60
+    }
+   }
+  },
+  "E": {
+   "advance": 500,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-zoij7zrm"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 450,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-p0j57ki7"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 350,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 380,
+       "y": 350,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-4ft6xngb"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 450,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-3ykokiaw"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-zoij7zrm",
+    "stroke-p0j57ki7",
+    "stroke-4ft6xngb",
+    "stroke-3ykokiaw"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 450,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 350,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 380,
+         "y": 350,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 450,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 500,
+     "lsb": 60
+    }
+   }
+  },
+  "F": {
+   "advance": 490,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-2juj38sc"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 450,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-k6aik905"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 350,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 370,
+       "y": 350,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-yugqsix5"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-2juj38sc",
+    "stroke-k6aik905",
+    "stroke-yugqsix5"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 450,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 350,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 370,
+         "y": 350,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 490,
+     "lsb": 60
+    }
+   }
+  },
+  "G": {
+   "advance": 580,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 530,
+       "y": 600,
+       "in": null,
+       "out": [
+        490,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 290,
+       "y": 700,
+       "in": [
+        430,
+        700
+       ],
+       "out": [
+        110,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 350,
+       "in": [
+        60,
+        595
+       ],
+       "out": [
+        60,
+        110
+       ],
+       "w": 1
+      },
+      {
+       "x": 290,
+       "y": 0,
+       "in": [
+        110,
+        0
+       ],
+       "out": [
+        430,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 530,
+       "y": 100,
+       "in": [
+        490,
+        0
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-pkcznnf8"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 520,
+       "y": 210,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 350,
+       "y": 210,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-al9wat7h"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 520,
+       "y": 210,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 520,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-vswg3ktb"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-pkcznnf8",
+    "stroke-al9wat7h",
+    "stroke-vswg3ktb"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 530,
+         "y": 600,
+         "in": null,
+         "out": [
+          490,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 290,
+         "y": 700,
+         "in": [
+          430,
+          700
+         ],
+         "out": [
+          110,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 350,
+         "in": [
+          60,
+          595
+         ],
+         "out": [
+          60,
+          110
+         ],
+         "w": 1
+        },
+        {
+         "x": 290,
+         "y": 0,
+         "in": [
+          110,
+          0
+         ],
+         "out": [
+          430,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 530,
+         "y": 100,
+         "in": [
+          490,
+          0
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 520,
+         "y": 210,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 350,
+         "y": 210,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 520,
+         "y": 210,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 520,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 580,
+     "lsb": 60
+    }
+   }
+  },
+  "H": {
+   "advance": 520,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-gsstfgf3"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 460,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 460,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-or6ckodt"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 460,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-sou81gmh"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-gsstfgf3",
+    "stroke-or6ckodt",
+    "stroke-sou81gmh"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 460,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 460,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 460,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 520,
+     "lsb": 60
+    }
+   }
+  },
+  "I": {
+   "advance": 260,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 40,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 220,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-5wxfuo9z"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 130,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 130,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-p1ps0ubi"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 40,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 220,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-noazv3ng"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-5wxfuo9z",
+    "stroke-p1ps0ubi",
+    "stroke-noazv3ng"
+   ],
+   "lsb": 40,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 40,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 220,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 130,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 130,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 40,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 220,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 260,
+     "lsb": 40
+    }
+   }
+  },
+  "J": {
+   "advance": 420,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 340,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 340,
+       "y": 120,
+       "in": null,
+       "out": [
+        340,
+        20
+       ],
+       "w": 1
+      },
+      {
+       "x": 230,
+       "y": 0,
+       "in": [
+        300,
+        0
+       ],
+       "out": [
+        120,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 80,
+       "y": 90,
+       "in": [
+        80,
+        20
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-zqo9jry2"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 160,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 360,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-edxy2ufl"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-zqo9jry2",
+    "stroke-edxy2ufl"
+   ],
+   "lsb": 80,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 340,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 340,
+         "y": 120,
+         "in": null,
+         "out": [
+          340,
+          20
+         ],
+         "w": 1
+        },
+        {
+         "x": 230,
+         "y": 0,
+         "in": [
+          300,
+          0
+         ],
+         "out": [
+          120,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 80,
+         "y": 90,
+         "in": [
+          80,
+          20
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 160,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 360,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 420,
+     "lsb": 80
+    }
+   }
+  },
+  "K": {
+   "advance": 540,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-azjsgrtk"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 470,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 180,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 490,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-t4be73jb"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 180,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-ifj6q5vm"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-azjsgrtk",
+    "stroke-t4be73jb",
+    "stroke-ifj6q5vm"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 470,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 180,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 490,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 180,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 540,
+     "lsb": 60
+    }
+   }
+  },
+  "L": {
+   "advance": 460,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-9fuagvv8"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 430,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-fjdiuekn"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-9fuagvv8",
+    "stroke-fjdiuekn"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 430,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 460,
+     "lsb": 60
+    }
+   }
+  },
+  "M": {
+   "advance": 640,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 320,
+       "y": 290,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 580,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 580,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-im2ifwxb"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-im2ifwxb"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 320,
+         "y": 290,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 580,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 580,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 640,
+     "lsb": 60
+    }
+   }
+  },
+  "N": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 500,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 500,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-4q9qh1mm"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-4q9qh1mm"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 500,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 500,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 60
+    }
+   }
+  },
+  "O": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": true,
+     "nodes": [
+      {
+       "x": 280,
+       "y": 700,
+       "in": [
+        155.73250000000002,
+        700
+       ],
+       "out": [
+        404.2675,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 505,
+       "y": 350,
+       "in": [
+        505,
+        543.3050000000001
+       ],
+       "out": [
+        505,
+        156.695
+       ],
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 0,
+       "in": [
+        404.2675,
+        0
+       ],
+       "out": [
+        155.73250000000002,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 55,
+       "y": 350,
+       "in": [
+        55,
+        156.695
+       ],
+       "out": [
+        55,
+        543.3050000000001
+       ],
+       "w": 1
+      }
+     ],
+     "_id": "stroke-lg2w4h2r"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-lg2w4h2r"
+   ],
+   "lsb": 55,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": true,
+       "nodes": [
+        {
+         "x": 280,
+         "y": 700,
+         "in": [
+          155.73250000000002,
+          700
+         ],
+         "out": [
+          404.2675,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 505,
+         "y": 350,
+         "in": [
+          505,
+          543.3050000000001
+         ],
+         "out": [
+          505,
+          156.695
+         ],
+         "w": 1
+        },
+        {
+         "x": 280,
+         "y": 0,
+         "in": [
+          404.2675,
+          0
+         ],
+         "out": [
+          155.73250000000002,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 55,
+         "y": 350,
+         "in": [
+          55,
+          156.695
+         ],
+         "out": [
+          55,
+          543.3050000000001
+         ],
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 55
+    }
+   }
+  },
+  "P": {
+   "advance": 540,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-yqcysc0z"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": [
+        230,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 490,
+       "y": 530,
+       "in": [
+        410,
+        700
+       ],
+       "out": [
+        490,
+        390
+       ],
+       "w": 1
+      },
+      {
+       "x": 250,
+       "y": 360,
+       "in": [
+        390,
+        360
+       ],
+       "out": [
+        120,
+        360
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-1usbyo08"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-yqcysc0z",
+    "stroke-1usbyo08"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": [
+          230,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 490,
+         "y": 530,
+         "in": [
+          410,
+          700
+         ],
+         "out": [
+          490,
+          390
+         ],
+         "w": 1
+        },
+        {
+         "x": 250,
+         "y": 360,
+         "in": [
+          390,
+          360
+         ],
+         "out": [
+          120,
+          360
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 540,
+     "lsb": 60
+    }
+   }
+  },
+  "Q": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": true,
+     "nodes": [
+      {
+       "x": 280,
+       "y": 700,
+       "in": [
+        155.73250000000002,
+        700
+       ],
+       "out": [
+        404.2675,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 505,
+       "y": 350,
+       "in": [
+        505,
+        543.3050000000001
+       ],
+       "out": [
+        505,
+        156.695
+       ],
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 0,
+       "in": [
+        404.2675,
+        0
+       ],
+       "out": [
+        155.73250000000002,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 55,
+       "y": 350,
+       "in": [
+        55,
+        156.695
+       ],
+       "out": [
+        55,
+        543.3050000000001
+       ],
+       "w": 1
+      }
+     ],
+     "_id": "stroke-putch2hy"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 350,
+       "y": 120,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 500,
+       "y": -30,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-nyka8e6l"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-putch2hy",
+    "stroke-nyka8e6l"
+   ],
+   "lsb": 55,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": true,
+       "nodes": [
+        {
+         "x": 280,
+         "y": 700,
+         "in": [
+          155.73250000000002,
+          700
+         ],
+         "out": [
+          404.2675,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 505,
+         "y": 350,
+         "in": [
+          505,
+          543.3050000000001
+         ],
+         "out": [
+          505,
+          156.695
+         ],
+         "w": 1
+        },
+        {
+         "x": 280,
+         "y": 0,
+         "in": [
+          404.2675,
+          0
+         ],
+         "out": [
+          155.73250000000002,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 55,
+         "y": 350,
+         "in": [
+          55,
+          156.695
+         ],
+         "out": [
+          55,
+          543.3050000000001
+         ],
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 350,
+         "y": 120,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 500,
+         "y": -30,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 55
+    }
+   }
+  },
+  "R": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-uki4rm54"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": [
+        230,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 490,
+       "y": 530,
+       "in": [
+        410,
+        700
+       ],
+       "out": [
+        490,
+        390
+       ],
+       "w": 1
+      },
+      {
+       "x": 250,
+       "y": 360,
+       "in": [
+        390,
+        360
+       ],
+       "out": [
+        120,
+        360
+       ],
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-h1bdkxaf"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 250,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 510,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-74d7mj7b"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-uki4rm54",
+    "stroke-h1bdkxaf",
+    "stroke-74d7mj7b"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": [
+          230,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 490,
+         "y": 530,
+         "in": [
+          410,
+          700
+         ],
+         "out": [
+          490,
+          390
+         ],
+         "w": 1
+        },
+        {
+         "x": 250,
+         "y": 360,
+         "in": [
+          390,
+          360
+         ],
+         "out": [
+          120,
+          360
+         ],
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 250,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 510,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 60
+    }
+   }
+  },
+  "S": {
+   "advance": 540,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 464,
+       "y": 574,
+       "in": null,
+       "out": [
+        440,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 236,
+       "y": 700,
+       "in": [
+        356,
+        700
+       ],
+       "out": [
+        92,
+        700
+       ],
+       "w": 1
+      },
+      {
+       "x": 134,
+       "y": 461.99999999999994,
+       "in": [
+        134,
+        595
+       ],
+       "out": [
+        134,
+        343
+       ],
+       "w": 1
+      },
+      {
+       "x": 404,
+       "y": 280,
+       "in": [
+        308,
+        336
+       ],
+       "out": [
+        500,
+        224
+       ],
+       "w": 1
+      },
+      {
+       "x": 452,
+       "y": 112,
+       "in": [
+        476,
+        182
+       ],
+       "out": [
+        404,
+        14
+       ],
+       "w": 1
+      },
+      {
+       "x": 188,
+       "y": 0,
+       "in": [
+        308,
+        0
+       ],
+       "out": [
+        68,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 56,
+       "y": 125.99999999999999,
+       "in": [
+        56,
+        28
+       ],
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-phn65c75"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-phn65c75"
+   ],
+   "lsb": 56,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 464,
+         "y": 574,
+         "in": null,
+         "out": [
+          440,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 236,
+         "y": 700,
+         "in": [
+          356,
+          700
+         ],
+         "out": [
+          92,
+          700
+         ],
+         "w": 1
+        },
+        {
+         "x": 134,
+         "y": 461.99999999999994,
+         "in": [
+          134,
+          595
+         ],
+         "out": [
+          134,
+          343
+         ],
+         "w": 1
+        },
+        {
+         "x": 404,
+         "y": 280,
+         "in": [
+          308,
+          336
+         ],
+         "out": [
+          500,
+          224
+         ],
+         "w": 1
+        },
+        {
+         "x": 452,
+         "y": 112,
+         "in": [
+          476,
+          182
+         ],
+         "out": [
+          404,
+          14
+         ],
+         "w": 1
+        },
+        {
+         "x": 188,
+         "y": 0,
+         "in": [
+          308,
+          0
+         ],
+         "out": [
+          68,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 56,
+         "y": 125.99999999999999,
+         "in": [
+          56,
+          28
+         ],
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 540,
+     "lsb": 56
+    }
+   }
+  },
+  "T": {
+   "advance": 520,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 460,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-8rms470r"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 260,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 260,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-q8dbh5yv"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-8rms470r",
+    "stroke-q8dbh5yv"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 460,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 260,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 260,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 520,
+     "lsb": 60
+    }
+   }
+  },
+  "U": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 200,
+       "in": [
+        60,
+        40
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 0,
+       "in": [
+        130,
+        0
+       ],
+       "out": [
+        430,
+        0
+       ],
+       "w": 1
+      },
+      {
+       "x": 500,
+       "y": 200,
+       "in": [
+        500,
+        40
+       ],
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 500,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-0pcurs21"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-0pcurs21"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 200,
+         "in": [
+          60,
+          40
+         ],
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 280,
+         "y": 0,
+         "in": [
+          130,
+          0
+         ],
+         "out": [
+          430,
+          0
+         ],
+         "w": 1
+        },
+        {
+         "x": 500,
+         "y": 200,
+         "in": [
+          500,
+          40
+         ],
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 500,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 60
+    }
+   }
+  },
+  "V": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 70,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 490,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-x7ynul4a"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-x7ynul4a"
+   ],
+   "lsb": 70,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 70,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 280,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 490,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 70
+    }
+   }
+  },
+  "W": {
+   "advance": 760,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 70,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 190,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 380,
+       "y": 500,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 570,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 690,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-0omb7h1v"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-0omb7h1v"
+   ],
+   "lsb": 70,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 70,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 190,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 380,
+         "y": 500,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 570,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 690,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 760,
+     "lsb": 70
+    }
+   }
+  },
+  "X": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 80,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 480,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-3ked30p3"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 480,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 80,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-rhas92ma"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-3ked30p3",
+    "stroke-rhas92ma"
+   ],
+   "lsb": 80,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 80,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 480,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 480,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 80,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 80
+    }
+   }
+  },
+  "Y": {
+   "advance": 560,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 80,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 480,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-pwue6con"
+    },
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 280,
+       "y": 360,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 280,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-wewcwgdy"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-pwue6con",
+    "stroke-wewcwgdy"
+   ],
+   "lsb": 80,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 80,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 280,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 480,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      },
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 280,
+         "y": 360,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 280,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 560,
+     "lsb": 80
+    }
+   }
+  },
+  "Z": {
+   "advance": 540,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 80,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 460,
+       "y": 700,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 80,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 460,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-ono7mvdc"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-ono7mvdc"
+   ],
+   "lsb": 80,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 80,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 460,
+         "y": 700,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 80,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 460,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 540,
+     "lsb": 80
+    }
+   }
+  },
+  ".": {
+   "advance": 170,
+   "strokes": [
+    {
+     "closed": false,
+     "nodes": [
+      {
+       "x": 60,
+       "y": 0,
+       "in": null,
+       "out": null,
+       "w": 1
+      },
+      {
+       "x": 60,
+       "y": 18,
+       "in": null,
+       "out": null,
+       "w": 1
+      }
+     ],
+     "_id": "stroke-tkiet3ea"
+    }
+   ],
+   "primitiveInstances": [],
+   "strokeOrder": [
+    "stroke-tkiet3ea"
+   ],
+   "lsb": 60,
+   "activeVariant": "default",
+   "variants": {
+    "default": {
+     "name": "default",
+     "strokes": [
+      {
+       "closed": false,
+       "nodes": [
+        {
+         "x": 60,
+         "y": 0,
+         "in": null,
+         "out": null,
+         "w": 1
+        },
+        {
+         "x": 60,
+         "y": 18,
+         "in": null,
+         "out": null,
+         "w": 1
+        }
+       ]
+      }
+     ],
+     "primitiveInstances": [],
+     "strokeOrder": [],
+     "advance": 170,
+     "lsb": 60
+    }
+   }
+  }
+ },
+ "order": [
+  "space",
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "I",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "P",
+  "Q",
+  "R",
+  "S",
+  "T",
+  "U",
+  "V",
+  "W",
+  "X",
+  "Y",
+  "Z",
+  "."
+ ],
+ "preview": {
+  "align": "left",
+  "italic": false,
+  "variantMap": {}
+ }
+}
