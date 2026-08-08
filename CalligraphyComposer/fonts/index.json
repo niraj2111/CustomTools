@@ -4,6 +4,11 @@
       "id": "italics",
       "name": "italics",
       "path": "./fonts/italics.json"
+    },
+    {
+      "id": "fraktur",
+      "name": "fraktur",
+      "path": "./fonts/fraktur.json"
     }
   ]
 }

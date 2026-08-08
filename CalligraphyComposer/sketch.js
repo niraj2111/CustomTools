@@ -32,6 +32,7 @@ let paperFolder;
 let sceneFolder;
 let fontFolder;
 let boxFolder;
+let fontBinding;
 let selectedBoxBindings;
 let actionBindings = {};
 let cachedLayouts = [];
@@ -190,12 +191,7 @@ function buildPane() {
   sceneFolder.addInput(P, "showSkeletonOverlay", { label: "Show skeleton" }).on("change", requestRender);
 
   fontFolder = pane.addFolder({ title: "Stroke Font", expanded: true });
-  fontFolder
-    .addInput(P, "fontId", { label: "Font", options: { italics: "italics" } })
-    .on("change", async () => {
-      await ensureCurrentFontDoc();
-      requestRender();
-    });
+  buildFontBinding({ italics: "italics" });
 
   boxFolder = pane.addFolder({ title: "Selected text box", expanded: true });
   selectedBoxBindings = {
@@ -377,6 +373,8 @@ function syncDisplaySize() {
 async function initFonts() {
   try {
     state.projectFonts = await loadProjectFonts();
+    syncCurrentFontId();
+    rebuildFontBinding();
     await ensureCurrentFontDoc();
     state.fontError = "";
   } catch (error) {
@@ -438,6 +436,34 @@ async function ensureCurrentFontDoc() {
     }
   }
   refreshSelectionMonitor();
+}
+
+function buildFontBinding(options) {
+  fontBinding = fontFolder.addInput(P, "fontId", { label: "Font", options });
+  fontBinding.on("change", async () => {
+    await ensureCurrentFontDoc();
+    requestRender();
+  });
+}
+
+function rebuildFontBinding() {
+  const options = Object.values(state.projectFonts).reduce((acc, entry) => {
+    acc[entry.name || entry.id] = entry.id;
+    return acc;
+  }, {});
+  if (fontBinding) {
+    fontBinding.dispose();
+  }
+  buildFontBinding(Object.keys(options).length ? options : { italics: "italics" });
+  pane.refresh();
+}
+
+function syncCurrentFontId() {
+  const ids = Object.keys(state.projectFonts);
+  if (!ids.length) return;
+  if (!state.projectFonts[P.fontId]) {
+    P.fontId = ids[0];
+  }
 }
 
 function requestRender() {
