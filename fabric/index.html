@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>fabric</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
+    />
+    <style>
+      :root {
+        --panel: 400px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        grid-template-columns: var(--panel) 1fr;
+        min-height: 100vh;
+        background: #0d1117;
+        color: #edf2f7;
+        font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      aside {
+        padding: 14px;
+        overflow: auto;
+        background:
+          radial-gradient(circle at top, rgba(76, 103, 138, 0.18), transparent 42%),
+          linear-gradient(180deg, #141b24 0%, #10161e 100%);
+        border-right: 1px solid #273241;
+      }
+
+      main {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+      }
+
+      #wrap {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 18px;
+      }
+
+      #canvas {
+        display: block;
+        border-radius: 14px;
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
+        background: #ffffff;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        line-height: 1;
+      }
+
+      .subtitle {
+        margin: 0 0 12px;
+        color: #b6c2cf;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 8px 12px;
+        border: 1px solid #344456;
+        border-radius: 10px;
+        background: #1f2b38;
+        color: #eef4fb;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .hint {
+        margin-top: 12px;
+        color: #b8c4d2;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        padding: 12px 18px 16px;
+        border-top: 1px solid #273241;
+        color: #b8c4d2;
+        font-size: 13px;
+      }
+
+      .stats b {
+        color: #f4f8fc;
+      }
+
+      @media (max-width: 980px) {
+        body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+        }
+
+        aside {
+          border-right: 0;
+          border-bottom: 1px solid #273241;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <h1>fabric</h1>
+      <p class="subtitle">
+        Thread-mesh textile generator with independent outer-band distortion, paper-sized
+        preview, and SVG export.
+      </p>
+      <div id="pane"></div>
+
+      <div class="row">
+        <button id="randomBtn" class="btn">Randomize Fields</button>
+        <button id="regenBtn" class="btn">Regenerate</button>
+        <button id="resetBtn" class="btn">Reset</button>
+      </div>
+
+      <div class="row">
+        <button id="pngBtn" class="btn">Save PNG</button>
+        <button id="svgBtn" class="btn">Export SVG</button>
+      </div>
+
+      <div class="hint">
+        Notes:
+        <ul>
+          <li>Mesh distortion and outer-band distortion are driven by separate seeded noise fields.</li>
+          <li><code>Preview Curves</code> smooths the on-screen and SVG paths using Catmull-Rom splines.</li>
+          <li><code>Randomize Fields</code> changes both distortion offsets without changing your control values.</li>
+          <li><code>Zoom</code> and <code>Fit View</code> only affect the preview.</li>
+        </ul>
+      </div>
+    </aside>
+
+    <main>
+      <div id="wrap">
+        <canvas id="canvas"></canvas>
+      </div>
+      <div class="stats">
+        <span>Segments: <b id="stat-segments">-</b></span>
+        <span>Points: <b id="stat-points">-</b></span>
+        <span>Render: <b id="stat-render">-</b></span>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="../shared/paper.js"></script>
+    <script src="../shared/export.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>
