@@ -1,5 +1,6 @@
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
+const paneHost = document.getElementById("pane");
 const appShell = document.getElementById("appShell");
 const controlPanel = document.getElementById("controlPanel");
 const collapseBtn = document.getElementById("collapseBtn");
@@ -11,41 +12,10 @@ const pathSvgBtn = document.getElementById("pathSvgBtn");
 const brushSvgBtn = document.getElementById("brushSvgBtn");
 const floatingUndoBtn = document.getElementById("floatingUndoBtn");
 const floatingStreamBtn = document.getElementById("floatingStreamBtn");
-const autoStream = document.getElementById("autoStream");
-const showGrid = document.getElementById("showGrid");
-const snapGrid = document.getElementById("snapGrid");
-const brushType = document.getElementById("brushType");
-const roundSize = document.getElementById("roundSize");
-const flatWidth = document.getElementById("flatWidth");
-const flatAngle = document.getElementById("flatAngle");
-const streamlineInput = document.getElementById("streamline");
-const smoothingInput = document.getElementById("smoothing");
-const minDistanceInput = document.getElementById("minDistance");
-const roundRow = document.getElementById("roundRow");
-const flatControls = document.getElementById("flatControls");
-const roundSizeValue = document.getElementById("roundSizeValue");
-const flatWidthValue = document.getElementById("flatWidthValue");
-const flatAngleValue = document.getElementById("flatAngleValue");
-const streamlineValue = document.getElementById("streamlineValue");
-const smoothingValue = document.getElementById("smoothingValue");
-const minDistanceValue = document.getElementById("minDistanceValue");
-const previewScaleValue = document.getElementById("previewScaleValue");
-const marginMMValue = document.getElementById("marginMMValue");
 const connectionBadge = document.getElementById("connectionBadge");
 const paperBadge = document.getElementById("paperBadge");
 const brushBadge = document.getElementById("brushBadge");
 const status = document.getElementById("status");
-const drawToolBtn = document.getElementById("drawToolBtn");
-const lassoToolBtn = document.getElementById("lassoToolBtn");
-const transformToolBtn = document.getElementById("transformToolBtn");
-const paperPresetSelect = document.getElementById("paperPreset");
-const canvasWMMInput = document.getElementById("canvasWMM");
-const canvasHMMInput = document.getElementById("canvasHMM");
-const dpiInput = document.getElementById("dpi");
-const previewScaleInput = document.getElementById("previewScale");
-const fitToViewportInput = document.getElementById("fitToViewport");
-const showMarginsInput = document.getElementById("showMargins");
-const marginMMInput = document.getElementById("marginMM");
 const canvasWrap = document.getElementById("canvasWrap");
 const penMarker = document.getElementById("penMarker");
 
@@ -63,9 +33,28 @@ const P = {
   showMargins: true,
 };
 
+const UI = {
+  tool: "draw",
+  autoStream: false,
+  showGrid: true,
+  snapGrid: false,
+  brushType: "round",
+  roundSize: 1.6,
+  flatWidth: 3.2,
+  flatAngle: 40,
+  streamline: 0.45,
+  smoothing: 0.25,
+  minDistance: 0.6,
+};
+
 const saxiHost = "127.0.0.1:9080";
 const view = {
-  pxPerMM: PaperUtils.getPxPerMM(P),
+  pxPerMM: 1,
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
+  canvasWidth: 0,
+  canvasHeight: 0,
 };
 
 let committedLayer = createLayer();
@@ -75,6 +64,7 @@ let socket = null;
 let streamTimer = null;
 let frameTimer = null;
 let connected = false;
+let pane = null;
 let tool = "draw";
 let panelCollapsed = false;
 let lassoPoints = [];
@@ -82,6 +72,41 @@ let transformState = null;
 let nextStrokeId = 1;
 let committedDirty = true;
 let hoverPointer = null;
+let gestureState = null;
+const activeTouchPointers = new Map();
+
+function makeValueBinding(object, key) {
+  return {
+    get value() {
+      return String(object[key]);
+    },
+    set value(next) {
+      object[key] = typeof object[key] === "number" ? Number(next) : next;
+    },
+  };
+}
+
+function makeCheckedBinding(object, key) {
+  return {
+    get checked() {
+      return !!object[key];
+    },
+    set checked(next) {
+      object[key] = !!next;
+    },
+  };
+}
+
+const autoStream = makeCheckedBinding(UI, "autoStream");
+const showGrid = makeCheckedBinding(UI, "showGrid");
+const snapGrid = makeCheckedBinding(UI, "snapGrid");
+const brushType = makeValueBinding(UI, "brushType");
+const roundSize = makeValueBinding(UI, "roundSize");
+const flatWidth = makeValueBinding(UI, "flatWidth");
+const flatAngle = makeValueBinding(UI, "flatAngle");
+const streamlineInput = makeValueBinding(UI, "streamline");
+const smoothingInput = makeValueBinding(UI, "smoothing");
+const minDistanceInput = makeValueBinding(UI, "minDistance");
 
 function createLayer() {
   return document.createElement("canvas");
@@ -110,9 +135,10 @@ function sq(v) {
 }
 
 function mmToCanvasPx(point) {
+  const scale = view.pxPerMM * view.zoom;
   return {
-    x: point.x * view.pxPerMM,
-    y: point.y * view.pxPerMM,
+    x: view.offsetX + point.x * scale,
+    y: view.offsetY + point.y * scale,
   };
 }
 
@@ -123,9 +149,10 @@ function pointerToMM(event) {
   }
   const xPx = (event.clientX - rect.left) * (canvas.width / rect.width);
   const yPx = (event.clientY - rect.top) * (canvas.height / rect.height);
+  const scale = view.pxPerMM * view.zoom;
   return {
-    x: clamp(xPx / view.pxPerMM, 0, P.canvasWMM),
-    y: clamp(yPx / view.pxPerMM, 0, P.canvasHMM),
+    x: clamp((xPx - view.offsetX) / scale, 0, P.canvasWMM),
+    y: clamp((yPx - view.offsetY) / scale, 0, P.canvasHMM),
   };
 }
 
@@ -208,24 +235,158 @@ function getBrushStampStepMM(brush) {
   return Math.max(0.25, getBrushSizeMM(brush) * 0.25);
 }
 
-function populatePaperPresetOptions() {
-  const options = Object.keys(PaperUtils.PAPER_PRESETS_MM);
-  paperPresetSelect.innerHTML = options
-    .map((name) => `<option value="${ExportUtils.escapeXML(name)}">${ExportUtils.escapeXML(name)}</option>`)
-    .join("");
+function getViewportBaseScale() {
+  return PaperUtils.getPxPerMM(P);
+}
+
+function getViewportScale() {
+  return view.pxPerMM * view.zoom;
+}
+
+function fitPaperToViewport(resetPan = false) {
+  const baseScale = getViewportBaseScale();
+  const fitScaleX = view.canvasWidth / Math.max(P.canvasWMM, 1);
+  const fitScaleY = view.canvasHeight / Math.max(P.canvasHMM, 1);
+  const fitZoom = Math.min(fitScaleX, fitScaleY) / Math.max(baseScale, 0.0001);
+
+  if (P.fitToViewport) {
+    view.zoom = clamp(fitZoom, 0.05, 12);
+    P.previewScale = view.zoom;
+  } else if (!Number.isFinite(view.zoom) || view.zoom <= 0) {
+    view.zoom = clamp(P.previewScale || 1, 0.05, 12);
+  }
+
+  view.pxPerMM = baseScale;
+  const scale = getViewportScale();
+  const paperWidthPx = P.canvasWMM * scale;
+  const paperHeightPx = P.canvasHMM * scale;
+
+  if (resetPan || P.fitToViewport) {
+    view.offsetX = (view.canvasWidth - paperWidthPx) * 0.5;
+    view.offsetY = (view.canvasHeight - paperHeightPx) * 0.5;
+    return;
+  }
+
+  const minOffsetX = Math.min(32, view.canvasWidth - paperWidthPx - 32);
+  const maxOffsetX = Math.max(view.canvasWidth - paperWidthPx - 32, 32);
+  const minOffsetY = Math.min(32, view.canvasHeight - paperHeightPx - 32);
+  const maxOffsetY = Math.max(view.canvasHeight - paperHeightPx - 32, 32);
+  view.offsetX = clamp(view.offsetX, minOffsetX, maxOffsetX);
+  view.offsetY = clamp(view.offsetY, minOffsetY, maxOffsetY);
+}
+
+function setManualZoom(nextZoom, anchorPx = null) {
+  const prevScale = getViewportScale();
+  const prevOffsetX = view.offsetX;
+  const prevOffsetY = view.offsetY;
+  const clampedZoom = clamp(nextZoom, 0.05, 12);
+  P.fitToViewport = false;
+  view.zoom = clampedZoom;
+  P.previewScale = clampedZoom;
+  view.pxPerMM = getViewportBaseScale();
+
+  if (anchorPx && prevScale > 0) {
+    const mmX = (anchorPx.x - prevOffsetX) / prevScale;
+    const mmY = (anchorPx.y - prevOffsetY) / prevScale;
+    const nextScale = getViewportScale();
+    view.offsetX = anchorPx.x - mmX * nextScale;
+    view.offsetY = anchorPx.y - mmY * nextScale;
+  }
+
+  fitPaperToViewport(false);
+  syncPaperControlsFromState();
+  committedDirty = true;
+  queueRedraw();
+  if (hoverPointer) {
+    updatePenMarkerFromPointer(hoverPointer.pointMm, getBrushSnapshot(), hoverPointer.event);
+  }
+}
+
+function panViewport(deltaX, deltaY) {
+  P.fitToViewport = false;
+  view.offsetX += deltaX;
+  view.offsetY += deltaY;
+  fitPaperToViewport(false);
+  syncPaperControlsFromState();
+  committedDirty = true;
+  queueRedraw();
+  if (hoverPointer) {
+    updatePenMarkerFromPointer(hoverPointer.pointMm, getBrushSnapshot(), hoverPointer.event);
+  }
+}
+
+function getEventCanvasPx(event) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (event.clientX - rect.left) * (canvas.width / Math.max(rect.width, 1)),
+    y: (event.clientY - rect.top) * (canvas.height / Math.max(rect.height, 1)),
+  };
+}
+
+function gestureCenter(points) {
+  return {
+    x: (points[0].x + points[1].x) * 0.5,
+    y: (points[0].y + points[1].y) * 0.5,
+  };
+}
+
+function gestureDistance(points) {
+  return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+}
+
+function beginTouchGesture() {
+  const points = Array.from(activeTouchPointers.values());
+  if (points.length < 2) return;
+  gestureState = {
+    center: gestureCenter(points),
+    distance: Math.max(gestureDistance(points), 1),
+    zoom: view.zoom,
+    offsetX: view.offsetX,
+    offsetY: view.offsetY,
+  };
+}
+
+function updateTouchGesture() {
+  const points = Array.from(activeTouchPointers.values());
+  if (points.length < 2) return;
+  if (!gestureState) {
+    beginTouchGesture();
+  }
+  if (!gestureState) return;
+
+  const center = gestureCenter(points);
+  const distance = Math.max(gestureDistance(points), 1);
+  const zoomRatio = distance / gestureState.distance;
+  const nextZoom = clamp(gestureState.zoom * zoomRatio, 0.05, 12);
+  const anchorCanvas = {
+    x: center.x,
+    y: center.y,
+  };
+
+  P.fitToViewport = false;
+  view.zoom = nextZoom;
+  P.previewScale = nextZoom;
+  view.pxPerMM = getViewportBaseScale();
+
+  const scaleAtStart = view.pxPerMM * gestureState.zoom;
+  const anchorMM = {
+    x: (gestureState.center.x - gestureState.offsetX) / scaleAtStart,
+    y: (gestureState.center.y - gestureState.offsetY) / scaleAtStart,
+  };
+  const nextScale = getViewportScale();
+  view.offsetX = anchorCanvas.x - anchorMM.x * nextScale;
+  view.offsetY = anchorCanvas.y - anchorMM.y * nextScale;
+  view.offsetX += center.x - gestureState.center.x;
+  view.offsetY += center.y - gestureState.center.y;
+
+  fitPaperToViewport(false);
+  syncPaperControlsFromState();
+  committedDirty = true;
+  queueRedraw();
 }
 
 function syncPaperControlsFromState() {
-  paperPresetSelect.value = P.paperPreset;
-  canvasWMMInput.value = String(P.canvasWMM);
-  canvasHMMInput.value = String(P.canvasHMM);
-  dpiInput.value = String(P.dpi);
-  previewScaleInput.value = String(P.previewScale);
-  fitToViewportInput.checked = P.fitToViewport;
-  showMarginsInput.checked = P.showMargins;
-  marginMMInput.value = String(P.marginMM);
-  previewScaleValue.textContent = fmt(P.previewScale, 2);
-  marginMMValue.textContent = `${fmt(P.marginMM)} mm`;
+  pane?.refresh();
 }
 
 function updateBadges() {
@@ -236,28 +397,16 @@ function updateBadges() {
 }
 
 function updateControlLabels() {
-  roundSizeValue.textContent = `${fmt(Number(roundSize.value))} mm`;
-  flatWidthValue.textContent = `${fmt(Number(flatWidth.value))} mm`;
-  flatAngleValue.textContent = `${fmt(Number(flatAngle.value))} deg`;
-  streamlineValue.textContent = fmt(Number(streamlineInput.value), 2);
-  smoothingValue.textContent = fmt(Number(smoothingInput.value), 2);
-  minDistanceValue.textContent = `${fmt(Number(minDistanceInput.value))} mm`;
-  previewScaleValue.textContent = fmt(Number(previewScaleInput.value), 2);
-  marginMMValue.textContent = `${fmt(Number(marginMMInput.value))} mm`;
-
-  const flat = brushType.value === "flat";
-  flatControls.hidden = !flat;
-  roundRow.hidden = flat;
   updateBadges();
+  pane?.refresh();
   if (hoverPointer) {
     updatePenMarkerFromPointer(hoverPointer.pointMm, getBrushSnapshot(), hoverPointer.event);
   }
 }
 
 function updateToolButtons() {
-  drawToolBtn.classList.toggle("active", tool === "draw");
-  lassoToolBtn.classList.toggle("active", tool === "lasso");
-  transformToolBtn.classList.toggle("active", tool === "transform");
+  UI.tool = tool;
+  pane?.refresh();
 }
 
 function setTool(next) {
@@ -281,6 +430,109 @@ function setPanelCollapsed(next) {
   syncCanvasSize();
 }
 
+function buildPane() {
+  pane = new Tweakpane.Pane({ container: paneHost, title: "Controls" });
+
+  const fTool = pane.addFolder({ title: "Tool", expanded: true });
+  fTool
+    .addInput(UI, "tool", {
+      options: {
+        Draw: "draw",
+        Lasso: "lasso",
+        Transform: "transform",
+      },
+    })
+    .on("change", (event) => setTool(event.value));
+  fTool.addInput(UI, "autoStream", { label: "Auto stream" });
+  fTool.addInput(UI, "showGrid", { label: "Show grid" }).on("change", () => {
+    committedDirty = true;
+    queueRedraw();
+  });
+  fTool.addInput(UI, "snapGrid", { label: "Snap grid" }).on("change", () => {
+    applyCurrentBrushToExistingStrokes();
+  });
+
+  const fPaper = pane.addFolder({ title: "Paper", expanded: true });
+  fPaper
+    .addInput(P, "paperPreset", {
+      label: "Preset",
+      options: Object.keys(PaperUtils.PAPER_PRESETS_MM).reduce((acc, name) => {
+        acc[name] = name;
+        return acc;
+      }, {}),
+    })
+    .on("change", (event) => {
+      PaperUtils.applyPaperPreset(P, event.value);
+      syncPaperControlsFromState();
+      updateBadges();
+      syncCanvasSize();
+    });
+  fPaper
+    .addInput(P, "canvasWMM", { label: "Width", min: 60, max: 1000, step: 1 })
+    .on("change", () => {
+      PaperUtils.syncPresetFromSize(P);
+      syncPaperControlsFromState();
+      updateBadges();
+      syncCanvasSize();
+    });
+  fPaper
+    .addInput(P, "canvasHMM", { label: "Height", min: 60, max: 1000, step: 1 })
+    .on("change", () => {
+      PaperUtils.syncPresetFromSize(P);
+      syncPaperControlsFromState();
+      updateBadges();
+      syncCanvasSize();
+    });
+  fPaper.addInput(P, "dpi", { min: 36, max: 1200, step: 1 }).on("change", syncCanvasSize);
+  fPaper.addInput(P, "fitToViewport", { label: "Fit preview" }).on("change", syncCanvasSize);
+  fPaper.addInput(P, "previewScale", { label: "Zoom", min: 0.05, max: 12, step: 0.01 }).on("change", () => {
+    setManualZoom(P.previewScale);
+  });
+  fPaper.addInput(P, "showMargins", { label: "Show margins" }).on("change", () => {
+    committedDirty = true;
+    queueRedraw();
+  });
+  fPaper.addInput(P, "marginMM", { label: "Margin", min: 0, max: 80, step: 0.5 }).on("change", () => {
+    committedDirty = true;
+    queueRedraw();
+    updateBadges();
+  });
+
+  const fBrush = pane.addFolder({ title: "Brush", expanded: true });
+  fBrush
+    .addInput(UI, "brushType", {
+      label: "Type",
+      options: {
+        Round: "round",
+        "Flat nib": "flat",
+      },
+    })
+    .on("change", () => {
+      updateControlLabels();
+      applyCurrentBrushToExistingStrokes();
+    });
+  fBrush.addInput(UI, "roundSize", { label: "Round size", min: 0.4, max: 8, step: 0.1 }).on("change", () => {
+    applyCurrentBrushToExistingStrokes();
+    updateControlLabels();
+  });
+  fBrush.addInput(UI, "flatWidth", { label: "Flat width", min: 0.6, max: 12, step: 0.1 }).on("change", () => {
+    applyCurrentBrushToExistingStrokes();
+    updateControlLabels();
+  });
+  fBrush.addInput(UI, "flatAngle", { label: "Nib angle", min: 0, max: 180, step: 1 }).on("change", () => {
+    applyCurrentBrushToExistingStrokes();
+    updateControlLabels();
+  });
+
+  const fStroke = pane.addFolder({ title: "Stroke", expanded: true });
+  fStroke.addInput(UI, "streamline", { min: 0, max: 2, step: 0.01 }).on("change", applyCurrentBrushToExistingStrokes);
+  fStroke.addInput(UI, "smoothing", { min: 0, max: 2, step: 0.01 }).on("change", applyCurrentBrushToExistingStrokes);
+  fStroke.addInput(UI, "minDistance", { label: "Min distance", min: 0.1, max: 5, step: 0.1 }).on(
+    "change",
+    applyCurrentBrushToExistingStrokes,
+  );
+}
+
 function styleProxyForCanvas(target) {
   return {
     style(name, value) {
@@ -290,17 +542,23 @@ function styleProxyForCanvas(target) {
 }
 
 function syncCanvasSize() {
-  const size = PaperUtils.getCanvasPixelSize(P);
-  view.pxPerMM = PaperUtils.getPxPerMM(P);
+  const wrapRect = canvasWrap.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(wrapRect.width * dpr));
+  const height = Math.max(1, Math.round(wrapRect.height * dpr));
 
-  canvas.width = size.width;
-  canvas.height = size.height;
-  committedLayer.width = size.width;
-  committedLayer.height = size.height;
-  activeLayer.width = size.width;
-  activeLayer.height = size.height;
+  view.canvasWidth = width;
+  view.canvasHeight = height;
+  canvas.width = width;
+  canvas.height = height;
+  committedLayer.width = width;
+  committedLayer.height = height;
+  activeLayer.width = width;
+  activeLayer.height = height;
 
-  PaperUtils.updateCanvasDisplaySize(styleProxyForCanvas(canvas), P, "canvasWrap", 20);
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  fitPaperToViewport(!gestureState);
   committedDirty = true;
   clearLayer(activeLayer);
   queueRedraw();
@@ -316,7 +574,8 @@ function clearLayer(layer) {
 
 function withPaperScale(targetCtx, fn) {
   targetCtx.save();
-  targetCtx.setTransform(view.pxPerMM, 0, 0, view.pxPerMM, 0, 0);
+  const scale = getViewportScale();
+  targetCtx.setTransform(scale, 0, 0, scale, view.offsetX, view.offsetY);
   fn(targetCtx);
   targetCtx.restore();
 }
@@ -342,7 +601,7 @@ function rebuildStrokePointsFromRaw(rawPoints, brush) {
   const points = [point];
 
   for (let i = 1; i < rawPoints.length; i += 1) {
-    filtered = lerp(filtered, rawPoints[i], clamp(1 - brush.streamline * 0.85, 0.05, 1));
+    filtered = lerp(filtered, rawPoints[i], clamp(1 - brush.streamline * 0.45, 0.015, 1));
     point = filtered;
     if (brush.snapToGrid) {
       point = {
@@ -396,8 +655,8 @@ function smoothPath(points, smoothing) {
   if (points.length < 3) return points.slice();
   if (smoothing <= 0.001) return points.slice();
 
-  const passes = smoothing < 0.34 ? 1 : smoothing < 0.67 ? 2 : 3;
-  const alpha = 0.12 + smoothing * 0.2;
+  const passes = Math.max(1, Math.min(5, Math.round(1 + smoothing * 2)));
+  const alpha = clamp(0.08 + smoothing * 0.12, 0.08, 0.28);
   let out = points.slice();
 
   for (let pass = 0; pass < passes; pass += 1) {
@@ -561,10 +820,13 @@ function drawIncrementalStrokeSegment(layer, stroke, fromPoint, toPoint) {
 }
 
 function drawGridAndGuides(targetCtx) {
-  targetCtx.fillStyle = "#ffffff";
+  targetCtx.fillStyle = "#0f1620";
   targetCtx.fillRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
 
   withPaperScale(targetCtx, (scaledCtx) => {
+    scaledCtx.fillStyle = "#ffffff";
+    scaledCtx.fillRect(0, 0, P.canvasWMM, P.canvasHMM);
+
     if (showGrid.checked) {
       for (let x = 0; x <= P.canvasWMM; x += 5) {
         const major = x % 25 === 0;
@@ -572,7 +834,7 @@ function drawGridAndGuides(targetCtx) {
         scaledCtx.moveTo(x, 0);
         scaledCtx.lineTo(x, P.canvasHMM);
         scaledCtx.strokeStyle = major ? "#cbd3e2" : "#e7ebf3";
-        scaledCtx.lineWidth = major ? 1.1 / view.pxPerMM : 0.7 / view.pxPerMM;
+        scaledCtx.lineWidth = major ? 1.1 / getViewportScale() : 0.7 / getViewportScale();
         scaledCtx.stroke();
       }
 
@@ -582,21 +844,21 @@ function drawGridAndGuides(targetCtx) {
         scaledCtx.moveTo(0, y);
         scaledCtx.lineTo(P.canvasWMM, y);
         scaledCtx.strokeStyle = major ? "#cbd3e2" : "#e7ebf3";
-        scaledCtx.lineWidth = major ? 1.1 / view.pxPerMM : 0.7 / view.pxPerMM;
+        scaledCtx.lineWidth = major ? 1.1 / getViewportScale() : 0.7 / getViewportScale();
         scaledCtx.stroke();
       }
     }
 
     scaledCtx.strokeStyle = "#c6cfdf";
-    scaledCtx.lineWidth = 1 / view.pxPerMM;
+    scaledCtx.lineWidth = 1 / getViewportScale();
     scaledCtx.strokeRect(0, 0, P.canvasWMM, P.canvasHMM);
 
     if (P.showMargins) {
       const margin = clamp(P.marginMM, 0, Math.min(P.canvasWMM, P.canvasHMM) * 0.5);
       scaledCtx.save();
-      scaledCtx.setLineDash([5 / view.pxPerMM, 4 / view.pxPerMM]);
+      scaledCtx.setLineDash([5 / getViewportScale(), 4 / getViewportScale()]);
       scaledCtx.strokeStyle = "#7e889f";
-      scaledCtx.lineWidth = 1 / view.pxPerMM;
+      scaledCtx.lineWidth = 1 / getViewportScale();
       scaledCtx.strokeRect(
         margin,
         margin,
@@ -757,7 +1019,7 @@ function drawPolylineMM(targetCtx, points, color, widthPx) {
   if (points.length < 2) return;
   targetCtx.save();
   targetCtx.strokeStyle = color;
-  targetCtx.lineWidth = widthPx / view.pxPerMM;
+  targetCtx.lineWidth = widthPx / getViewportScale();
   targetCtx.beginPath();
   targetCtx.moveTo(points[0].x, points[0].y);
   for (let i = 1; i < points.length; i += 1) {
@@ -813,9 +1075,11 @@ function drawSelectionOverlay() {
     ctx.strokeStyle = "#2d8b83";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(lassoPoints[0].x * view.pxPerMM, lassoPoints[0].y * view.pxPerMM);
+    const firstPoint = mmToCanvasPx(lassoPoints[0]);
+    ctx.moveTo(firstPoint.x, firstPoint.y);
     for (let i = 1; i < lassoPoints.length; i += 1) {
-      ctx.lineTo(lassoPoints[i].x * view.pxPerMM, lassoPoints[i].y * view.pxPerMM);
+      const pointPx = mmToCanvasPx(lassoPoints[i]);
+      ctx.lineTo(pointPx.x, pointPx.y);
     }
     ctx.stroke();
     ctx.restore();
@@ -1048,7 +1312,7 @@ function handleDrawMove(point) {
   let filtered = lerp(
     current.filtered,
     point,
-    clamp(1 - current.brush.streamline * 0.85, 0.05, 1),
+    clamp(1 - current.brush.streamline * 0.45, 0.015, 1),
   );
   current.filtered = filtered;
 
@@ -1098,28 +1362,20 @@ function clearAll() {
   streamIfAutoEnabled();
 }
 
-function syncPaperStateFromInputs() {
-  P.canvasWMM = clamp(Number(canvasWMMInput.value) || P.canvasWMM, 60, 1000);
-  P.canvasHMM = clamp(Number(canvasHMMInput.value) || P.canvasHMM, 60, 1000);
-  P.dpi = clamp(Number(dpiInput.value) || P.dpi, 36, 1200);
-  P.previewScale = clamp(Number(previewScaleInput.value) || P.previewScale, 0.2, 4);
-  P.marginMM = clamp(Number(marginMMInput.value) || P.marginMM, 0, 80);
-  P.fitToViewport = fitToViewportInput.checked;
-  P.showMargins = showMarginsInput.checked;
-  PaperUtils.syncPresetFromSize(P);
-  syncPaperControlsFromState();
-  updateBadges();
-}
-
-function handlePaperPresetChange() {
-  PaperUtils.applyPaperPreset(P, paperPresetSelect.value);
-  syncPaperControlsFromState();
-  updateBadges();
-  syncCanvasSize();
-}
-
 canvas.addEventListener("pointerdown", (event) => {
   canvas.setPointerCapture(event.pointerId);
+  if (event.pointerType === "touch") {
+    activeTouchPointers.set(event.pointerId, getEventCanvasPx(event));
+    if (current && tool === "draw") {
+      finalizeCurrentStroke();
+      queueRedraw();
+    }
+    if (activeTouchPointers.size >= 2) {
+      beginTouchGesture();
+    }
+    return;
+  }
+
   const point = pointFromPointer(event);
   if (!point) return;
 
@@ -1151,6 +1407,16 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
+  if (event.pointerType === "touch") {
+    if (activeTouchPointers.has(event.pointerId)) {
+      activeTouchPointers.set(event.pointerId, getEventCanvasPx(event));
+      if (activeTouchPointers.size >= 2) {
+        updateTouchGesture();
+      }
+    }
+    return;
+  }
+
   if (isPenPointerEvent(event)) {
     handlePenPreview(event);
   }
@@ -1190,7 +1456,17 @@ canvas.addEventListener("pointermove", (event) => {
   }
 });
 
-canvas.addEventListener("pointerup", () => {
+canvas.addEventListener("pointerup", (event) => {
+  if (event.pointerType === "touch") {
+    activeTouchPointers.delete(event.pointerId);
+    if (activeTouchPointers.size >= 2) {
+      beginTouchGesture();
+    } else {
+      gestureState = null;
+    }
+    return;
+  }
+
   if (tool === "draw") {
     finalizeCurrentStroke();
     queueRedraw();
@@ -1204,7 +1480,15 @@ canvas.addEventListener("pointerup", () => {
   }
 });
 
-canvas.addEventListener("pointerleave", () => {
+canvas.addEventListener("pointerleave", (event) => {
+  if (event.pointerType === "touch") {
+    activeTouchPointers.delete(event.pointerId);
+    if (activeTouchPointers.size === 0) {
+      gestureState = null;
+    }
+    return;
+  }
+
   if (tool === "draw" && current) {
     finalizeCurrentStroke();
     queueRedraw();
@@ -1212,7 +1496,15 @@ canvas.addEventListener("pointerleave", () => {
   hidePenMarker();
 });
 
-canvas.addEventListener("pointercancel", () => {
+canvas.addEventListener("pointercancel", (event) => {
+  if (event.pointerType === "touch") {
+    activeTouchPointers.delete(event.pointerId);
+    if (activeTouchPointers.size === 0) {
+      gestureState = null;
+    }
+    return;
+  }
+
   if (tool === "draw" && current) {
     finalizeCurrentStroke();
     queueRedraw();
@@ -1226,6 +1518,25 @@ canvas.addEventListener("pointerenter", (event) => {
   }
 });
 
+canvas.addEventListener(
+  "wheel",
+  (event) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const anchor = getEventCanvasPx(event);
+      const zoomFactor = Math.exp(-event.deltaY * 0.0025);
+      setManualZoom(view.zoom * zoomFactor, anchor);
+      return;
+    }
+
+    if (Math.abs(event.deltaX) > 0 || Math.abs(event.deltaY) > 0) {
+      event.preventDefault();
+      panViewport(-event.deltaX, -event.deltaY);
+    }
+  },
+  { passive: false },
+);
+
 undoBtn.addEventListener("click", undoLast);
 floatingUndoBtn.addEventListener("click", undoLast);
 clearBtn.addEventListener("click", clearAll);
@@ -1233,70 +1544,19 @@ streamBtn.addEventListener("click", streamNow);
 floatingStreamBtn.addEventListener("click", streamNow);
 pathSvgBtn.addEventListener("click", exportPathSvg);
 brushSvgBtn.addEventListener("click", exportBrushSvg);
-drawToolBtn.addEventListener("click", () => setTool("draw"));
-lassoToolBtn.addEventListener("click", () => setTool("lasso"));
-transformToolBtn.addEventListener("click", () => setTool("transform"));
 collapseBtn.addEventListener("click", () => setPanelCollapsed(true));
 showPanelBtn.addEventListener("click", () => setPanelCollapsed(false));
 
-paperPresetSelect.addEventListener("change", handlePaperPresetChange);
-
-[canvasWMMInput, canvasHMMInput, dpiInput].forEach((element) => {
-  element.addEventListener("change", () => {
-    syncPaperStateFromInputs();
-    syncCanvasSize();
-  });
-});
-
-[previewScaleInput, marginMMInput].forEach((element) => {
-  element.addEventListener("input", () => {
-    syncPaperStateFromInputs();
-    syncCanvasSize();
-    updateControlLabels();
-  });
-});
-
-[fitToViewportInput, showMarginsInput].forEach((element) => {
-  element.addEventListener("change", () => {
-    syncPaperStateFromInputs();
-    syncCanvasSize();
-  });
-});
-
-brushType.addEventListener("change", () => {
-  updateControlLabels();
-  applyCurrentBrushToExistingStrokes();
-});
-
-[roundSize, flatWidth, flatAngle, showGrid, snapGrid, streamlineInput, smoothingInput, minDistanceInput].forEach(
-  (element) => {
-    element.addEventListener("input", () => {
-      updateControlLabels();
-      if (element === showGrid) {
-        committedDirty = true;
-        queueRedraw();
-      } else {
-        applyCurrentBrushToExistingStrokes();
-      }
-    });
-  },
-);
-
-showGrid.addEventListener("change", () => {
-  committedDirty = true;
-  queueRedraw();
-});
-
 window.addEventListener("resize", () => {
-  PaperUtils.updateCanvasDisplaySize(styleProxyForCanvas(canvas), P, "canvasWrap", 20);
+  syncCanvasSize();
   if (hoverPointer) {
     updatePenMarkerFromPointer(hoverPointer.pointMm, getBrushSnapshot(), hoverPointer.event);
   }
 });
 
 function init() {
-  populatePaperPresetOptions();
   PaperUtils.applyPaperPreset(P, P.paperPreset);
+  buildPane();
   syncPaperControlsFromState();
   updateControlLabels();
   updateToolButtons();

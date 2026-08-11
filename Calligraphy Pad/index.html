@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Calligraphy Pad</title>
-    <link href="https://fonts.googleapis.com/css?family=Work+Sans:400,700,900" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -13,7 +13,7 @@
         <div class="panel-head">
           <div>
             <h1>Calligraphy Pad</h1>
-            <p>Draw here and stream directly into saxi.</p>
+            <p>Live drawing pad with saxi streaming and SVG export.</p>
           </div>
           <button id="collapseBtn" type="button" class="ghost">Hide</button>
         </div>
@@ -24,115 +24,19 @@
           <span class="badge" id="brushBadge">brush: round 1.6 mm</span>
         </div>
 
-        <div class="panel-block compact-block">
-          <div class="row">
-            <button id="drawToolBtn" type="button" class="tool-btn active">Draw</button>
-            <button id="lassoToolBtn" type="button" class="tool-btn">Lasso</button>
-            <button id="transformToolBtn" type="button" class="tool-btn">Transform</button>
-          </div>
-          <p id="status" class="status">Connecting...</p>
-        </div>
+        <div id="pane"></div>
 
-        <div class="panel-block compact-block">
-          <div class="row">
-            <button id="undoBtn" type="button">Undo</button>
-            <button id="clearBtn" class="warn" type="button">Clear</button>
-            <button id="streamBtn" class="primary" type="button">Stream</button>
-          </div>
-          <div class="row">
-            <button id="pathSvgBtn" type="button">Export Path SVG</button>
-            <button id="brushSvgBtn" type="button">Export Brush SVG</button>
-          </div>
-          <div class="row tight">
-            <label><input id="autoStream" type="checkbox" /> Auto stream</label>
-            <label><input id="showGrid" type="checkbox" checked /> Show grid</label>
-            <label><input id="snapGrid" type="checkbox" /> Snap to grid</label>
-          </div>
+        <div class="row actions">
+          <button id="undoBtn" type="button">Undo</button>
+          <button id="clearBtn" class="warn" type="button">Clear</button>
+          <button id="streamBtn" class="primary" type="button">Stream</button>
         </div>
-
-        <div class="panel-block compact-block">
-          <h2>Paper</h2>
-          <div class="row">
-            <label for="paperPreset">Preset</label>
-            <select id="paperPreset"></select>
-          </div>
-          <div class="row">
-            <label for="canvasWMM">Width</label>
-            <input id="canvasWMM" type="number" min="60" max="1000" step="1" value="210" />
-            <span class="small">mm</span>
-          </div>
-          <div class="row">
-            <label for="canvasHMM">Height</label>
-            <input id="canvasHMM" type="number" min="60" max="1000" step="1" value="297" />
-            <span class="small">mm</span>
-          </div>
-          <div class="row">
-            <label for="dpi">DPI</label>
-            <input id="dpi" type="number" min="36" max="1200" step="1" value="96" />
-          </div>
-          <div class="row">
-            <label for="previewScale">Zoom</label>
-            <input id="previewScale" type="range" min="0.2" max="4" step="0.01" value="1" />
-            <span id="previewScaleValue" class="small">1</span>
-          </div>
-          <div class="row tight">
-            <label><input id="fitToViewport" type="checkbox" checked /> Fit preview</label>
-            <label><input id="showMargins" type="checkbox" checked /> Show margins</label>
-          </div>
-          <div class="row">
-            <label for="marginMM">Margin</label>
-            <input id="marginMM" type="range" min="0" max="80" step="0.5" value="20" />
-            <span id="marginMMValue" class="small">20 mm</span>
-          </div>
+        <div class="row actions">
+          <button id="pathSvgBtn" type="button">Path SVG</button>
+          <button id="brushSvgBtn" type="button">Brush SVG</button>
         </div>
-
-        <div class="panel-block compact-block">
-          <h2>Brush</h2>
-          <div class="row">
-            <label for="brushType">Brush</label>
-            <select id="brushType">
-              <option value="round">Round</option>
-              <option value="flat">Flat nib</option>
-            </select>
-          </div>
-          <div class="row" id="roundRow">
-            <label for="roundSize">Round size</label>
-            <input id="roundSize" type="range" min="0.4" max="8" step="0.1" value="1.6" />
-            <span id="roundSizeValue" class="small">1.6 mm</span>
-          </div>
-          <div id="flatControls" hidden>
-            <div class="row">
-              <label for="flatWidth">Flat width</label>
-              <input id="flatWidth" type="range" min="0.6" max="12" step="0.1" value="3.2" />
-              <span id="flatWidthValue" class="small">3.2 mm</span>
-            </div>
-            <div class="row">
-              <label for="flatAngle">Nib angle</label>
-              <input id="flatAngle" type="range" min="0" max="180" step="1" value="40" />
-              <span id="flatAngleValue" class="small">40 deg</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel-block">
-          <h2>Stroke</h2>
-          <div class="row">
-            <label for="streamline">Streamline</label>
-            <input id="streamline" type="range" min="0" max="1" step="0.01" value="0.45" />
-            <span id="streamlineValue" class="small">0.45</span>
-          </div>
-          <div class="row">
-            <label for="smoothing">Smoothing</label>
-            <input id="smoothing" type="range" min="0" max="1" step="0.01" value="0.25" />
-            <span id="smoothingValue" class="small">0.25</span>
-          </div>
-          <div class="row">
-            <label for="minDistance">Min distance</label>
-            <input id="minDistance" type="range" min="0.1" max="5" step="0.1" value="0.6" />
-            <span id="minDistanceValue" class="small">0.6 mm</span>
-          </div>
-          <p class="small">Grid: minor 5 mm, major 25 mm. Stream still uses centerline SVG for saxi compatibility.</p>
-        </div>
+        <p id="status" class="status">Connecting...</p>
+        <p class="hint">Apple Pencil hover shows a live cursor preview on supported iPads.</p>
       </aside>
 
       <section class="canvas-shell">
@@ -147,6 +51,7 @@
         </div>
       </section>
     </main>
+    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
     <script src="../shared/paper.js"></script>
     <script src="../shared/export.js"></script>
     <script src="./sketch.js" defer></script>

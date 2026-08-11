@@ -1,21 +1,25 @@
 :root {
-  --bg: #edf1f6;
-  --panel: #ffffff;
-  --fg: #272a3a;
-  --muted: #687087;
-  --line: #d7dcea;
-  --accent: #2d8b83;
-  --accent-soft: #d9efec;
-  --danger: #c15353;
+  --bg: #0b0f14;
+  --panel: #131a23;
+  --fg: #edf3fb;
+  --muted: #94a3b8;
+  --line: #223042;
+  --accent: #5dd6bf;
+  --danger: #f87171;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  font-family: "Work Sans", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--fg);
   background: var(--bg);
 }
@@ -28,7 +32,7 @@ select {
 
 button {
   border: 1px solid var(--line);
-  background: #fff;
+  background: #1a2330;
   color: var(--fg);
   padding: 8px 12px;
   border-radius: 8px;
@@ -43,7 +47,7 @@ button.primary {
 }
 
 button.secondary {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(26, 35, 48, 0.95);
 }
 
 button.warn {
@@ -55,30 +59,10 @@ button.ghost {
   background: transparent;
 }
 
-input[type="number"],
-input[type="range"],
-select {
-  width: 100%;
-}
-
-input[type="number"],
-select {
-  border: 1px solid var(--line);
-  background: #fff;
-  color: var(--fg);
-  padding: 6px 8px;
-  border-radius: 8px;
-}
-
-code {
-  background: #eef2f8;
-  padding: 1px 4px;
-}
-
 .app-shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -116,12 +100,6 @@ h1 {
   font-size: 19px;
 }
 
-h2 {
-  margin: 0 0 6px;
-  font-size: 13px;
-  color: var(--fg);
-}
-
 p {
   margin: 0;
   color: var(--muted);
@@ -131,67 +109,35 @@ p {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .badge {
   border: 1px solid var(--line);
-  background: #fff;
+  background: #18212d;
   font-size: 10px;
   color: var(--muted);
   padding: 2px 6px;
   border-radius: 999px;
 }
 
-.panel-block {
-  border: 1px solid var(--line);
-  background: #fbfcfe;
-  padding: 8px;
-  border-radius: 8px;
-  margin-bottom: 8px;
+#pane {
+  min-height: 0;
 }
 
-.compact-block .row {
-  margin-bottom: 8px;
-}
-
-.row {
+.actions {
   display: flex;
   gap: 6px;
-  align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.row:last-child {
-  margin-bottom: 0;
-}
-
-.row.tight {
-  gap: 10px;
-}
-
-.row label {
-  font-size: 11px;
-  color: var(--muted);
-  min-width: 72px;
-}
-
-.row input[type="checkbox"] {
-  width: auto;
-}
-
-.tool-btn.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 700;
+  margin-top: 10px;
 }
 
 .status,
-.small {
+.hint {
   font-size: 11px;
   color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.4;
 }
 
 .canvas-shell {
@@ -207,7 +153,7 @@ p {
   position: relative;
   height: 100%;
   min-height: 0;
-  background: #fff;
+  background: #0f1620;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px;
@@ -216,7 +162,7 @@ p {
 canvas {
   width: 100%;
   height: 100%;
-  background: #fff;
+  background: transparent;
   display: block;
   touch-action: none;
   border-radius: 4px;
@@ -254,6 +200,10 @@ canvas {
   box-shadow: 0 8px 24px rgba(27, 37, 52, 0.14);
 }
 
+.tp-dfwv {
+  width: 100% !important;
+}
+
 .hidden {
   display: none;
 }
@@ -266,14 +216,14 @@ canvas {
     overflow: visible;
   }
 
+  .app-shell.panel-collapsed {
+    grid-template-columns: 1fr;
+  }
+
   .control-panel {
     border-right: 0;
     border-bottom: 1px solid var(--line);
     height: auto;
-  }
-
-  .app-shell.panel-collapsed {
-    grid-template-columns: 1fr;
   }
 
   .canvas-shell {
