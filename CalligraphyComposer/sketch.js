@@ -22,19 +22,27 @@ function escapeHTML(value) {
   return ExportUtils.escapeXML(value);
 }
 
-let pane;
+let panes = [];
 let canvas;
 let ctx;
+let bgCanvas;
+let bgCtx;
+let glyphCanvas;
+let overlayCtx;
 let wrapEl;
 let variantMenuEl;
 let boxTextInputEl;
+let paperColorInputEl;
 let paperFolder;
 let sceneFolder;
 let fontFolder;
 let boxFolder;
+let modifierFolder;
 let fontBinding;
-let selectedBoxBindings;
-let actionBindings = {};
+let marginBinding;
+let showMarginsBinding;
+let modifierDetailBindings = {};
+let selectedBoxBindings = {};
 let cachedLayouts = [];
 let activeBoxId = null;
 let nextBoxId = 1;
@@ -44,15 +52,42 @@ let hoverGlyphKey = null;
 let lastClickMs = 0;
 let renderQueued = false;
 const glyphArtworkCache = new Map();
+const glSceneCache = {
+  key: "",
+  instances: null,
+  count: 0,
+  uploaded: false,
+};
+const viewport = {
+  x: 0,
+  y: 0,
+  scale: 1,
+  initialized: false,
+};
+const glRenderer = {
+  gl: null,
+  program: null,
+  quadBuffer: null,
+  instanceBuffer: null,
+  aQuad: null,
+  aCenter: null,
+  aRadii: null,
+  aRotation: null,
+  aInk: null,
+  uResolution: null,
+  uPxPerMM: null,
+  uColor: null,
+  ready: false,
+};
 
 const P = {
   paperPreset: "A4 Portrait",
   canvasWMM: 210,
   canvasHMM: 297,
-  dpi: 96,
+  dpi: 144,
   previewScale: 1,
   fitToViewport: true,
-  paperColor: "#f7f1e8",
+  paperColor: "#ffffff",
   marginColor: "#d0ba97",
   guideColor: "#dbc9ad",
   frameColor: "#2454a6",
@@ -96,7 +131,7 @@ const state = {
 };
 
 const selectionState = {
-  activeName: "Box 1",
+  activeName: "Text layer 1",
   text: "",
   fontSizeMM: FALLBACK_FONT_SIZE_MM,
   lineHeightMM: FALLBACK_LINE_HEIGHT_MM,
@@ -105,9 +140,20 @@ const selectionState = {
   align: "left",
   slantShear: 0,
   verticalScale: 1,
+  modifierPreset: "custom",
+  modifierScaleStart: 0.82,
+  modifierScaleEnd: 1.38,
+  modifierSlantStart: 0,
+  modifierSlantEnd: 0.32,
   penId: "p4",
   nibMode: "fixed",
   nibWidthMM: 2.4,
+  stampSpacingFactor: 0.32,
+  stampSizeBoost: 1,
+  inkOpacity: 0.2,
+  inkSoftness: 0.34,
+  inkOverlapGain: 1.2,
+  inkTexture: 0.16,
 };
 
 window.addEventListener("load", () => {
@@ -125,15 +171,39 @@ window.addEventListener("load", () => {
 function createCanvas() {
   wrapEl = document.getElementById("wrap");
   boxTextInputEl = document.getElementById("boxTextInput");
+  paperColorInputEl = document.getElementById("paperColorInput");
+  bgCanvas = document.createElement("canvas");
+  bgCanvas.className = "paper-layer";
+  bgCanvas.setAttribute("aria-hidden", "true");
+  bgCanvas.style.pointerEvents = "none";
+  bgCanvas.style.zIndex = "1";
+  bgCtx = bgCanvas.getContext("2d");
+  wrapEl.appendChild(bgCanvas);
+
+  glyphCanvas = document.createElement("canvas");
+  glyphCanvas.className = "glyph-layer";
+  glyphCanvas.setAttribute("aria-hidden", "true");
+  glyphCanvas.style.pointerEvents = "none";
+  glyphCanvas.style.zIndex = "2";
+  glyphCanvas.style.background = "transparent";
+  wrapEl.appendChild(glyphCanvas);
+  initGlyphRenderer();
+
   canvas = document.createElement("canvas");
+  canvas.className = "overlay-layer";
   canvas.tabIndex = 0;
   canvas.setAttribute("aria-label", "CalligraphyComposer canvas");
-  ctx = canvas.getContext("2d");
+  canvas.style.zIndex = "3";
+  overlayCtx = canvas.getContext("2d");
+  ctx = overlayCtx;
   wrapEl.appendChild(canvas);
   variantMenuEl = document.createElement("div");
   variantMenuEl.className = "variant-menu";
+  variantMenuEl.style.zIndex = "4";
   wrapEl.appendChild(variantMenuEl);
   canvas.addEventListener("pointerdown", onPointerDown);
+  wrapEl.addEventListener("pointerdown", onStagePointerDown);
+  wrapEl.addEventListener("wheel", onStageWheel, { passive: false });
   canvas.addEventListener("pointermove", onHoverPointerMove);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
@@ -142,12 +212,11 @@ function createCanvas() {
 }
 
 function buildPane() {
-  pane = new Tweakpane.Pane({ container: document.getElementById("pane") });
-
-  paperFolder = pane.addFolder({ title: "Paper", expanded: true });
+  panes = [];
+  paperFolder = createPane("docPane");
   paperFolder
     .addInput(P, "paperPreset", {
-      label: "Preset",
+      label: "Paper Size",
       options: Object.keys(PaperUtils.PAPER_PRESETS_MM).reduce((acc, label) => {
         acc[label] = label;
         return acc;
@@ -157,92 +226,32 @@ function buildPane() {
       PaperUtils.applyPaperPreset(P, ev.value);
       syncCanvasSize();
     });
-  paperFolder
-    .addInput(P, "canvasWMM", { label: "Width", min: 60, max: 1000, step: 1 })
-    .on("change", () => {
-      PaperUtils.syncPresetFromSize(P);
-      syncCanvasSize();
-    });
-  paperFolder
-    .addInput(P, "canvasHMM", { label: "Height", min: 60, max: 1000, step: 1 })
-    .on("change", () => {
-      PaperUtils.syncPresetFromSize(P);
-      syncCanvasSize();
-    });
-  paperFolder
-    .addInput(P, "dpi", { label: "DPI", min: 36, max: 1200, step: 1 })
-    .on("change", syncCanvasSize);
-  paperFolder.addInput(P, "fitToViewport", { label: "Fit preview" }).on("change", syncDisplaySize);
-  paperFolder
-    .addInput(P, "previewScale", { label: "Zoom", min: 0.2, max: 4, step: 0.01 })
-    .on("change", syncDisplaySize);
-  paperFolder.addInput(P, "marginMM", { label: "Margin", min: 0, max: 80, step: 0.5 }).on(
-    "change",
-    requestRender,
-  );
-  paperFolder.addInput(P, "showMargins", { label: "Show margins" }).on("change", requestRender);
+  marginBinding = paperFolder.addInput(P, "marginMM", { label: "Margin", min: 0, max: 80, step: 0.5 });
+  marginBinding.on("change", requestRender);
+  showMarginsBinding = paperFolder.addInput(P, "showMargins", { label: "Show Margin" });
+  showMarginsBinding.on("change", () => {
+    syncMarginVisibility();
+    requestRender();
+  });
 
-  sceneFolder = pane.addFolder({ title: "Guides", expanded: false });
-  sceneFolder.addInput(P, "showGuides", { label: "Show guides" }).on("change", requestRender);
-  sceneFolder.addInput(P, "guideSpacingMM", { label: "Guide gap", min: 2, max: 40, step: 0.5 }).on(
-    "change",
-    requestRender,
-  );
-  sceneFolder.addInput(P, "showSkeletonOverlay", { label: "Show skeleton" }).on("change", requestRender);
+  sceneFolder = paperFolder;
+  sceneFolder.addInput(P, "dpi", {
+    label: "DPI",
+    min: 72,
+    max: 600,
+    step: 1,
+  }).on("change", syncCanvasSize);
+  sceneFolder.addInput(P, "showGuides", { label: "Show Guides" }).on("change", requestRender);
 
-  fontFolder = pane.addFolder({ title: "Stroke Font", expanded: true });
-  buildFontBinding({ italics: "italics" });
-
-  boxFolder = pane.addFolder({ title: "Selected text box", expanded: true });
+  boxFolder = createPane("toolPane");
   selectedBoxBindings = {
-    activeName: boxFolder.addMonitor(selectionState, "activeName", { label: "Active" }),
-    fontSizeMM: boxFolder.addInput(selectionState, "fontSizeMM", {
-      label: "Letter size",
-      min: 4,
-      max: 80,
-      step: 0.1,
-    }),
-    lineHeightMM: boxFolder.addInput(selectionState, "lineHeightMM", {
-      label: "Line height",
-      min: 2,
-      max: 120,
-      step: 0.01,
-    }),
-    paddingMM: boxFolder.addInput(selectionState, "paddingMM", {
-      label: "Padding",
-      min: 0,
-      max: 30,
-      step: 0.25,
-    }),
-    trackingMM: boxFolder.addInput(selectionState, "trackingMM", {
-      label: "Tracking",
-      min: -10,
-      max: 20,
-      step: 0.01,
-    }),
-    slantShear: boxFolder.addInput(selectionState, "slantShear", {
-      label: "Slant shear",
-      min: -0.8,
-      max: 0.8,
-      step: 0.01,
-    }),
-    verticalScale: boxFolder.addInput(selectionState, "verticalScale", {
-      label: "Vertical scale",
-      min: 0.2,
-      max: 3,
-      step: 0.01,
-    }),
     penId: boxFolder.addInput(selectionState, "penId", {
-      label: "Pen",
+      label: "Tool",
       options: {
         "Parallel 2.4": "p4",
         "Parallel 3.8": "p5",
         "Micron 03": "p1",
       },
-    }),
-    nibMode: boxFolder.addInput(selectionState, "nibMode", {
-      label: "Nib mode",
-      options: NIB_MODE_OPTIONS,
     }),
     nibWidthMM: boxFolder.addInput(selectionState, "nibWidthMM", {
       label: "Nib width",
@@ -250,32 +259,146 @@ function buildPane() {
       max: 20,
       step: 0.05,
     }),
+    stampSpacingFactor: boxFolder.addInput(selectionState, "stampSpacingFactor", {
+      label: "Stamp spacing",
+      min: 0.02,
+      max: 1.2,
+      step: 0.01,
+    }),
+    stampSizeBoost: boxFolder.addInput(selectionState, "stampSizeBoost", {
+      label: "Stamp size",
+      min: 0.6,
+      max: 1.6,
+      step: 0.01,
+    }),
+    inkOpacity: boxFolder.addInput(selectionState, "inkOpacity", {
+      label: "Ink opacity",
+      min: 0.02,
+      max: 1,
+      step: 0.01,
+    }),
+    inkSoftness: boxFolder.addInput(selectionState, "inkSoftness", {
+      label: "Edge softness",
+      min: 0.02,
+      max: 0.95,
+      step: 0.01,
+    }),
+    inkOverlapGain: boxFolder.addInput(selectionState, "inkOverlapGain", {
+      label: "Overlap gain",
+      min: 0.2,
+      max: 3,
+      step: 0.01,
+    }),
+    inkTexture: boxFolder.addInput(selectionState, "inkTexture", {
+      label: "Texture amount",
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }),
   };
 
-  actionBindings.alignLeft = boxFolder.addButton({ title: "L" });
-  actionBindings.alignCenter = boxFolder.addButton({ title: "C" });
-  actionBindings.alignRight = boxFolder.addButton({ title: "R" });
-  layoutActionButtonsRow();
-  actionBindings.alignLeft.on("click", () => setAlignment("left"));
-  actionBindings.alignCenter.on("click", () => setAlignment("center"));
-  actionBindings.alignRight.on("click", () => setAlignment("right"));
+  fontFolder = createPane("scriptPane");
+  buildFontBinding({ italics: "italics" });
+  syncMarginVisibility();
+  Object.assign(selectedBoxBindings, {
+    fontSizeMM: fontFolder.addInput(selectionState, "fontSizeMM", {
+      label: "Letter size",
+      min: 4,
+      max: 80,
+      step: 0.1,
+    }),
+    lineHeightMM: fontFolder.addInput(selectionState, "lineHeightMM", {
+      label: "Line height",
+      min: 2,
+      max: 120,
+      step: 0.01,
+    }),
+    trackingMM: fontFolder.addInput(selectionState, "trackingMM", {
+      label: "Letter Spacing",
+      min: -10,
+      max: 20,
+      step: 0.01,
+    }),
+    slantShear: fontFolder.addInput(selectionState, "slantShear", {
+      label: "Slant",
+      min: -0.8,
+      max: 0.8,
+      step: 0.01,
+    }),
+    verticalScale: fontFolder.addInput(selectionState, "verticalScale", {
+      label: "Vertical scale",
+      min: 0.2,
+      max: 3,
+      step: 0.01,
+    }),
+  });
+
+  modifierFolder = createPane("modifierPane");
+  selectedBoxBindings.modifierPreset = modifierFolder.addInput(selectionState, "modifierPreset", {
+    label: "Preset",
+    options: {
+      Custom: "custom",
+      Cascade: "cascade",
+      "Line Spaced": "linespaced",
+    },
+  });
+  modifierDetailBindings = {
+    modifierScaleStart: modifierFolder.addInput(selectionState, "modifierScaleStart", {
+      label: "Scale start",
+      min: 0.2,
+      max: 3,
+      step: 0.01,
+    }),
+    modifierScaleEnd: modifierFolder.addInput(selectionState, "modifierScaleEnd", {
+      label: "Scale end",
+      min: 0.2,
+      max: 3,
+      step: 0.01,
+    }),
+    modifierSlantStart: modifierFolder.addInput(selectionState, "modifierSlantStart", {
+      label: "Slant start",
+      min: -1,
+      max: 1,
+      step: 0.01,
+    }),
+    modifierSlantEnd: modifierFolder.addInput(selectionState, "modifierSlantEnd", {
+      label: "Slant end",
+      min: -1,
+      max: 1,
+      step: 0.01,
+    }),
+  };
 
   for (const [key, blade] of Object.entries(selectedBoxBindings)) {
-    if (key === "activeName") continue;
     blade.on("change", () => {
       if (key === "penId") {
-        syncNibWidthToPen();
-      }
-      if (key === "nibMode") {
-        syncNibWidthToPen();
-      }
-      if (key === "fontSizeMM" && selectionState.nibMode === "proportional") {
         syncNibWidthToPen();
       }
       applySelectionStateToBox();
       requestRender();
     });
   }
+  for (const blade of Object.values(modifierDetailBindings)) {
+    blade.on("change", () => {
+      applySelectionStateToBox();
+      requestRender();
+    });
+  }
+  syncModifierVisibility();
+}
+
+function createPane(id) {
+  const pane = new Tweakpane.Pane({ container: document.getElementById(id) });
+  panes.push(pane);
+  return pane;
+}
+
+function refreshPanes() {
+  for (const pane of panes) {
+    pane?.refresh();
+  }
+  syncMarginVisibility();
+  syncModifierVisibility();
 }
 
 function bindUI() {
@@ -334,40 +457,81 @@ function bindUI() {
     P.fitToViewport = true;
     P.previewScale = 1;
     syncDisplaySize();
-    pane.refresh();
+    refreshPanes();
   });
 
   document.getElementById("resetViewBtn").addEventListener("click", () => {
     P.fitToViewport = false;
     P.previewScale = 1;
     syncDisplaySize();
-    pane.refresh();
+    refreshPanes();
   });
 
   document.getElementById("svgBtn").addEventListener("click", exportSvg);
   document.getElementById("pathSvgBtn").addEventListener("click", exportPathSvg);
+  document.getElementById("alignLeftBtn").addEventListener("click", () => setAlignment("left"));
+  document.getElementById("alignCenterBtn").addEventListener("click", () => setAlignment("center"));
+  document.getElementById("alignRightBtn").addEventListener("click", () => setAlignment("right"));
+  paperColorInputEl?.addEventListener("input", () => {
+    P.paperColor = paperColorInputEl.value;
+    syncColorIndicators();
+    requestRender();
+  });
+  document.getElementById("inkSwatches")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-color]");
+    if (!button) return;
+    P.textColor = button.dataset.color;
+    syncColorIndicators();
+    requestRender();
+  });
 }
 
 function syncCanvasSize() {
   const size = PaperUtils.getCanvasPixelSize(P);
+  if (bgCanvas) {
+    bgCanvas.width = size.width;
+    bgCanvas.height = size.height;
+  }
+  if (glyphCanvas) {
+    glyphCanvas.width = size.width;
+    glyphCanvas.height = size.height;
+  }
   canvas.width = size.width;
   canvas.height = size.height;
+  resizeGlyphRenderer();
   syncDisplaySize();
   requestRender();
 }
 
 function syncDisplaySize() {
-  PaperUtils.updateCanvasDisplaySize(
-    {
-      style(name, value) {
-        canvas.style[name] = value;
-      },
-    },
-    P,
-    "wrap",
-    36,
-  );
+  const pxSize = PaperUtils.getCanvasPixelSize(P);
+  const wrapRect = wrapEl?.getBoundingClientRect();
+  if (!wrapRect) return;
+  const availableW = Math.max(1, wrapRect.width - 120);
+  const availableH = Math.max(1, wrapRect.height - 120);
+  const fitScale = Math.min(availableW / pxSize.width, availableH / pxSize.height, 1);
+  if (P.fitToViewport || !viewport.initialized) {
+    viewport.scale = fitScale * P.previewScale;
+    viewport.x = (wrapRect.width - pxSize.width * viewport.scale) * 0.5;
+    viewport.y = (wrapRect.height - pxSize.height * viewport.scale) * 0.5;
+    viewport.initialized = true;
+  }
+  applyViewportTransform();
   requestRender();
+}
+
+function applyViewportTransform() {
+  const pxSize = PaperUtils.getCanvasPixelSize(P);
+  for (const layer of [bgCanvas, glyphCanvas, canvas]) {
+    if (!layer) continue;
+    layer.style.width = `${pxSize.width}px`;
+    layer.style.height = `${pxSize.height}px`;
+    layer.style.position = "absolute";
+    layer.style.left = "0";
+    layer.style.top = "0";
+    layer.style.transformOrigin = "0 0";
+    layer.style.transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`;
+  }
 }
 
 async function initFonts() {
@@ -395,11 +559,17 @@ async function ensureCurrentFontDoc() {
     state.loadingFont = true;
     requestRender();
     try {
-      const res = await fetch(entry.resolvedPath, { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(`Font fetch failed with status ${res.status} for ${entry.resolvedPath}`);
+      const bundled = getBundledFontDoc(P.fontId);
+      let data;
+      if (bundled) {
+        data = bundled;
+      } else {
+        const res = await fetch(entry.resolvedPath, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`Font fetch failed with status ${res.status} for ${entry.resolvedPath}`);
+        }
+        data = await res.json();
       }
-      const data = await res.json();
       state.fontDocs[P.fontId] = normalizeDoc(data);
     } finally {
       state.loadingFont = false;
@@ -446,6 +616,21 @@ function buildFontBinding(options) {
   });
 }
 
+function syncMarginVisibility() {
+  const el = marginBinding?.element || marginBinding?.controller?.view?.element || marginBinding?.controller_?.view?.element;
+  if (!el) return;
+  el.style.display = P.showMargins ? "" : "none";
+}
+
+function syncModifierVisibility() {
+  const visible = selectionState.modifierPreset === "cascade";
+  for (const blade of Object.values(modifierDetailBindings)) {
+    const el = blade?.element || blade?.controller?.view?.element || blade?.controller_?.view?.element;
+    if (!el) continue;
+    el.style.display = visible ? "" : "none";
+  }
+}
+
 function rebuildFontBinding() {
   const options = Object.values(state.projectFonts).reduce((acc, entry) => {
     acc[entry.name || entry.id] = entry.id;
@@ -455,7 +640,7 @@ function rebuildFontBinding() {
     fontBinding.dispose();
   }
   buildFontBinding(Object.keys(options).length ? options : { italics: "italics" });
-  pane.refresh();
+  refreshPanes();
 }
 
 function syncCurrentFontId() {
@@ -476,12 +661,12 @@ function requestRender() {
 }
 
 function render() {
-  if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = P.bgColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!canvas || !bgCtx || !overlayCtx) return;
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  overlayCtx.clearRect(0, 0, canvas.width, canvas.height);
 
   const pxPerMM = PaperUtils.getPxPerMM(P);
+  ctx = bgCtx;
   ctx.save();
   ctx.scale(pxPerMM, pxPerMM);
   drawPaper();
@@ -489,11 +674,20 @@ function render() {
 
   if (!state.currentDoc) {
     drawLoadingState();
+    clearGlyphRenderer();
   } else {
     cachedLayouts = state.boxes.map((box) => layoutBox(state.currentDoc, box));
-    drawBoxes(state.currentDoc);
+    renderGlyphScene(state.currentDoc);
   }
   ctx.restore();
+
+  if (state.currentDoc) {
+    ctx = overlayCtx;
+    ctx.save();
+    ctx.scale(pxPerMM, pxPerMM);
+    drawBoxesOverlay(state.currentDoc);
+    ctx.restore();
+  }
   updateStats();
 }
 
@@ -531,73 +725,436 @@ function drawLoadingState() {
   ctx.fillText(message, P.canvasWMM * 0.5, P.canvasHMM * 0.5);
 }
 
-function drawBoxes(doc) {
+function drawBoxesOverlay(doc) {
   for (let i = 0; i < state.boxes.length; i++) {
-    drawTextBox(doc, state.boxes[i], cachedLayouts[i], state.boxes[i].id === activeBoxId);
+    drawTextBoxOverlay(doc, state.boxes[i], cachedLayouts[i], state.boxes[i].id === activeBoxId);
   }
 }
 
-function drawTextBox(doc, box, layout, isActive) {
+function drawTextBoxOverlay(doc, box, layout, isActive) {
   if (!layout) return;
-  const pen = resolvePenForDoc(doc, box);
-  for (const line of layout.lines) {
+  const totalLines = Math.max(layout.lines.length, 1);
+  for (let lineIndex = 0; lineIndex < layout.lines.length; lineIndex++) {
+    const line = layout.lines[lineIndex];
     const baselineY = box.yMM + box.paddingMM + line.baselineMM;
+    const totalItems = Math.max(line.items.filter((item) => item.glyph).length, 1);
+    let glyphIndex = 0;
     for (const item of line.items) {
       if (!item.glyph) continue;
       const drawX = box.xMM + box.paddingMM + line.offsetMM + item.xMM;
-      drawGlyphItem(item, pen, drawX, baselineY, box.fontSizeMM, box.slantShear, box.verticalScale);
+      const modifier = resolveGlyphModifier(box, lineIndex, totalLines, glyphIndex, totalItems);
       if (item.key === hoverGlyphKey && item.variants?.length > 1) {
-        drawGlyphHoverOutline(item, drawX, baselineY, box.fontSizeMM, box.slantShear, box.verticalScale, doc.metrics);
+        drawGlyphHoverOutline(item, drawX, baselineY, box.fontSizeMM, modifier.slantShear, modifier.verticalScale, doc.metrics);
       }
+      if (P.showSkeletonOverlay) {
+        drawGlyphSkeletonOverlay(item, drawX, baselineY, box.fontSizeMM, modifier.slantShear, modifier.verticalScale);
+      }
+      glyphIndex += 1;
     }
   }
 
   if (isActive) {
+    const boxHeightMM = getBoxHeightMM(box, layout);
     ctx.fillStyle = P.selectionFill;
-    ctx.fillRect(box.xMM, box.yMM, box.widthMM, box.heightMM);
+    ctx.fillRect(box.xMM, box.yMM, box.widthMM, boxHeightMM);
     ctx.strokeStyle = P.frameColor;
     ctx.lineWidth = 0.4;
-    ctx.strokeRect(box.xMM, box.yMM, box.widthMM, box.heightMM);
-    drawHandles(box);
+    ctx.strokeRect(box.xMM, box.yMM, box.widthMM, boxHeightMM);
+    drawHandles(box, boxHeightMM);
   }
+}
+
+function drawGlyphSkeletonOverlay(item, xMM, baselineYMM, emSizeMM, slantShear, verticalScale) {
+  const scale = emSizeMM / UPM;
+  const transformed = transformGlyphSkeleton(item.glyph, slantShear, verticalScale);
+  ctx.save();
+  ctx.translate(xMM, baselineYMM);
+  ctx.scale(scale, -scale);
+  ctx.strokeStyle = "rgba(36,84,166,.55)";
+  ctx.lineWidth = 2 / Math.max(emSizeMM, 1);
+  for (const st of transformed.strokes || []) {
+    drawSkeletonPathCanvas(st);
+  }
+  ctx.restore();
+}
+
+function renderGlyphScene(doc) {
+  if (!glRenderer.ready) {
+    drawBoxesCpu(doc);
+    return;
+  }
+  const key = computeSceneGeometryKey(doc);
+  if (glSceneCache.key !== key) {
+    const built = buildGlyphStampInstances(doc);
+    glSceneCache.key = key;
+    glSceneCache.instances = built.instances;
+    glSceneCache.count = built.count;
+    glSceneCache.uploaded = false;
+  }
+  uploadGlyphSceneIfNeeded();
+  drawGlyphSceneGL();
+}
+
+function drawBoxesCpu(doc) {
+  for (let i = 0; i < state.boxes.length; i++) {
+    const box = state.boxes[i];
+    const layout = cachedLayouts[i];
+    if (!layout) continue;
+    const pen = resolvePenForDoc(doc, box);
+    const totalLines = Math.max(layout.lines.length, 1);
+    for (let lineIndex = 0; lineIndex < layout.lines.length; lineIndex++) {
+      const line = layout.lines[lineIndex];
+      const baselineY = box.yMM + box.paddingMM + line.baselineMM;
+      const totalItems = Math.max(line.items.filter((item) => item.glyph).length, 1);
+      let glyphIndex = 0;
+      for (const item of line.items) {
+        if (!item.glyph) continue;
+        const drawX = box.xMM + box.paddingMM + line.offsetMM + item.xMM;
+        const modifier = resolveGlyphModifier(box, lineIndex, totalLines, glyphIndex, totalItems);
+        drawGlyphItem(item, pen, drawX, baselineY, box.fontSizeMM, modifier.slantShear, modifier.verticalScale);
+        glyphIndex += 1;
+      }
+    }
+  }
+}
+
+function computeSceneGeometryKey(doc) {
+  return JSON.stringify({
+    fontId: P.fontId,
+    pens: doc?.pens,
+    boxes: state.boxes.map((box) => ({
+      id: box.id,
+      xMM: box.xMM,
+      yMM: box.yMM,
+      widthMM: box.widthMM,
+      heightMM: box.heightMM,
+      paddingMM: box.paddingMM,
+      text: box.text,
+      fontSizeMM: box.fontSizeMM,
+      lineHeightMM: box.lineHeightMM,
+      trackingMM: box.trackingMM,
+      align: box.align,
+      slantShear: box.slantShear,
+      verticalScale: box.verticalScale,
+      modifierPreset: box.modifierPreset,
+      modifierScaleStart: box.modifierScaleStart,
+      modifierScaleEnd: box.modifierScaleEnd,
+      modifierSlantStart: box.modifierSlantStart,
+      modifierSlantEnd: box.modifierSlantEnd,
+      penId: box.penId,
+      nibWidthMM: box.nibWidthMM,
+      stampSpacingFactor: box.stampSpacingFactor,
+      stampSizeBoost: box.stampSizeBoost,
+      inkOpacity: box.inkOpacity,
+      inkSoftness: box.inkSoftness,
+      inkOverlapGain: box.inkOverlapGain,
+      inkTexture: box.inkTexture,
+      variantMap: box.variantMap,
+      leftKernMMMap: box.leftKernMMMap,
+    })),
+  });
+}
+
+function buildGlyphStampInstances(doc) {
+  const instances = [];
+  for (let i = 0; i < state.boxes.length; i++) {
+    const box = state.boxes[i];
+    const layout = cachedLayouts[i] || layoutBox(doc, box);
+    const pen = resolvePenForDoc(doc, box);
+    const scale = box.fontSizeMM / UPM;
+    const totalLines = Math.max(layout.lines.length, 1);
+    for (let lineIndex = 0; lineIndex < layout.lines.length; lineIndex++) {
+      const line = layout.lines[lineIndex];
+      const baselineY = box.yMM + box.paddingMM + line.baselineMM;
+      const totalItems = Math.max(line.items.filter((item) => item.glyph).length, 1);
+      let glyphIndex = 0;
+      for (const item of line.items) {
+        if (!item.glyph) continue;
+        const drawX = box.xMM + box.paddingMM + line.offsetMM + item.xMM;
+        const modifier = resolveGlyphModifier(box, lineIndex, totalLines, glyphIndex, totalItems);
+        const transformed = transformGlyphSkeleton(item.glyph, modifier.slantShear, modifier.verticalScale);
+        const spacingFactor = box.stampSpacingFactor ?? 0.32;
+        const stampSizeBoost = box.stampSizeBoost ?? 1;
+        const inkOpacity = box.inkOpacity ?? 0.2;
+        const inkSoftness = box.inkSoftness ?? 0.34;
+        const inkOverlapGain = box.inkOverlapGain ?? 1.2;
+        const inkTexture = box.inkTexture ?? 0.16;
+        const spacingU = Math.max(0.25, pen.wU * spacingFactor);
+        for (const st of transformed.strokes || []) {
+          const stamps = sampleStrokeForStamps(st, spacingU);
+          for (const stamp of stamps) {
+            const centerXMM = drawX + stamp.x * scale;
+            const centerYMM = baselineY - stamp.y * scale;
+            const halfWMM = (pen.mm * stamp.w * stampSizeBoost) * 0.5;
+            const halfHMM = (pen.mm * Math.max(pen.ratio, MIN_RATIO) * stamp.w * stampSizeBoost) * 0.5;
+            const angle = (-pen.angle * Math.PI) / 180;
+            instances.push(
+              centerXMM,
+              centerYMM,
+              halfWMM,
+              halfHMM,
+              Math.cos(angle),
+              Math.sin(angle),
+              inkOpacity,
+              inkSoftness,
+              inkOverlapGain,
+              inkTexture,
+            );
+          }
+        }
+        glyphIndex += 1;
+      }
+    }
+  }
+  return { instances: new Float32Array(instances), count: instances.length / 10 };
+}
+
+function initGlyphRenderer() {
+  const gl = glyphCanvas?.getContext("webgl2", { alpha: true, antialias: true });
+  if (!gl) return;
+  const vertexSource = `
+    attribute vec2 a_quad;
+    attribute vec2 a_center;
+    attribute vec2 a_radii;
+    attribute vec2 a_rotation;
+    attribute vec4 a_ink;
+    uniform vec2 u_resolution;
+    uniform float u_pxPerMM;
+    varying vec2 v_uv;
+    varying vec2 v_worldMM;
+    varying vec4 v_ink;
+    void main() {
+      vec2 localMM = vec2(a_quad.x * a_radii.x, a_quad.y * a_radii.y);
+      vec2 rotatedMM = vec2(
+        localMM.x * a_rotation.x - localMM.y * a_rotation.y,
+        localMM.x * a_rotation.y + localMM.y * a_rotation.x
+      );
+      v_worldMM = a_center + rotatedMM;
+      vec2 px = v_worldMM * u_pxPerMM;
+      vec2 zeroToOne = px / u_resolution;
+      vec2 clip = zeroToOne * 2.0 - 1.0;
+      v_uv = a_quad;
+      v_ink = a_ink;
+      gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
+    }
+  `;
+  const fragmentSource = `
+    precision mediump float;
+    uniform vec4 u_color;
+    varying vec2 v_uv;
+    varying vec2 v_worldMM;
+    varying vec4 v_ink;
+    float hash21(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+    void main() {
+      float dist = length(v_uv);
+      if (dist > 1.0) discard;
+      float softness = clamp(v_ink.y, 0.02, 0.98);
+      float inner = max(0.0, 1.0 - softness);
+      float coverage = 1.0 - smoothstep(inner, 1.0, dist);
+      float grainA = hash21(floor(v_worldMM * 3.0));
+      float grainB = hash21(floor(v_worldMM.yx * 5.0 + 17.0));
+      float grain = mix(1.0, 0.82 + 0.18 * (0.55 * grainA + 0.45 * grainB), clamp(v_ink.w, 0.0, 1.0));
+      float alpha = clamp(coverage * v_ink.x * v_ink.z * grain, 0.0, 1.0);
+      if (alpha < 0.002) discard;
+      gl_FragColor = vec4(u_color.rgb * alpha, alpha);
+    }
+  `;
+  const program = createGLProgram(gl, vertexSource, fragmentSource);
+  if (!program) return;
+  glRenderer.gl = gl;
+  glRenderer.program = program;
+  glRenderer.quadBuffer = gl.createBuffer();
+  glRenderer.instanceBuffer = gl.createBuffer();
+  glRenderer.aQuad = gl.getAttribLocation(program, "a_quad");
+  glRenderer.aCenter = gl.getAttribLocation(program, "a_center");
+  glRenderer.aRadii = gl.getAttribLocation(program, "a_radii");
+  glRenderer.aRotation = gl.getAttribLocation(program, "a_rotation");
+  glRenderer.aInk = gl.getAttribLocation(program, "a_ink");
+  glRenderer.uResolution = gl.getUniformLocation(program, "u_resolution");
+  glRenderer.uPxPerMM = gl.getUniformLocation(program, "u_pxPerMM");
+  glRenderer.uColor = gl.getUniformLocation(program, "u_color");
+  gl.bindBuffer(gl.ARRAY_BUFFER, glRenderer.quadBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enable(gl.BLEND);
+  gl.blendEquation(gl.FUNC_ADD);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  glRenderer.ready = true;
+}
+
+function createGLProgram(gl, vertexSource, fragmentSource) {
+  const vertex = compileGLShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragment = compileGLShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  if (!vertex || !fragment) return null;
+  const program = gl.createProgram();
+  gl.attachShader(program, vertex);
+  gl.attachShader(program, fragment);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error("WebGL link failed:", gl.getProgramInfoLog(program));
+    return null;
+  }
+  return program;
+}
+
+function compileGLShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error("WebGL shader compile failed:", gl.getShaderInfoLog(shader));
+    return null;
+  }
+  return shader;
+}
+
+function resizeGlyphRenderer() {
+  if (!glRenderer.ready) return;
+  glRenderer.gl.viewport(0, 0, glyphCanvas.width, glyphCanvas.height);
+  glSceneCache.uploaded = false;
+}
+
+function uploadGlyphSceneIfNeeded() {
+  if (!glRenderer.ready || glSceneCache.uploaded) return;
+  const gl = glRenderer.gl;
+  gl.bindBuffer(gl.ARRAY_BUFFER, glRenderer.instanceBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, glSceneCache.instances || new Float32Array(), gl.STATIC_DRAW);
+  glSceneCache.uploaded = true;
+}
+
+function drawGlyphSceneGL() {
+  if (!glRenderer.ready) return;
+  const gl = glRenderer.gl;
+  gl.viewport(0, 0, glyphCanvas.width, glyphCanvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  if (!glSceneCache.count) return;
+  gl.useProgram(glRenderer.program);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glRenderer.quadBuffer);
+  gl.enableVertexAttribArray(glRenderer.aQuad);
+  gl.vertexAttribPointer(glRenderer.aQuad, 2, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribDivisor(glRenderer.aQuad, 0);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, glRenderer.instanceBuffer);
+  gl.enableVertexAttribArray(glRenderer.aCenter);
+  gl.vertexAttribPointer(glRenderer.aCenter, 2, gl.FLOAT, false, 40, 0);
+  gl.vertexAttribDivisor(glRenderer.aCenter, 1);
+  gl.enableVertexAttribArray(glRenderer.aRadii);
+  gl.vertexAttribPointer(glRenderer.aRadii, 2, gl.FLOAT, false, 40, 8);
+  gl.vertexAttribDivisor(glRenderer.aRadii, 1);
+  gl.enableVertexAttribArray(glRenderer.aRotation);
+  gl.vertexAttribPointer(glRenderer.aRotation, 2, gl.FLOAT, false, 40, 16);
+  gl.vertexAttribDivisor(glRenderer.aRotation, 1);
+  gl.enableVertexAttribArray(glRenderer.aInk);
+  gl.vertexAttribPointer(glRenderer.aInk, 4, gl.FLOAT, false, 40, 24);
+  gl.vertexAttribDivisor(glRenderer.aInk, 1);
+
+  gl.uniform2f(glRenderer.uResolution, glyphCanvas.width, glyphCanvas.height);
+  gl.uniform1f(glRenderer.uPxPerMM, PaperUtils.getPxPerMM(P));
+  const color = parseHexColor(P.textColor);
+  gl.uniform4f(glRenderer.uColor, color[0], color[1], color[2], color[3]);
+  gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, glSceneCache.count);
+}
+
+function clearGlyphRenderer() {
+  if (!glRenderer.ready) return;
+  const gl = glRenderer.gl;
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+}
+
+function parseHexColor(value) {
+  const hex = String(value || "#000000").replace("#", "");
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
+      : hex.padEnd(6, "0").slice(0, 6);
+  const int = Number.parseInt(normalized, 16);
+  return [((int >> 16) & 255) / 255, ((int >> 8) & 255) / 255, (int & 255) / 255, 1];
 }
 
 function drawGlyphHoverOutline(item, drawX, baselineY, emSizeMM, slantShear, verticalScale, metrics) {
   const scale = emSizeMM / UPM;
-  const horizontalShift = Math.abs(slantShear) * (metrics.ascender - metrics.descender) * scale;
-  const scaledHeight = (metrics.ascender - metrics.descender) * scale * Math.max(verticalScale || 1, 0.001);
+  const transformed = transformGlyphSkeleton(item.glyph, slantShear, verticalScale);
+  const bounds = skeletonBounds(transformed);
   ctx.save();
   ctx.strokeStyle = "rgba(76, 125, 255, 0.55)";
   ctx.lineWidth = 0.35;
   ctx.strokeRect(
-    drawX + Math.min(0, slantShear * metrics.descender * scale) - 0.6,
-    baselineY - metrics.ascender * scale * Math.max(verticalScale || 1, 0.001) - 0.6,
-    item.advance * scale + horizontalShift + 1.2,
-    scaledHeight + 1.2,
+    drawX + bounds.x0 * scale - 0.6,
+    baselineY - bounds.y1 * scale - 0.6,
+    Math.max(item.advance * scale, (bounds.x1 - bounds.x0) * scale) + 1.2,
+    Math.max(0.1, (bounds.y1 - bounds.y0) * scale) + 1.2,
   );
   ctx.restore();
 }
 
 function drawGlyphItem(item, pen, xMM, baselineYMM, emSizeMM, slantShear, verticalScale) {
   const scale = emSizeMM / UPM;
-  const cached = getCachedGlyphArtwork(item, pen);
+  const transformed = transformGlyphSkeleton(item.glyph, slantShear, verticalScale);
+  const cached = getCachedGlyphArtwork(item, pen, transformed, slantShear, verticalScale);
   ctx.save();
   ctx.translate(xMM, baselineYMM);
   ctx.scale(scale, -scale);
-  ctx.transform(1, 0, slantShear || 0, Math.max(verticalScale || 1, 0.001), 0, 0);
   ctx.fillStyle = P.textColor;
   ctx.fill(cached.path, "nonzero");
   if (P.showSkeletonOverlay) {
     ctx.strokeStyle = "rgba(36,84,166,.55)";
     ctx.lineWidth = 2 / Math.max(emSizeMM, 1);
-    for (const st of item.glyph.strokes || []) {
+    for (const st of transformed.strokes || []) {
       drawSkeletonPathCanvas(st);
     }
   }
   ctx.restore();
 }
 
-function getCachedGlyphArtwork(item, pen) {
+function transformGlyphSkeleton(glyph, slantShear, verticalScale) {
+  const shear = slantShear || 0;
+  const vScale = Math.max(verticalScale || 1, 0.001);
+  const mapPoint = (pt) => [pt[0] + shear * pt[1], pt[1] * vScale];
+  return {
+    ...glyph,
+    strokes: (glyph.strokes || []).map((st) => ({
+      ...st,
+      nodes: (st.nodes || []).map((node) => {
+        const mapped = mapPoint([node.x, node.y]);
+        return {
+          ...node,
+          x: mapped[0],
+          y: mapped[1],
+          in: node.in ? mapPoint(node.in) : undefined,
+          out: node.out ? mapPoint(node.out) : undefined,
+        };
+      }),
+    })),
+  };
+}
+
+function resolveGlyphModifier(box, lineIndex, totalLines, glyphIndex, totalItems) {
+  const base = {
+    slantShear: box.slantShear || 0,
+    verticalScale: Math.max(box.verticalScale || 1, 0.001),
+  };
+  if ((box.modifierPreset || "custom") !== "cascade") {
+    return base;
+  }
+  const lineT = totalLines <= 1 ? 1 : lineIndex / (totalLines - 1);
+  const glyphT = totalItems <= 1 ? 1 : glyphIndex / (totalItems - 1);
+  const scaleStart = box.modifierScaleStart ?? 0.82;
+  const scaleEnd = box.modifierScaleEnd ?? 1.38;
+  const slantStart = box.modifierSlantStart ?? 0;
+  const slantEnd = box.modifierSlantEnd ?? 0.32;
+  return {
+    verticalScale: base.verticalScale * (scaleStart + (scaleEnd - scaleStart) * lineT),
+    slantShear: base.slantShear + slantStart + (slantEnd - slantStart) * glyphT,
+  };
+}
+
+function getCachedGlyphArtwork(item, pen, transformedGlyph = item.glyph, slantShear = 0, verticalScale = 1) {
   const cacheKey = [
     P.fontId,
     item.name,
@@ -606,12 +1163,14 @@ function getCachedGlyphArtwork(item, pen) {
     fmt(pen.wU, 4),
     fmt(pen.ratio, 4),
     fmt(pen.angle, 4),
+    fmt(slantShear || 0, 4),
+    fmt(Math.max(verticalScale || 1, 0.001), 4),
   ].join("|");
   let cached = glyphArtworkCache.get(cacheKey);
   if (cached) {
     return cached;
   }
-  const polys = expandGlyph(item.glyph, pen, 4).filter(
+  const polys = expandGlyph(transformedGlyph, pen, 4).filter(
     (poly) => poly && poly.length > 1 && poly.every((pt) => Number.isFinite(pt[0]) && Number.isFinite(pt[1])),
   );
   const path = new Path2D();
@@ -664,8 +1223,8 @@ function drawSkeletonPathCanvas(st) {
   ctx.stroke();
 }
 
-function drawHandles(box) {
-  for (const handle of getBoxHandles(box)) {
+function drawHandles(box, boxHeightMM = box.heightMM) {
+  for (const handle of getBoxHandles(box, boxHeightMM)) {
     ctx.fillStyle = handle.key === hoverHandle ? "#ffb15a" : P.handleColor;
     ctx.fillRect(handle.xMM - 1.3, handle.yMM - 1.3, 2.6, 2.6);
   }
@@ -689,6 +1248,9 @@ function layoutBox(doc, box) {
     trackingU,
     scaleMMPerUnit,
   );
+  if ((box.modifierPreset || "custom") === "linespaced") {
+    applyLineSpacedPreset(layout.lines, maxWidthU, box.align);
+  }
   const lines = layout.lines.map((line, index) => ({
     items: line.items.map((item) => ({
       ...item,
@@ -702,15 +1264,39 @@ function layoutBox(doc, box) {
   }));
   const lineCount = Math.max(lines.length, 1);
   const contentHeightMM =
-    lineCount * (metrics.ascender - metrics.descender + metrics.lineGap) * scaleMMPerUnit -
-    metrics.lineGap * scaleMMPerUnit;
+    (metrics.ascender - metrics.descender) * scaleMMPerUnit + Math.max(0, lineCount - 1) * lineAdvanceMM;
   box.heightMM = Math.max(12, contentHeightMM + box.paddingMM * 2);
   return {
     lines,
+    heightMM: box.heightMM,
     overflow: false,
     missing: layout.missing,
     textLength: box.text.length,
   };
+}
+
+function applyLineSpacedPreset(lines, maxWidthU, align = "left") {
+  for (const line of lines) {
+    const itemCount = line.items.length;
+    if (itemCount <= 1) {
+      line.width = Math.min(line.width, maxWidthU);
+      line.offsetX = previewLineOffset(line.width, maxWidthU, align);
+      continue;
+    }
+    const glyphSpanU = line.items.reduce((sum, item) => Math.max(sum, item.x + item.advance), 0);
+    const gaps = itemCount - 1;
+    const derivedTrackingU = gaps > 0 ? Math.max(0, (maxWidthU - glyphSpanU) / gaps) : 0;
+    for (let i = 0; i < line.items.length; i++) {
+      const item = line.items[i];
+      item.x += derivedTrackingU * i;
+    }
+    line.width = Math.min(maxWidthU, glyphSpanU + derivedTrackingU * gaps);
+    line.offsetX = previewLineOffset(line.width, maxWidthU, align);
+  }
+}
+
+function getBoxHeightMM(box, layout = null) {
+  return Math.max(12, layout?.heightMM ?? box.heightMM ?? 12);
 }
 
 function createTextBox(overrides = {}) {
@@ -718,7 +1304,7 @@ function createTextBox(overrides = {}) {
   const baseFontSizeMM = overrides.fontSizeMM ?? FALLBACK_FONT_SIZE_MM;
   return {
     id,
-    name: overrides.name || `Box ${id}`,
+    name: overrides.name || `Text layer ${id}`,
     text: overrides.text || "CalligraphyComposer",
     xMM: overrides.xMM ?? 26,
     yMM: overrides.yMM ?? 32,
@@ -732,9 +1318,20 @@ function createTextBox(overrides = {}) {
     align: overrides.align || "left",
     slantShear: overrides.slantShear ?? 0,
     verticalScale: overrides.verticalScale ?? 1,
+    modifierPreset: overrides.modifierPreset || "custom",
+    modifierScaleStart: overrides.modifierScaleStart ?? 0.82,
+    modifierScaleEnd: overrides.modifierScaleEnd ?? 1.38,
+    modifierSlantStart: overrides.modifierSlantStart ?? 0,
+    modifierSlantEnd: overrides.modifierSlantEnd ?? 0.32,
     penId: overrides.penId || "p4",
     nibMode: overrides.nibMode || "fixed",
     nibWidthMM: overrides.nibWidthMM ?? (overrides.penWidthScale ? 2.4 * overrides.penWidthScale : 2.4),
+    stampSpacingFactor: overrides.stampSpacingFactor ?? 0.32,
+    stampSizeBoost: overrides.stampSizeBoost ?? 1,
+    inkOpacity: overrides.inkOpacity ?? 0.2,
+    inkSoftness: overrides.inkSoftness ?? 0.34,
+    inkOverlapGain: overrides.inkOverlapGain ?? 1.2,
+    inkTexture: overrides.inkTexture ?? 0.16,
     variantMap: clone(overrides.variantMap || {}),
     leftKernMMMap: clone(overrides.leftKernMMMap || {}),
   };
@@ -756,28 +1353,33 @@ function refreshSelectionMonitor() {
   document.getElementById("boxCountLabel").textContent = `${state.boxes.length} text box${state.boxes.length === 1 ? "" : "es"}`;
   if (!active) {
     selectionState.activeName = "None";
-    pane?.refresh();
+    refreshPanes();
     if (boxTextInputEl) {
       boxTextInputEl.value = "";
     }
+    document.getElementById("activeLayerTitle").textContent = "No text layer selected";
+    syncAlignmentButtons(null);
     updateStats();
     return;
   }
   selectionState.activeName = active.name;
-  for (const key of ["text", "fontSizeMM", "lineHeightMM", "paddingMM", "trackingMM", "align", "slantShear", "verticalScale", "penId", "nibMode", "nibWidthMM"]) {
+  for (const key of ["text", "fontSizeMM", "lineHeightMM", "trackingMM", "align", "slantShear", "verticalScale", "modifierPreset", "modifierScaleStart", "modifierScaleEnd", "modifierSlantStart", "modifierSlantEnd", "penId", "nibWidthMM", "stampSpacingFactor", "stampSizeBoost", "inkOpacity", "inkSoftness", "inkOverlapGain", "inkTexture"]) {
     selectionState[key] = active[key];
   }
-  pane?.refresh();
+  refreshPanes();
   if (boxTextInputEl) {
     boxTextInputEl.value = active.text || "";
   }
+  document.getElementById("activeLayerTitle").textContent = layerLabelForBox(active);
+  syncAlignmentButtons(active.align);
+  syncColorIndicators();
   updateStats();
 }
 
 function applySelectionStateToBox() {
   const box = getActiveBox();
   if (!box) return;
-  for (const key of ["text", "fontSizeMM", "lineHeightMM", "paddingMM", "trackingMM", "penId", "nibMode", "nibWidthMM", "slantShear", "verticalScale"]) {
+  for (const key of ["text", "fontSizeMM", "lineHeightMM", "paddingMM", "trackingMM", "penId", "nibWidthMM", "slantShear", "verticalScale", "modifierPreset", "modifierScaleStart", "modifierScaleEnd", "modifierSlantStart", "modifierSlantEnd", "stampSpacingFactor", "stampSizeBoost", "inkOpacity", "inkSoftness", "inkOverlapGain", "inkTexture"]) {
     box[key] = selectionState[key];
   }
   box.align = selectionState.align;
@@ -786,27 +1388,9 @@ function applySelectionStateToBox() {
 function setAlignment(align) {
   selectionState.align = align;
   applySelectionStateToBox();
-  pane?.refresh();
+  syncAlignmentButtons(align);
+  refreshPanes();
   requestRender();
-}
-
-function layoutActionButtonsRow() {
-  const row = document.createElement("div");
-  row.className = "tp-action-row";
-  const buttons = [actionBindings.alignLeft, actionBindings.alignCenter, actionBindings.alignRight]
-    .map(getBladeElement)
-    .filter(Boolean);
-  if (!buttons.length) return;
-  const parent = buttons[0].parentElement;
-  if (!parent) return;
-  parent.insertBefore(row, buttons[0]);
-  for (const buttonEl of buttons) {
-    row.appendChild(buttonEl);
-  }
-}
-
-function getBladeElement(binding) {
-  return binding?.element || binding?.controller?.view?.element || binding?.controller_?.view?.element || null;
 }
 
 function syncNibWidthToPen() {
@@ -814,13 +1398,39 @@ function syncNibWidthToPen() {
   if (!doc) return;
   const pen = doc.pens.find((candidate) => candidate.id === selectionState.penId) || doc.pens[0];
   if (!pen) return;
-  if (selectionState.nibMode === "proportional") {
-    const referenceEm = doc.physicalEmMm || 1;
-    selectionState.nibWidthMM = (pen.mm / referenceEm) * selectionState.fontSizeMM;
-  } else {
-    selectionState.nibWidthMM = pen.mm;
+  selectionState.nibMode = "fixed";
+  selectionState.nibWidthMM = pen.mm;
+  refreshPanes();
+}
+
+function syncAlignmentButtons(align) {
+  const mapping = {
+    alignLeftBtn: align === "left",
+    alignCenterBtn: align === "center",
+    alignRightBtn: align === "right",
+  };
+  for (const [id, active] of Object.entries(mapping)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.classList.toggle("active", !!active);
   }
-  pane?.refresh();
+}
+
+function syncColorIndicators() {
+  if (paperColorInputEl) {
+    paperColorInputEl.value = P.paperColor;
+    const chip = document.getElementById("paperColorChip");
+    if (chip) chip.style.background = P.paperColor;
+  }
+  document.querySelectorAll("#inkSwatches [data-color]").forEach((button) => {
+    button.classList.toggle("active", (button.dataset.color || "").toLowerCase() === P.textColor.toLowerCase());
+  });
+}
+
+function layerLabelForBox(box) {
+  if (!box) return "Text layer";
+  const match = String(box.name || "").match(/(\d+)/);
+  return match ? `Text layer ${match[1]}` : box.name || "Text layer";
 }
 
 function onPointerDown(event) {
@@ -833,6 +1443,7 @@ function onPointerDown(event) {
     state.activeGlyphItem = null;
     hideVariantMenu(true);
     refreshSelectionMonitor();
+    startPanDrag(event);
     requestRender();
     return;
   }
@@ -867,7 +1478,25 @@ function onPointerDown(event) {
   requestRender();
 }
 
+function onStagePointerDown(event) {
+  if (event.target !== wrapEl) return;
+  activeBoxId = null;
+  state.activeGlyphItem = null;
+  hideVariantMenu(true);
+  refreshSelectionMonitor();
+  startPanDrag(event);
+  requestRender();
+}
+
 function onPointerMove(event) {
+  if (dragState?.kind === "pan") {
+    viewport.x = dragState.origin.x + (event.clientX - dragState.startClient.x);
+    viewport.y = dragState.origin.y + (event.clientY - dragState.startClient.y);
+    P.fitToViewport = false;
+    applyViewportTransform();
+    requestRender();
+    return;
+  }
   const point = pointerToMM(event);
   if (!point) return;
   hoverHandle = null;
@@ -884,8 +1513,9 @@ function onPointerMove(event) {
   const box = getActiveBox();
   if (!box) return;
   if (dragState.kind === "move") {
+    const boxHeightMM = getBoxHeightMM(box, cachedLayouts[state.boxes.findIndex((candidate) => candidate.id === box.id)]);
     box.xMM = clamp(dragState.origin.xMM + (point.x - dragState.start.x), 0, P.canvasWMM - box.widthMM);
-    box.yMM = clamp(dragState.origin.yMM + (point.y - dragState.start.y), 0, P.canvasHMM - box.heightMM);
+    box.yMM = clamp(dragState.origin.yMM + (point.y - dragState.start.y), 0, P.canvasHMM - boxHeightMM);
   } else {
     applyResize(box, dragState, point);
   }
@@ -895,9 +1525,13 @@ function onPointerMove(event) {
 
 function onPointerUp(event) {
   if (dragState) {
+    wrapEl.classList.remove("is-panning");
     dragState = null;
     if (canvas.hasPointerCapture?.(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
+    }
+    if (wrapEl.hasPointerCapture?.(event.pointerId)) {
+      wrapEl.releasePointerCapture(event.pointerId);
     }
     requestRender();
   }
@@ -1030,11 +1664,43 @@ function pointerToMM(event) {
   return { x: xPx / pxPerMM, y: yPx / pxPerMM };
 }
 
+function startPanDrag(event) {
+  wrapEl.classList.add("is-panning");
+  dragState = {
+    kind: "pan",
+    startClient: { x: event.clientX, y: event.clientY },
+    origin: { x: viewport.x, y: viewport.y },
+  };
+  wrapEl.setPointerCapture?.(event.pointerId);
+}
+
+function onStageWheel(event) {
+  event.preventDefault();
+  const rect = wrapEl.getBoundingClientRect();
+  const cursorX = event.clientX - rect.left;
+  const cursorY = event.clientY - rect.top;
+  const zoomFactor = Math.exp(-event.deltaY * 0.0015);
+  const nextScale = clamp(viewport.scale * zoomFactor, 0.1, 8);
+  const worldX = (cursorX - viewport.x) / viewport.scale;
+  const worldY = (cursorY - viewport.y) / viewport.scale;
+  viewport.scale = nextScale;
+  viewport.x = cursorX - worldX * nextScale;
+  viewport.y = cursorY - worldY * nextScale;
+  P.fitToViewport = false;
+  P.previewScale = nextScale;
+  applyViewportTransform();
+  requestRender();
+}
+
 function hitTestBoxes(point) {
   const ordered = [...state.boxes].reverse();
   for (const box of ordered) {
+    const layout = state.currentDoc
+      ? cachedLayouts[state.boxes.findIndex((candidate) => candidate.id === box.id)] || layoutBox(state.currentDoc, box)
+      : null;
+    const boxHeightMM = getBoxHeightMM(box, layout);
     if (box.id === activeBoxId) {
-      for (const handle of getBoxHandles(box)) {
+      for (const handle of getBoxHandles(box, boxHeightMM)) {
         if (distance(point.x, point.y, handle.xMM, handle.yMM) <= 3.2) {
           return { part: "handle", box, handle };
         }
@@ -1044,7 +1710,7 @@ function hitTestBoxes(point) {
       point.x >= box.xMM &&
       point.x <= box.xMM + box.widthMM &&
       point.y >= box.yMM &&
-      point.y <= box.yMM + box.heightMM
+      point.y <= box.yMM + boxHeightMM
     ) {
       return { part: "box", box };
     }
@@ -1052,11 +1718,11 @@ function hitTestBoxes(point) {
   return null;
 }
 
-function getBoxHandles(box) {
+function getBoxHandles(box, boxHeightMM = box.heightMM) {
   const x0 = box.xMM;
   const y0 = box.yMM;
   const x1 = box.xMM + box.widthMM;
-  const y1 = box.yMM + box.heightMM;
+  const y1 = box.yMM + boxHeightMM;
   const ym = (y0 + y1) * 0.5;
   return [
     { key: "e", xMM: x1, yMM: ym },
@@ -1112,6 +1778,16 @@ function appAssetUrl(path) {
 }
 
 async function loadProjectFonts() {
+  const bundledManifest = getBundledFontManifest();
+  if (bundledManifest?.fonts?.length) {
+    const out = {};
+    for (const entry of bundledManifest.fonts || []) {
+      out[entry.id] = { ...entry, resolvedPath: appAssetUrl(entry.path) };
+    }
+    if (Object.keys(out).length) {
+      return out;
+    }
+  }
   const url = appAssetUrl("./fonts/index.json");
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
@@ -1126,6 +1802,15 @@ async function loadProjectFonts() {
     throw new Error(`Manifest loaded from ${url} but did not contain any fonts.`);
   }
   return out;
+}
+
+function getBundledFontManifest() {
+  return window.__CALLIGRAPHY_FONT_BUNDLE__?.manifest || null;
+}
+
+function getBundledFontDoc(fontId) {
+  const doc = window.__CALLIGRAPHY_FONT_BUNDLE__?.docs?.[fontId];
+  return doc ? clone(doc) : null;
 }
 
 function skeletonBounds(g) {
@@ -1442,6 +2127,41 @@ function smooth(t) {
   return t * t * (3 - 2 * t);
 }
 
+function sampleStrokeForStamps(st, spacingU) {
+  const { pts, w } = flattenStroke(st, Math.max(4, spacingU * 0.5));
+  if (!pts.length) return [];
+  const out = [{ x: pts[0][0], y: pts[0][1], w: w[0] ?? 1 }];
+  let remaining = spacingU;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const A = pts[i];
+    const B = pts[i + 1];
+    const dx = B[0] - A[0];
+    const dy = B[1] - A[1];
+    const segLen = Math.hypot(dx, dy);
+    if (segLen < 1e-6) continue;
+    let dist = remaining;
+    while (dist <= segLen) {
+      const t = clamp(dist / segLen, 0, 1);
+      out.push({
+        x: A[0] + dx * t,
+        y: A[1] + dy * t,
+        w: (w[i] ?? 1) * (1 - t) + (w[i + 1] ?? 1) * t,
+      });
+      dist += spacingU;
+    }
+    remaining = dist - segLen;
+    if (!Number.isFinite(remaining) || remaining <= 1e-6) {
+      remaining = spacingU;
+    }
+  }
+  const last = pts[pts.length - 1];
+  const prev = out[out.length - 1];
+  if (!prev || Math.hypot(last[0] - prev.x, last[1] - prev.y) > spacingU * 0.2) {
+    out.push({ x: last[0], y: last[1], w: w[w.length - 1] ?? 1 });
+  }
+  return out;
+}
+
 function flattenStroke(st, tol) {
   const nodes = st.nodes || [];
   if (nodes.length < 2) {
@@ -1547,20 +2267,30 @@ function exportSvg() {
     const pen = resolvePenForDoc(doc, box);
     const scale = box.fontSizeMM / UPM;
     svg.push(`<g data-box="${ExportUtils.escapeXML(box.name)}">`);
-    for (const line of layout.lines) {
+    const totalLines = Math.max(layout.lines.length, 1);
+    for (let lineIndex = 0; lineIndex < layout.lines.length; lineIndex++) {
+      const line = layout.lines[lineIndex];
       const baselineY = box.yMM + box.paddingMM + line.baselineMM;
+      const totalItems = Math.max(line.items.filter((item) => item.glyph).length, 1);
+      let glyphIndex = 0;
       for (const item of line.items) {
         if (!item.glyph) continue;
         const drawX = box.xMM + box.paddingMM + line.offsetMM + item.xMM;
-        const pathData = polysToPathData(getCachedGlyphArtwork(item, pen).polys);
-        if (!pathData) continue;
-        svg.push(
-          `<g transform="translate(${ExportUtils.fmt(drawX)} ${ExportUtils.fmt(baselineY)}) scale(${ExportUtils.fmt(
-            scale,
-          )} ${ExportUtils.fmt(-scale)}) matrix(1 0 ${ExportUtils.fmt(box.slantShear || 0)} ${ExportUtils.fmt(Math.max(box.verticalScale || 1, 0.001))} 0 0)">`,
+        const modifier = resolveGlyphModifier(box, lineIndex, totalLines, glyphIndex, totalItems);
+        const pathData = polysToPathData(
+          getCachedGlyphArtwork(
+            item,
+            pen,
+            transformGlyphSkeleton(item.glyph, modifier.slantShear, modifier.verticalScale),
+            modifier.slantShear,
+            modifier.verticalScale,
+          ).polys,
         );
+        if (!pathData) continue;
+        svg.push(`<g transform="translate(${ExportUtils.fmt(drawX)} ${ExportUtils.fmt(baselineY)}) scale(${ExportUtils.fmt(scale)} ${ExportUtils.fmt(-scale)})">`);
         svg.push(`<path d="${pathData}" fill="${ExportUtils.escapeXML(P.textColor)}" fill-rule="nonzero"/>`);
         svg.push(`</g>`);
+        glyphIndex += 1;
       }
     }
     svg.push("</g>");
@@ -1586,23 +2316,26 @@ function exportPathSvg() {
     svg.push(
       `<g data-box="${ExportUtils.escapeXML(box.name)}" fill="none" stroke="${ExportUtils.escapeXML(P.textColor)}" stroke-width="0.2">`,
     );
-    for (const line of layout.lines) {
+    const totalLines = Math.max(layout.lines.length, 1);
+    for (let lineIndex = 0; lineIndex < layout.lines.length; lineIndex++) {
+      const line = layout.lines[lineIndex];
       const baselineY = box.yMM + box.paddingMM + line.baselineMM;
+      const totalItems = Math.max(line.items.filter((item) => item.glyph).length, 1);
+      let glyphIndex = 0;
       for (const item of line.items) {
         if (!item.glyph) continue;
         const drawX = box.xMM + box.paddingMM + line.offsetMM + item.xMM;
-        svg.push(
-          `<g transform="translate(${ExportUtils.fmt(drawX)} ${ExportUtils.fmt(baselineY)}) scale(${ExportUtils.fmt(
-            scale,
-          )} ${ExportUtils.fmt(-scale)}) matrix(1 0 ${ExportUtils.fmt(box.slantShear || 0)} ${ExportUtils.fmt(Math.max(box.verticalScale || 1, 0.001))} 0 0)">`,
-        );
-        for (const st of item.glyph.strokes || []) {
+        const modifier = resolveGlyphModifier(box, lineIndex, totalLines, glyphIndex, totalItems);
+        const transformed = transformGlyphSkeleton(item.glyph, modifier.slantShear, modifier.verticalScale);
+        svg.push(`<g transform="translate(${ExportUtils.fmt(drawX)} ${ExportUtils.fmt(baselineY)}) scale(${ExportUtils.fmt(scale)} ${ExportUtils.fmt(-scale)})">`);
+        for (const st of transformed.strokes || []) {
           const d = strokePathData(st, 3);
           if (d) {
             svg.push(`<path d="${d}"/>`);
           }
         }
         svg.push(`</g>`);
+        glyphIndex += 1;
       }
     }
     svg.push(`</g>`);

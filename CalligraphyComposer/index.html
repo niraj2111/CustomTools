@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Petit+Formal+Script&family=Space+Grotesk:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link
@@ -16,7 +16,15 @@
     />
     <style>
       :root {
-        --panel: 390px;
+        --app-bg: #ececf2;
+        --card-bg: rgba(255, 255, 255, 0.9);
+        --card-stroke: rgba(30, 33, 40, 0.1);
+        --card-shadow: 0 2px 10px rgba(16, 18, 27, 0.05);
+        --text: #17181c;
+        --muted: #5f6571;
+        --accent: #ff8d28;
+        --accent-soft: rgba(255, 141, 40, 0.14);
+        --canvas-bg: #ffffff;
       }
 
       * {
@@ -30,59 +38,231 @@
 
       body {
         margin: 0;
-        display: grid;
-        grid-template-columns: var(--panel) 1fr;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #f3f3f7 0%, #e8e8ef 100%);
+        color: var(--text);
+        font-family: "Inter", sans-serif;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      .app-shell {
         height: 100vh;
-        background:
-          radial-gradient(circle at top, #243246 0, #141922 55%, #0c1016 100%);
-        color: #eef4fb;
-        font-family: "Space Grotesk", sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
 
-      aside {
-        background: rgba(18, 24, 34, 0.94);
-        border-right: 1px solid rgba(145, 169, 198, 0.16);
-        padding: 14px 14px 16px;
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 10px 16px;
+        background: rgba(245, 245, 249, 0.86);
+        border-bottom: 1px solid rgba(30, 33, 40, 0.08);
+        backdrop-filter: blur(14px);
+        position: sticky;
+        top: 0;
+        z-index: 30;
+      }
+
+      .brand {
+        font-size: 18px;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+      }
+
+      .topbar-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .action-button,
+      .panel-button,
+      .icon-toggle {
+        appearance: none;
+        border: 1px solid var(--card-stroke);
+        background: rgba(217, 217, 217, 0.96);
+        color: var(--text);
+        border-radius: 12px;
+        box-shadow: var(--card-shadow);
+      }
+
+      .icon-toggle img {
+        width: 24px;
+        height: 24px;
+        display: block;
+      }
+
+      .action-button,
+      .panel-button {
+        padding: 10px 14px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .workspace {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
+      }
+
+      .rail {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        position: absolute;
+        top: 24px;
+        z-index: 20;
+        pointer-events: auto;
+      }
+
+      .rail-left {
+        left: 16px;
+        width: 286px;
+        max-height: calc(100vh - 96px);
         overflow: auto;
-        backdrop-filter: blur(10px);
+        padding-right: 4px;
       }
 
-      main {
+      .rail-right {
+        right: 16px;
+        width: 285px;
+      }
+
+      .panel-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-stroke);
+        border-radius: 12px;
+        box-shadow: var(--card-shadow);
+        padding: 14px;
+        backdrop-filter: blur(12px);
+      }
+
+      .panel-title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .accordion {
+        margin: 0;
+      }
+
+      .accordion > summary {
+        list-style: none;
+        cursor: pointer;
+      }
+
+      .accordion > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .summary-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .summary-caret {
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(95, 101, 113, 0.08);
+        color: var(--muted);
+        font-size: 12px;
+        transition: transform 0.18s ease;
+      }
+
+      .accordion[open] .summary-caret {
+        transform: rotate(90deg);
+      }
+
+      .accordion-body {
+        margin-top: 10px;
+      }
+
+      .stage-area {
+        position: absolute;
+        inset: 0;
         min-width: 0;
-        display: grid;
-        grid-template-rows: minmax(0, 1fr) auto;
+        min-height: 0;
       }
 
       #wrap {
+        position: absolute;
+        inset: 0;
         width: 100%;
         height: 100%;
-        display: grid;
-        place-items: center;
-        overflow: auto;
-        padding: 18px;
+        overflow: hidden;
         touch-action: none;
         position: relative;
+        cursor: grab;
+        background-color: #ececf2;
+        background-image: radial-gradient(rgba(125, 132, 146, 0.18) 1.2px, transparent 1.2px);
+        background-size: 24px 24px;
+      }
+
+      #wrap.is-panning {
+        cursor: grabbing;
+      }
+
+      .stage-hint {
+        position: absolute;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        z-index: 5;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(30, 33, 40, 0.08);
+        color: var(--muted);
+        font-size: 12px;
+        backdrop-filter: blur(10px);
       }
 
       #wrap canvas {
         display: block;
-        border-radius: 16px;
+        z-index: 1;
         box-shadow:
-          0 24px 48px rgba(0, 0, 0, 0.34),
-          0 0 0 1px rgba(255, 255, 255, 0.08);
-        background: #f7f1e8;
+          0 2px 6px 2px rgba(0, 0, 0, 0.15),
+          0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+
+      #wrap canvas.paper-layer {
+        background: var(--canvas-bg);
+      }
+
+      #wrap canvas.glyph-layer,
+      #wrap canvas.overlay-layer {
+        background: transparent;
+        box-shadow: none;
       }
 
       .variant-menu {
         position: absolute;
         z-index: 20;
         display: none;
-        min-width: 150px;
+        min-width: 160px;
         max-width: 220px;
-        background: rgba(18, 24, 34, 0.98);
-        border: 1px solid rgba(145, 169, 198, 0.22);
-        border-radius: 10px;
-        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+        background: rgba(255, 255, 255, 0.97);
+        border: 1px solid var(--card-stroke);
+        border-radius: 12px;
+        box-shadow: 0 12px 28px rgba(17, 20, 28, 0.12);
         padding: 8px;
       }
 
@@ -91,11 +271,12 @@
       }
 
       .variant-title {
+        margin-bottom: 8px;
+        color: var(--muted);
         font-size: 10px;
-        letter-spacing: 0.12em;
+        font-weight: 600;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: #92a6bf;
-        margin-bottom: 7px;
       }
 
       .variant-list {
@@ -105,212 +286,409 @@
 
       .variant-btn {
         width: 100%;
-        text-align: left;
-        background: #202938;
-        border: 1px solid #35445a;
-        color: #edf4fb;
-        padding: 6px 8px;
+        padding: 7px 8px;
+        border: 1px solid var(--card-stroke);
         border-radius: 8px;
+        background: #f6f6fa;
+        color: var(--text);
+        text-align: left;
         cursor: pointer;
-        font: inherit;
-        font-size: 12px;
       }
 
       .variant-btn:hover,
       .variant-btn[aria-pressed="true"] {
-        border-color: #6ea3ff;
-        background: #27364d;
+        border-color: var(--accent);
+        background: #fff5eb;
       }
 
-      .tp-action-row {
+      .panel-meta {
         display: flex;
-        gap: 6px;
-        margin: 8px 0 2px;
-      }
-
-      .tp-action-row > * {
-        flex: 1 1 0;
-      }
-
-      .title {
-        margin: 0 0 8px;
-        font-size: 24px;
-        line-height: 1;
-      }
-
-      .subtitle {
-        margin: 0 0 12px;
-        color: #bfd0e2;
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .chip {
-        display: inline-flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 12px;
-        padding: 8px 10px;
-        border-radius: 999px;
-        background: rgba(255, 231, 198, 0.08);
-        color: #f5dfbc;
-        font-size: 12px;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
       }
 
-      .row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
+      .panel-label {
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .color-chip {
+        position: relative;
+        width: 40px;
+        height: 24px;
+        border: 1px solid rgba(27, 30, 37, 0.16);
+        border-radius: 8px;
+        background: #ffffff;
+        overflow: hidden;
+      }
+
+      .color-chip input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
         margin-top: 10px;
       }
 
-      .btn {
-        display: inline-block;
-        background: #202938;
-        border: 1px solid #35445a;
-        color: #edf4fb;
-        padding: 8px 12px;
-        border-radius: 12px;
+      .swatch {
+        width: 100%;
+        aspect-ratio: 1;
+        border: 2px solid transparent;
+        border-radius: 8px;
         cursor: pointer;
-        font: inherit;
-        font-size: 14px;
+        box-shadow: inset 0 0 0 1px rgba(20, 22, 28, 0.06);
       }
 
-      .btn:hover {
-        border-color: #6ea3ff;
-      }
-
-      .btn:active {
-        transform: translateY(1px);
-      }
-
-      .hint {
-        font-size: 12px;
-        line-height: 1.55;
-        color: #bfd0e2;
-        margin-top: 14px;
+      .swatch.active {
+        border-color: rgba(23, 24, 28, 0.5);
       }
 
       .text-editor {
-        margin-top: 12px;
+        margin-top: 4px;
       }
 
-      .text-editor label {
-        display: block;
-        margin-bottom: 6px;
+      .panel-note {
+        margin: 0 0 10px;
+        color: var(--muted);
         font-size: 12px;
-        color: #bfd0e2;
+        line-height: 1.45;
       }
 
       .text-editor textarea {
         width: 100%;
-        min-height: 120px;
+        min-height: 138px;
+        padding: 10px;
+        border: 1px solid rgba(24, 28, 34, 0.08);
+        border-radius: 8px;
         resize: vertical;
-        background: #161f2c;
-        border: 1px solid #35445a;
-        color: #edf4fb;
-        border-radius: 12px;
-        padding: 10px 12px;
-        font: inherit;
-        line-height: 1.45;
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--text);
+        line-height: 1.5;
       }
 
       .text-editor textarea:focus {
         outline: none;
-        border-color: #6ea3ff;
-        box-shadow: 0 0 0 1px rgba(110, 163, 255, 0.25);
+        border-color: rgba(255, 141, 40, 0.45);
+        box-shadow: 0 0 0 3px rgba(255, 141, 40, 0.16);
       }
 
-      ul {
-        margin: 8px 0 0;
-        padding-left: 18px;
-      }
-
-      .stats {
+      .align-actions {
         display: flex;
-        gap: 18px;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .icon-toggle {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .icon-toggle.active {
+        background: rgba(204, 204, 204, 0.98);
+        border-color: rgba(27, 30, 37, 0.16);
+      }
+
+      .secondary-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
         flex-wrap: wrap;
-        padding: 12px 18px 16px;
-        border-top: 1px solid rgba(145, 169, 198, 0.14);
-        background: rgba(12, 16, 22, 0.9);
-        color: #bfd0e2;
-        font-size: 13px;
       }
 
-      .stats b {
-        color: #ffffff;
-        font-weight: 600;
+      .secondary-actions .action-button {
+        background: rgba(242, 242, 247, 0.92);
       }
 
-      @media (max-width: 980px) {
-        body {
-          grid-template-columns: 1fr;
-          grid-template-rows: auto 1fr;
+      .panel-button {
+        width: 100%;
+        text-align: left;
+        background: var(--card-bg);
+      }
+
+      .hidden-utility {
+        display: none;
+      }
+
+      #docPane,
+      #toolPane,
+      #scriptPane,
+      #modifierPane {
+        font-family: "Inter", sans-serif;
+        --tp-font-family: "Inter", sans-serif;
+        --tp-base-background-color: transparent;
+        --tp-base-shadow-color: transparent;
+        --tp-button-background-color: rgba(230, 230, 234, 0.98);
+        --tp-button-background-color-active: rgba(255, 141, 40, 0.2);
+        --tp-button-background-color-focus: rgba(255, 141, 40, 0.16);
+        --tp-button-background-color-hover: rgba(240, 240, 244, 0.98);
+        --tp-button-foreground-color: var(--text);
+        --tp-container-background-color: transparent;
+        --tp-container-background-color-active: rgba(248, 248, 251, 0.96);
+        --tp-container-background-color-focus: rgba(248, 248, 251, 0.96);
+        --tp-container-background-color-hover: rgba(248, 248, 251, 0.96);
+        --tp-container-foreground-color: var(--text);
+        --tp-groove-foreground-color: rgba(27, 30, 37, 0.1);
+        --tp-input-background-color: transparent;
+        --tp-input-background-color-active: rgba(248, 248, 251, 0.96);
+        --tp-input-background-color-focus: rgba(248, 248, 251, 0.96);
+        --tp-input-background-color-hover: rgba(248, 248, 251, 0.96);
+        --tp-input-foreground-color: var(--text);
+        --tp-label-foreground-color: var(--text);
+        --tp-monitor-background-color: transparent;
+        --tp-monitor-foreground-color: var(--muted);
+      }
+
+      #docPane .tp-dfwv,
+      #toolPane .tp-dfwv,
+      #scriptPane .tp-dfwv,
+      #modifierPane .tp-dfwv {
+        gap: 2px;
+      }
+
+      #docPane .tp-rotv,
+      #toolPane .tp-rotv,
+      #scriptPane .tp-rotv,
+      #modifierPane .tp-rotv {
+        box-shadow: none;
+      }
+
+      #docPane .tp-fldv,
+      #toolPane .tp-fldv,
+      #scriptPane .tp-fldv,
+      #modifierPane .tp-fldv {
+        border-radius: 0;
+      }
+
+      #docPane .tp-fldv_t,
+      #toolPane .tp-fldv_t,
+      #scriptPane .tp-fldv_t,
+      #modifierPane .tp-fldv_t {
+        display: none;
+      }
+
+      #docPane .tp-lblv,
+      #toolPane .tp-lblv,
+      #scriptPane .tp-lblv,
+      #modifierPane .tp-lblv {
+        min-height: 38px;
+        padding: 7px 0;
+      }
+
+      #docPane .tp-lblv_l,
+      #toolPane .tp-lblv_l,
+      #scriptPane .tp-lblv_l,
+      #modifierPane .tp-lblv_l {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text);
+      }
+
+      #docPane .tp-lblv_v,
+      #toolPane .tp-lblv_v,
+      #scriptPane .tp-lblv_v,
+      #modifierPane .tp-lblv_v {
+        min-width: 120px;
+      }
+
+      #docPane .tp-txtv_i,
+      #docPane .tp-lstv_s,
+      #docPane .tp-ckbv_w,
+      #docPane .tp-sldv_t,
+      #toolPane .tp-txtv_i,
+      #toolPane .tp-lstv_s,
+      #toolPane .tp-ckbv_w,
+      #toolPane .tp-sldv_t,
+      #scriptPane .tp-txtv_i,
+      #scriptPane .tp-lstv_s,
+      #scriptPane .tp-ckbv_w,
+      #scriptPane .tp-sldv_t,
+      #modifierPane .tp-txtv_i,
+      #modifierPane .tp-lstv_s,
+      #modifierPane .tp-ckbv_w,
+      #modifierPane .tp-sldv_t {
+        border-radius: 8px;
+      }
+
+      @media (max-width: 1180px) {
+        .workspace {
+          display: flex;
+          flex-direction: column;
           height: auto;
-          min-height: 100vh;
+          padding: 12px;
+          gap: 12px;
         }
 
-        aside {
-          border-right: 0;
-          border-bottom: 1px solid rgba(145, 169, 198, 0.16);
+        .stage-area,
+        .rail {
+          position: static;
+        }
+
+        .rail-left,
+        .rail-right {
+          width: auto;
+          max-height: none;
+          overflow: visible;
+          padding-right: 0;
+        }
+
+        #wrap {
+          position: relative;
+          min-height: 60vh;
         }
       }
     </style>
   </head>
   <body>
-    <aside>
-      <h1 class="title">CalligraphyComposer</h1>
-      <p class="subtitle">
-        Paper-scale calligraphy text composer with interactive wrapped text boxes, measurable nib
-        settings, and SVG export.
-      </p>
-      <div class="chip">
-        <span>Standalone MVP</span>
-        <strong id="boxCountLabel">1 text box</strong>
-      </div>
-      <div id="pane"></div>
-      <div class="text-editor">
-        <label for="boxTextInput">Text</label>
-        <textarea id="boxTextInput" spellcheck="false"></textarea>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">Logo</div>
+        <div class="topbar-actions">
+          <button id="pathSvgBtn" class="action-button" type="button">Export Paths</button>
+          <button id="svgBtn" class="action-button" type="button">Export Artwork</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="rail rail-left">
+          <details class="panel-card accordion" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Document Setup</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <div id="docPane"></div>
+              <div class="panel-meta" style="margin-top:10px; margin-bottom:0">
+                <span class="panel-label">Paper Color</span>
+                <label class="color-chip" id="paperColorChip">
+                  <input id="paperColorInput" type="color" value="#ffffff" />
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <details class="panel-card accordion" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Tool</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <div id="toolPane"></div>
+              <div class="swatches" id="inkSwatches">
+                <button class="swatch" type="button" data-color="#000000" style="background:#000000"></button>
+                <button class="swatch" type="button" data-color="#ff8d28" style="background:#ff8d28"></button>
+                <button class="swatch" type="button" data-color="#ffcc00" style="background:#ffcc00"></button>
+                <button class="swatch" type="button" data-color="#0088ff" style="background:#0088ff"></button>
+                <button class="swatch" type="button" data-color="#ff383c" style="background:#ff383c"></button>
+              </div>
+            </div>
+          </details>
+
+          <details class="panel-card accordion" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Script</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <div id="scriptPane"></div>
+            </div>
+          </details>
+
+          <details class="panel-card accordion" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Modifier</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <p class="panel-note">Apply progressive scaling top-to-bottom and slant left-to-right.</p>
+              <div id="modifierPane"></div>
+            </div>
+          </details>
+        </aside>
+
+        <main class="stage-area">
+          <div id="wrap"></div>
+          <div class="stage-hint">Drag empty space to pan. Use the wheel to zoom.</div>
+        </main>
+
+        <aside class="rail rail-right">
+          <details class="panel-card accordion" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title" id="activeLayerTitle">Text layer 1</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <div class="text-editor">
+                <textarea id="boxTextInput" spellcheck="false" placeholder="Placeholder text..."></textarea>
+              </div>
+              <div class="align-actions">
+                <button id="alignLeftBtn" class="icon-toggle active" type="button" aria-label="Align left">
+                  <img
+                    alt=""
+                    src="https://www.figma.com/api/mcp/asset/f0b2c39f-df0f-469d-9db3-7b0f875d5829.svg"
+                  />
+                </button>
+                <button id="alignCenterBtn" class="icon-toggle" type="button" aria-label="Align center">
+                  <img
+                    alt=""
+                    src="https://www.figma.com/api/mcp/asset/302243ec-e4f6-4fc9-981b-e5f87f6ed1bf.svg"
+                  />
+                </button>
+                <button id="alignRightBtn" class="icon-toggle" type="button" aria-label="Align right">
+                  <img
+                    alt=""
+                    src="https://www.figma.com/api/mcp/asset/0c9fbb97-6bb4-4a6e-b470-7f00ec7f122c.svg"
+                  />
+                </button>
+              </div>
+              <div class="secondary-actions">
+                <button id="duplicateBoxBtn" class="action-button" type="button">Duplicate</button>
+                <button id="deleteBoxBtn" class="action-button" type="button">Delete</button>
+              </div>
+            </div>
+          </details>
+
+          <button id="addBoxBtn" class="panel-button" type="button">New Text Layer</button>
+        </aside>
       </div>
 
-      <div class="row">
-        <button id="addBoxBtn" class="btn">Add Text Box</button>
-        <button id="duplicateBoxBtn" class="btn">Duplicate Box</button>
-        <button id="deleteBoxBtn" class="btn">Delete Box</button>
+      <div class="hidden-utility" aria-hidden="true">
+        <span id="boxCountLabel"></span>
+        <span id="stat-active-box"></span>
+        <span id="stat-paper"></span>
+        <span id="stat-font"></span>
+        <span id="stat-nib"></span>
+        <button id="fitBtn" type="button"></button>
+        <button id="resetViewBtn" type="button"></button>
       </div>
-
-      <div class="row">
-        <button id="fitBtn" class="btn">Fit Preview</button>
-        <button id="resetViewBtn" class="btn">Reset Zoom</button>
-        <button id="svgBtn" class="btn">Export Artwork</button>
-        <button id="pathSvgBtn" class="btn">Export Paths</button>
-      </div>
-
-      <div class="hint">
-        Notes:
-        <ul>
-          <li>All page, font, spacing, and nib values are stored in millimetres.</li>
-          <li>Drag inside a box to move it, or drag a corner/edge handle to resize it.</li>
-          <li>Wrapping is constrained by the text box width and internal padding.</li>
-          <li>The nib preview is a measurable broad/round stroke approximation for standalone use.</li>
-        </ul>
-      </div>
-    </aside>
-
-    <main>
-      <div id="wrap"></div>
-      <div class="stats">
-        <span>Active box: <b id="stat-active-box">Box 1</b></span>
-        <span>Paper: <b id="stat-paper">A4 Portrait</b></span>
-        <span>Font: <b id="stat-font">18.0 mm</b></span>
-        <span>Nib: <b id="stat-nib">2.4 mm broad</b></span>
-      </div>
-    </main>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
     <script src="../shared/paper.js"></script>
     <script src="../shared/export.js"></script>
+    <script src="./fonts/bundle.js"></script>
     <script src="./sketch.js"></script>
   </body>
 </html>
