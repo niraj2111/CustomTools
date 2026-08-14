@@ -45,6 +45,7 @@ const UI = {
   streamline: 0.45,
   smoothing: 0.25,
   minDistance: 0.6,
+  exportTolerance: 0.18,
 };
 
 const saxiHost = "127.0.0.1:9080";
@@ -531,6 +532,7 @@ function buildPane() {
     "change",
     applyCurrentBrushToExistingStrokes,
   );
+  fStroke.addInput(UI, "exportTolerance", { label: "Export fit", min: 0.03, max: 1, step: 0.01 });
 }
 
 function styleProxyForCanvas(target) {
@@ -583,6 +585,7 @@ function withPaperScale(targetCtx, fn) {
 function invalidateStrokeCaches(stroke) {
   stroke.pathDirty = true;
   stroke.brushDirty = true;
+  stroke.bezierDirty = true;
 }
 
 function rebuildStrokePointsFromRaw(rawPoints, brush) {
@@ -646,8 +649,10 @@ function createStroke(point) {
     brush,
     pathCache: [],
     brushCache: [],
+    bezierCache: null,
     pathDirty: true,
     brushDirty: true,
+    bezierDirty: true,
   };
 }
 
@@ -686,6 +691,161 @@ function getStrokePathPoints(stroke) {
   );
   stroke.pathDirty = false;
   return stroke.pathCache;
+}
+
+function subtractPoints(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y };
+}
+
+function addPoints(a, b) {
+  return { x: a.x + b.x, y: a.y + b.y };
+}
+
+function scalePoint(point, factor) {
+  return { x: point.x * factor, y: point.y * factor };
+}
+
+function normalizePoint(point) {
+  const length = Math.hypot(point.x, point.y);
+  if (length <= 1e-6) {
+    return { x: 0, y: 0 };
+  }
+  return { x: point.x / length, y: point.y / length };
+}
+
+function perpendicularDistance(point, a, b) {
+  const length = dist(a, b);
+  if (length <= 1e-6) {
+    return dist(point, a);
+  }
+  const area = Math.abs((b.x - a.x) * (a.y - point.y) - (a.x - point.x) * (b.y - a.y));
+  return area / length;
+}
+
+function simplifyRadialDistance(points, tolerance) {
+  if (points.length <= 2) return points.slice();
+  const out = [points[0]];
+  let previous = points[0];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    if (dist(points[i], previous) >= tolerance) {
+      out.push(points[i]);
+      previous = points[i];
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function simplifyDouglasPeucker(points, tolerance) {
+  if (points.length <= 2) return points.slice();
+  let maxDistance = 0;
+  let splitIndex = -1;
+  const start = points[0];
+  const end = points[points.length - 1];
+
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const distance = perpendicularDistance(points[i], start, end);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      splitIndex = i;
+    }
+  }
+
+  if (maxDistance <= tolerance || splitIndex < 0) {
+    return [start, end];
+  }
+
+  const left = simplifyDouglasPeucker(points.slice(0, splitIndex + 1), tolerance);
+  const right = simplifyDouglasPeucker(points.slice(splitIndex), tolerance);
+  return left.slice(0, -1).concat(right);
+}
+
+function cornerAwareSimplify(points, tolerance) {
+  if (points.length <= 2) return points.slice();
+  const cornerCosine = Math.cos((35 * Math.PI) / 180);
+  const segments = [];
+  let segmentStart = 0;
+
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const incoming = normalizePoint(subtractPoints(points[i], points[i - 1]));
+    const outgoing = normalizePoint(subtractPoints(points[i + 1], points[i]));
+    const cosine = incoming.x * outgoing.x + incoming.y * outgoing.y;
+    if (cosine > cornerCosine) continue;
+    segments.push(points.slice(segmentStart, i + 1));
+    segmentStart = i;
+  }
+  segments.push(points.slice(segmentStart));
+
+  const out = [];
+  for (const segment of segments) {
+    const radial = simplifyRadialDistance(segment, tolerance * 0.5);
+    const simplified = simplifyDouglasPeucker(radial, tolerance);
+    if (!out.length) {
+      out.push(...simplified);
+    } else {
+      out.push(...simplified.slice(1));
+    }
+  }
+  return out;
+}
+
+function catmullRomToBezier(points) {
+  if (!points.length) return [];
+  if (points.length === 1) {
+    return [{ type: "move", point: points[0] }];
+  }
+
+  const segments = [{ type: "move", point: points[0] }];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const cp1 = addPoints(p1, scalePoint(subtractPoints(p2, p0), 1 / 6));
+    const cp2 = subtractPoints(p2, scalePoint(subtractPoints(p3, p1), 1 / 6));
+    segments.push({
+      type: "cubic",
+      cp1,
+      cp2,
+      point: p2,
+    });
+  }
+  return segments;
+}
+
+function buildBezierPathCache(stroke) {
+  const tolerance = clamp(Number(UI.exportTolerance) || 0.18, 0.03, 1);
+  if (!stroke.bezierDirty && stroke.bezierCache && Math.abs(stroke.bezierCache.tolerance - tolerance) < 1e-6) {
+    return stroke.bezierCache;
+  }
+
+  const path = getStrokePathPoints(stroke);
+  const simplified = cornerAwareSimplify(path, tolerance);
+  const segments = catmullRomToBezier(simplified);
+
+  stroke.bezierCache = {
+    tolerance,
+    sourceCount: path.length,
+    reducedCount: simplified.length,
+    segments,
+  };
+  stroke.bezierDirty = false;
+  return stroke.bezierCache;
+}
+
+function bezierSegmentsToPathData(segments) {
+  if (!segments || !segments.length) return "";
+  const commands = [];
+  for (const segment of segments) {
+    if (segment.type === "move") {
+      commands.push(`M ${fmt(segment.point.x)} ${fmt(segment.point.y)}`);
+    } else if (segment.type === "cubic") {
+      commands.push(
+        `C ${fmt(segment.cp1.x)} ${fmt(segment.cp1.y)} ${fmt(segment.cp2.x)} ${fmt(segment.cp2.y)} ${fmt(segment.point.x)} ${fmt(segment.point.y)}`,
+      );
+    }
+  }
+  return commands.join(" ");
 }
 
 function pointOnFlatStamp(center, width, angleRad, xDir, yDir) {
@@ -1111,11 +1271,9 @@ function buildPathSvgDocument() {
   );
   parts.push(`<g fill="none" stroke="#000" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round">`);
   for (const stroke of strokes) {
-    const points = getStrokePathPoints(stroke);
-    if (!points.length) continue;
-    const d = points
-      .map((point, index) => `${index === 0 ? "M" : "L"} ${fmt(point.x)} ${fmt(point.y)}`)
-      .join(" ");
+    const bezier = buildBezierPathCache(stroke);
+    const d = bezierSegmentsToPathData(bezier.segments);
+    if (!d) continue;
     parts.push(`<path d="${d}"/>`);
   }
   parts.push(`</g>`);
