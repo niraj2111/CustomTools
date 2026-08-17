@@ -3,7 +3,7 @@ const TAU = Math.PI * 2;
 const PI = Math.PI;
 const BASE_W = 1500;
 const BASE_H = 900;
-const { CANVAS_PRESETS, applyMotifPreset, createAppState, resetAppState } = window.VictorianPatternState;
+const { CANVAS_PRESETS, GRAMMAR_PRESETS, applyMotifPreset, createAppState, resetAppState } = window.VictorianPatternState;
 const { bindButtons, buildPane, updateStats } = window.VictorianPatternControls;
 const { downloadPng, downloadSvg } = window.VictorianPatternExport;
 const { resetCanvasView, syncCanvasSize, updateCanvasDisplaySize } = window.VictorianPatternCanvas;
@@ -33,6 +33,7 @@ let R = mulberry32(1);
 const rnd = (a = 1, b) => (b === undefined ? R() * a : a + R() * (b - a));
 const rint = (a, b) => Math.floor(rnd(a, b + 1));
 const chance = (p) => R() < p;
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const normalizeVec = (x, y) => {
   const mag = Math.hypot(x, y) || 1;
   return [x / mag, y / mag];
@@ -296,6 +297,116 @@ function margin() {
 
 function isPlacedSpawnMotif() {
   return appState.motifPreset === "placedSpawns";
+}
+
+function getActiveGrammar() {
+  return GRAMMAR_PRESETS[appState.motifPreset] || GRAMMAR_PRESETS.freeField;
+}
+
+function roleForTier(defaultRole, point) {
+  return point?.role || defaultRole || "support";
+}
+
+function chainRoleProfile(chain) {
+  const grammar = getActiveGrammar();
+  const role = chain?.role || "support";
+  const branchStartKey = `${role}BranchStart`;
+  const branchEndKey = `${role}BranchEnd`;
+  const branchRateKey = `${role}BranchRate`;
+  const spacingScaleKey = `${role}SpacingScale`;
+  const leafBiasKey = `${role}LeafBias`;
+  return {
+    role,
+    branchStart: grammar[branchStartKey] ?? grammar.supportBranchStart ?? 0.3,
+    branchEnd: grammar[branchEndKey] ?? grammar.supportBranchEnd ?? 0.8,
+    branchRate: grammar[branchRateKey] ?? grammar.supportBranchRate ?? 0.6,
+    spacingScale: grammar[spacingScaleKey] ?? grammar.supportSpacingScale ?? 1,
+    leafBias: grammar[leafBiasKey] ?? grammar.supportLeafBias ?? 1,
+    quietRadiusScale: grammar.quietRadiusScale ?? 1,
+    contourBranchBias: grammar.contourBranchBias ?? 0.5,
+  };
+}
+
+function branchWindowForChain(chain) {
+  const profile = chainRoleProfile(chain);
+  const total = Math.max(1, chainLen(chain.arcs || []));
+  const band = Math.max(0.14, profile.branchEnd - profile.branchStart);
+  const depthTightening = Math.min(0.08, chain.depth * 0.02);
+  const center = clamp(
+    (profile.branchStart + profile.branchEnd) * 0.5 + (chain.zoneBias ?? 0) * 0.04,
+    0.18,
+    0.88
+  );
+  const halfBand = Math.max(0.08, band * 0.5 - depthTightening);
+  return {
+    total,
+    start: clamp(center - halfBand, 0.12, 0.9),
+    end: clamp(center + halfBand, 0.16, 0.94),
+    spacing: params.spacing * profile.spacingScale,
+    branchRate: Math.max(0.05, profile.branchRate * (chain.branchRateScale ?? 1)),
+    leafBias: Math.max(0.3, profile.leafBias * (chain.leafBiasScale ?? 1)),
+  };
+}
+
+function sampleZoneAt(t, window) {
+  if (t < window.start * 0.72) {
+    return "launch";
+  }
+  if (t < window.start) {
+    return "shoulder";
+  }
+  if (t <= window.end) {
+    return "body";
+  }
+  if (t <= Math.min(0.98, window.end + 0.12)) {
+    return "terminal";
+  }
+  return "tail";
+}
+
+function branchChanceForZone(zone, window, chain) {
+  const contourBias = chain.contourBias ?? 0;
+  const roleProfile = chainRoleProfile(chain);
+  switch (zone) {
+    case "launch":
+      return 0;
+    case "shoulder":
+      return window.branchRate * 0.45;
+    case "body":
+      return window.branchRate * (0.92 + contourBias * roleProfile.contourBranchBias * 0.18);
+    case "terminal":
+      return window.branchRate * 0.36;
+    default:
+      return 0;
+  }
+}
+
+function chooseChildRole(parentRole, zone, prefersFloating = false) {
+  if (prefersFloating) {
+    return "filler";
+  }
+  if (parentRole === "hero") {
+    return zone === "body" ? "support" : "filler";
+  }
+  if (parentRole === "support") {
+    return "filler";
+  }
+  return "terminal";
+}
+
+function roleDebugColor(role) {
+  switch (role) {
+    case "hero":
+      return "rgba(255, 184, 77, 0.95)";
+    case "support":
+      return "rgba(111, 202, 255, 0.9)";
+    case "filler":
+      return "rgba(161, 241, 132, 0.9)";
+    case "terminal":
+      return "rgba(255, 123, 160, 0.88)";
+    default:
+      return "rgba(220, 220, 220, 0.82)";
+  }
 }
 
 function reflectedPlacementPoints(point) {
@@ -970,6 +1081,20 @@ function appendArcPhase(arcs, P, T, sign, radiusRange, sweepRange) {
   return { P: [ex, ey], T: [etx, ety] };
 }
 
+function appendPlannedArc(arcs, P, T, sign, radius, sweep) {
+  const { arc, ex, ey, etx, ety } = arcFrom(
+    P[0],
+    P[1],
+    T[0],
+    T[1],
+    Math.max(1.2, radius),
+    sign,
+    Math.max(0.02, sweep)
+  );
+  arcs.push(arc);
+  return { P: [ex, ey], T: [etx, ety] };
+}
+
 function derivedSpiralRadius(hostRadius, role, scale = 1) {
   const unit = stageScale();
   let factor = 0.22;
@@ -1021,7 +1146,272 @@ function appendTerminalTransition(
   return appendArcPhase(arcs, P, T, sign, [radius, radius * 1.06], [sweepMin, sweepMax]);
 }
 
+function stemGestureTarget(px, py, tier = {}, options = {}) {
+  const bounds = options.bounds ?? sourceBounds();
+  const targetX = tier.targetX ?? lerp(bounds.xMin, bounds.xMax, 0.54);
+  const targetY = tier.targetY ?? lerp(bounds.yMin, bounds.yMax, 0.22);
+  return {
+    x: targetX,
+    y: targetY,
+  };
+}
+
+function chooseGestureBendSign(px, py, launchAngle, tier = {}, options = {}) {
+  const preferredSign = options.preferredSign ?? null;
+  const rootScale = tier.rootScale ?? 1;
+  const tangent = [Math.cos(launchAngle), Math.sin(launchAngle)];
+  const target = stemGestureTarget(px, py, tier, options);
+  const targetAngle = Math.atan2(target.y - py, target.x - px);
+  const flowAngle = options.flowAngle ?? flowAngleAt(px, py, "spine");
+  const candidates = [1, -1];
+  let bestSign = preferredSign ?? 1;
+  let bestScore = -Infinity;
+
+  for (const sign of candidates) {
+    let score = 0;
+    const probeRadius = rnd(su(220), su(320)) * rootScale;
+    const probeSweep = rnd(0.18, 0.3);
+    const { ex, ey, etx, ety } = arcFrom(px, py, tangent[0], tangent[1], probeRadius, sign, probeSweep);
+    const tangentAngle = Math.atan2(ety, etx);
+    const targetAlign = Math.cos(angleBetween(tangentAngle, targetAngle));
+    const flowAlign = Math.cos(angleBetween(tangentAngle, flowAngle));
+    const inward = params.mirror ? stageWidth() * 0.25 : stageWidth() * 0.5;
+    const inwardGain = sign * Math.sign(inward - px) * 0.22;
+    const upwardGain = Math.max(0, py - ey) / Math.max(su(40), stageHeight() * 0.12);
+    const rootPenalty = Math.abs(angleBetween(tangentAngle, launchAngle));
+    score += targetAlign * 2.4;
+    score += flowAlign * 1.8;
+    score += inwardGain;
+    score += upwardGain * 0.8;
+    score -= rootPenalty * 0.32;
+    if (preferredSign === sign) {
+      score += 0.42;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestSign = sign;
+    }
+  }
+
+  return bestSign;
+}
+
+function buildSpineGestureSchedule(baseRadius, bendSign, options = {}) {
+  const role = options.role ?? "support";
+  const contourBias = options.contourBias ?? 0;
+  const isCorner = options.isCorner ?? false;
+  const reversalChanceBase =
+    role === "hero" ? 0.48 : role === "support" ? 0.36 : 0.22;
+  const reversalChance = reversalChanceBase * (isCorner ? 0.82 : 1) * (1 - contourBias * 0.22);
+  const hasReversal = chance(reversalChance);
+  const launchSweep = isCorner ? rnd(0.1, 0.2) : rnd(0.08, 0.18);
+  const launchRadius = baseRadius * rnd(1.9, 2.45);
+  const earlySweep = rnd(0.14, 0.24);
+  const earlyRadius = baseRadius * rnd(1.34, 1.72);
+  const bodySweep = rnd(0.2, 0.34);
+  const bodyRadius = baseRadius * rnd(0.96, 1.2);
+  const crestSweep = rnd(0.18, 0.3);
+  const crestRadius = baseRadius * rnd(0.72, 0.94);
+  const steps = [
+    { sign: bendSign, radius: launchRadius, sweep: launchSweep, phase: "launch" },
+    { sign: bendSign, radius: earlyRadius, sweep: earlySweep, phase: "launch" },
+    { sign: bendSign, radius: bodyRadius, sweep: bodySweep, phase: "body" },
+    { sign: bendSign, radius: crestRadius, sweep: crestSweep, phase: "body" },
+  ];
+
+  let curlSign = bendSign;
+  if (hasReversal) {
+    const inflectionRadiusA = baseRadius * rnd(1.9, 2.5);
+    const inflectionRadiusB = baseRadius * rnd(2.25, 2.9);
+    const reverseRadius = baseRadius * rnd(1.02, 1.34);
+    steps.push(
+      { sign: bendSign, radius: inflectionRadiusA, sweep: rnd(0.06, 0.13), phase: "inflect" },
+      { sign: -bendSign, radius: inflectionRadiusB, sweep: rnd(0.06, 0.12), phase: "inflect" },
+      { sign: -bendSign, radius: reverseRadius, sweep: rnd(0.14, 0.26), phase: "reverse" }
+    );
+    if (chance(0.62)) {
+      steps.push({
+        sign: -bendSign,
+        radius: baseRadius * rnd(0.8, 1.02),
+        sweep: rnd(0.1, 0.22),
+        phase: "reverse",
+      });
+    }
+    curlSign = -bendSign;
+  } else {
+    steps.push({
+      sign: bendSign,
+      radius: baseRadius * rnd(0.62, 0.82),
+      sweep: rnd(0.12, 0.24),
+      phase: "settle",
+    });
+  }
+
+  return {
+    steps,
+    hasReversal,
+    curlSign,
+  };
+}
+
+function appendSpineTransitionBridge(arcs, P, T, sign, hostRadius, targetRadius, options = {}) {
+  const decay = Math.max(0.58, Math.min(0.86, params.decay));
+  const role = options.role ?? "support";
+  const isCorner = options.isCorner ?? false;
+  const leadInFactor = role === "hero" ? 1.06 : role === "support" ? 1 : 0.94;
+  const bridgeRadii = [
+    Math.max(targetRadius * 2.3 * leadInFactor, lerp(hostRadius, targetRadius, 0.18)),
+    Math.max(targetRadius * 1.74 * leadInFactor, lerp(hostRadius, targetRadius, 0.38)),
+    Math.max(targetRadius * 1.28 * leadInFactor, lerp(hostRadius, targetRadius, 0.58)),
+    Math.max(targetRadius * 1.04, targetRadius / decay),
+  ];
+  const bridgeSweeps = isCorner
+    ? [rnd(0.06, 0.1), rnd(0.08, 0.12), rnd(0.1, 0.14), rnd(0.12, 0.18)]
+    : [rnd(0.07, 0.11), rnd(0.09, 0.13), rnd(0.11, 0.16), rnd(0.16, 0.22)];
+  let phase = { P, T };
+  const transitionStartIndex = arcs.length;
+  for (let i = 0; i < bridgeRadii.length; i++) {
+    phase = appendPlannedArc(arcs, phase.P, phase.T, sign, bridgeRadii[i], bridgeSweeps[i]);
+  }
+  return {
+    P: phase.P,
+    T: phase.T,
+    transitionStartIndex,
+    transitionIndex: arcs.length - 1,
+  };
+}
+
+function scoreSpineCandidate(candidate, config = {}) {
+  const { arcs, launchAngle, curlRadius, hasReversal, transitionStartIndex, targetAngle, breathing } = candidate;
+  let score = 0;
+  let curvatureJumpPenalty = 0;
+  let transitionPenalty = 0;
+  let inflectionReward = 0;
+
+  for (let i = 0; i < arcs.length - 1; i++) {
+    const current = arcs[i];
+    const next = arcs[i + 1];
+    const currentCurvature = (Math.sign(current.da) || 1) / Math.max(current.r, 1e-6);
+    const nextCurvature = (Math.sign(next.da) || 1) / Math.max(next.r, 1e-6);
+    const curvatureJump = Math.abs(nextCurvature - currentCurvature);
+    curvatureJumpPenalty += curvatureJump * (i === 0 ? 1.4 : 1);
+    if (i >= transitionStartIndex - 1) {
+      transitionPenalty += curvatureJump;
+    }
+    if (Math.sign(current.da) !== Math.sign(next.da)) {
+      const softZone = Math.min(current.r, next.r) > Math.max(curlRadius * 1.45, su(90));
+      inflectionReward += softZone ? 0.85 : -0.95;
+    }
+  }
+
+  const first = arcs[0];
+  const rootTurnPenalty = Math.abs(first.da) / Math.max(first.r, 1e-6) * su(210);
+  const bodyEndArc = arcs[Math.max(0, transitionStartIndex - 1)] ?? arcs[arcs.length - 1];
+  const curlContinuityPenalty = Math.abs((1 / Math.max(bodyEndArc.r, 1e-6)) - (1 / Math.max(curlRadius, 1e-6))) * su(85);
+  const lastArc = arcs[arcs.length - 1];
+  const [endTx, endTy] = arcTangentAt(lastArc, 1);
+  const endAngle = Math.atan2(endTy, endTx);
+  const targetAlignment = Math.cos(angleBetween(endAngle, targetAngle));
+  const launchAlignment = Math.cos(angleBetween(Math.atan2(arcTangentAt(first, 1)[1], arcTangentAt(first, 1)[0]), launchAngle));
+
+  score += targetAlignment * 2.8;
+  score += launchAlignment * 1.4;
+  score += hasReversal ? inflectionReward + 0.2 : 0.3;
+  if (breathing) {
+    const contourAllowance = 1 - Math.min(0.8, config.contourBias ?? 0);
+    score += (breathing.avgMinSide / Math.max(su(42), params.spacing * 1.2)) * 1.8;
+    score += (breathing.avgClearance / Math.max(su(64), params.spacing * 1.8)) * 0.9;
+    score += breathing.balance * 1.2 * contourAllowance;
+    score += (breathing.minSide / Math.max(su(28), params.spacing * 0.8)) * 0.8;
+  }
+  score -= curvatureJumpPenalty * su(16);
+  score -= transitionPenalty * su(28);
+  score -= curlContinuityPenalty;
+  score -= rootTurnPenalty;
+
+  if (config.role === "hero") {
+    score += bodyEndArc.r > curlRadius * 1.6 ? 0.4 : -0.2;
+  }
+
+  return score;
+}
+
+function buildGestureStemCandidate(config) {
+  const {
+    px,
+    py,
+    launchAngle,
+    startSign,
+    rootScale,
+    role,
+    contourScale = 1,
+    contourBias = 0,
+    isCorner = false,
+  } = config;
+  const T = [Math.cos(launchAngle), Math.sin(launchAngle)];
+  const baseRadius = rnd(isCorner ? su(220) : su(180), isCorner ? su(330) : su(280)) * rootScale * contourScale;
+  const schedule = buildSpineGestureSchedule(baseRadius, startSign, {
+    role,
+    contourBias,
+    isCorner,
+  });
+  const arcs = [];
+  let P = [px, py];
+  let Tc = T.slice();
+
+  for (const step of schedule.steps) {
+    const phase = appendPlannedArc(arcs, P, Tc, step.sign, step.radius, step.sweep);
+    P = phase.P;
+    Tc = phase.T;
+  }
+
+  const bodyEndIndex = arcs.length - 1;
+  const hostRadius = arcs[arcs.length - 1].r;
+  const closingRadius = Math.max(
+    su(isCorner ? 20 : 18) * rootScale,
+    Math.min(su(role === "hero" ? 40 : 36) * rootScale, hostRadius * (schedule.hasReversal ? 0.38 : 0.32))
+  );
+  const bridge = appendSpineTransitionBridge(arcs, P, Tc, schedule.curlSign, hostRadius, closingRadius, {
+    role,
+    isCorner,
+  });
+  const spiralTurns =
+    role === "hero"
+      ? terminalQuarterTurns(schedule.hasReversal, "spine-hero")
+      : role === "support"
+        ? terminalQuarterTurns(schedule.hasReversal, "spine-support")
+        : terminalQuarterTurns(schedule.hasReversal, "spine");
+  const sp = spiralArcs(
+    bridge.P[0],
+    bridge.P[1],
+    bridge.T[0],
+    bridge.T[1],
+    schedule.curlSign,
+    closingRadius,
+    params.decay,
+    spiralTurns
+  );
+  arcs.push(...sp.arcs);
+
+  return {
+    arcs,
+    bodyEndIndex,
+    transitionStartIndex: bridge.transitionStartIndex,
+    transitionIndex: bridge.transitionIndex,
+    terminalStartIndex: bridge.transitionIndex + 1,
+    spiral: sp,
+    closingRadius,
+    hasReversal: schedule.hasReversal,
+  };
+}
+
 function terminalQuarterTurns(hasReversal, role) {
+  if (role === "spine-hero") {
+    return hasReversal ? 2 : Math.max(2, Math.min(3, quartersFromTurns() + 1));
+  }
+  if (role === "spine-support") {
+    return hasReversal ? 1 : Math.max(2, Math.min(3, quartersFromTurns()));
+  }
   if (hasReversal) {
     return role === "spine" ? 1 : 1;
   }
@@ -1155,14 +1545,20 @@ function findBranchAnchor(chain, startT = 0.58, endT = 0.82) {
   const total = samples[samples.length - 1].s;
   let best = null;
   let bestScore = -Infinity;
+  const window = branchWindowForChain(chain);
 
   for (const p of samples) {
     const t = p.s / total;
     if (t < startT || t > endT || p.r < 14) {
       continue;
     }
+    const zone = sampleZoneAt(t, window);
+    if (zone === "launch" || zone === "tail") {
+      continue;
+    }
+    const zoneBonus = zone === "body" ? 18 : 8;
     const lateBias = t;
-    const score = p.r * 0.5 + lateBias * 30;
+    const score = p.r * 0.5 + lateBias * 30 + zoneBonus;
     if (score > bestScore) {
       bestScore = score;
       best = p;
@@ -1177,15 +1573,18 @@ function tryRequiredOffshoot(chain, scale, grid, queue) {
     return false;
   }
 
-  const anchor = findBranchAnchor(chain);
+  const window = branchWindowForChain(chain);
+  const anchor = findBranchAnchor(chain, window.start, window.end);
   if (!anchor) {
     return false;
   }
 
-  const childScale = scale * params.falloff * 0.68;
+  const childScale = scale * params.falloff * (chain.role === "hero" ? 0.78 : 0.66);
   const anchorSamples = sampleArcs(chain.arcs, 4);
   const anchorTotal = anchorSamples[anchorSamples.length - 1].s;
   const terminalBias = anchor.s / anchorTotal;
+  const zone = sampleZoneAt(terminalBias, window);
+  const childRole = chooseChildRole(chain.role, zone, false);
   const preferredSides = [-anchor.dir, anchor.dir];
   for (const side of preferredSides) {
     const child = buildChild(
@@ -1198,7 +1597,8 @@ function tryRequiredOffshoot(chain, scale, grid, queue) {
       childScale,
       grid,
       terminalBias,
-      chain.chainId
+      chain.chainId,
+      childRole
     );
     if (child && child.kind === "stroke") {
       queue.push({ chain: child, scale: childScale });
@@ -1237,6 +1637,124 @@ function probeClearanceAlongRay(grid, x, y, angle, maxDistance, step = 16, start
   }
 
   return limit;
+}
+
+function measureStemBreathing(samples, grid, options = {}) {
+  if (!samples?.length) {
+    return {
+      minSide: 0,
+      avgMinSide: 0,
+      avgClearance: 0,
+      balance: 0,
+    };
+  }
+
+  const total = samples[samples.length - 1].s || 1;
+  const startT = options.startT ?? 0.14;
+  const endT = options.endT ?? 0.72;
+  const maxDistance = options.maxDistance ?? Math.max(su(86), params.spacing * 2.8);
+  const step = options.step ?? Math.max(8, params.clearance * 0.8);
+  const leftClearances = [];
+  const rightClearances = [];
+
+  for (let i = 0; i < samples.length; i += 2) {
+    const sample = samples[i];
+    const t = sample.s / total;
+    if (t < startT || t > endT) {
+      continue;
+    }
+    const normalAngle = Math.atan2(sample.tx, -sample.ty);
+    const left = probeClearanceAlongRay(grid, sample.x, sample.y, normalAngle, maxDistance, step, step);
+    const right = probeClearanceAlongRay(
+      grid,
+      sample.x,
+      sample.y,
+      normalAngle + PI,
+      maxDistance,
+      step,
+      step
+    );
+    leftClearances.push(left);
+    rightClearances.push(right);
+  }
+
+  if (!leftClearances.length || !rightClearances.length) {
+    return {
+      minSide: maxDistance,
+      avgMinSide: maxDistance,
+      avgClearance: maxDistance,
+      balance: 1,
+    };
+  }
+
+  const avgLeft = leftClearances.reduce((sum, value) => sum + value, 0) / leftClearances.length;
+  const avgRight = rightClearances.reduce((sum, value) => sum + value, 0) / rightClearances.length;
+  const minSide = Math.min(Math.min(...leftClearances), Math.min(...rightClearances));
+  const avgMinSide = leftClearances.reduce((sum, value, index) => sum + Math.min(value, rightClearances[index]), 0) / leftClearances.length;
+  const avgClearance = (avgLeft + avgRight) * 0.5;
+  const balance = Math.min(avgLeft, avgRight) / Math.max(avgLeft, avgRight, 1e-6);
+
+  return {
+    minSide,
+    avgMinSide,
+    avgClearance,
+    balance,
+  };
+}
+
+function measureCandidateBreathing(samples, grid, options = {}) {
+  if (!samples?.length) {
+    return {
+      minSide: 0,
+      avgMinSide: 0,
+      avgClearance: 0,
+      balance: 0,
+    };
+  }
+
+  const total = samples[samples.length - 1].s || 1;
+  const startT = options.startT ?? 0.08;
+  const endT = options.endT ?? 0.92;
+  const maxDistance = options.maxDistance ?? Math.max(su(42), params.spacing * 1.8);
+  const step = options.step ?? Math.max(8, params.clearance * 0.75);
+  const leftClearances = [];
+  const rightClearances = [];
+
+  for (let i = 0; i < samples.length; i += 2) {
+    const sample = samples[i];
+    const t = sample.s / total;
+    if (t < startT || t > endT) {
+      continue;
+    }
+    const normalAngle = Math.atan2(sample.tx, -sample.ty);
+    const left = probeClearanceAlongRay(grid, sample.x, sample.y, normalAngle, maxDistance, step, step);
+    const right = probeClearanceAlongRay(grid, sample.x, sample.y, normalAngle + PI, maxDistance, step, step);
+    leftClearances.push(left);
+    rightClearances.push(right);
+  }
+
+  if (!leftClearances.length) {
+    return {
+      minSide: maxDistance,
+      avgMinSide: maxDistance,
+      avgClearance: maxDistance,
+      balance: 1,
+    };
+  }
+
+  const avgLeft = leftClearances.reduce((sum, value) => sum + value, 0) / leftClearances.length;
+  const avgRight = rightClearances.reduce((sum, value) => sum + value, 0) / rightClearances.length;
+  const minSide = Math.min(Math.min(...leftClearances), Math.min(...rightClearances));
+  const avgMinSide = leftClearances.reduce((sum, value, index) => sum + Math.min(value, rightClearances[index]), 0) / leftClearances.length;
+  const avgClearance = (avgLeft + avgRight) * 0.5;
+  const balance = Math.min(avgLeft, avgRight) / Math.max(avgLeft, avgRight, 1e-6);
+
+  return {
+    minSide,
+    avgMinSide,
+    avgClearance,
+    balance,
+  };
 }
 
 function findOpenLaunchAngle(grid, spawnPoint, fallbackAngle = 0, avoidAngle = null) {
@@ -1386,6 +1904,7 @@ function runSecondPassSpines(grid, queue, bounds, baseTier) {
     const secondPass = buildSpine(grid, 0, 1, {
       ...baseTier,
       parentId: source.chainId,
+      role: source.role === "hero" ? "support" : "filler",
       rootScale: secondPassScale,
       bodyChance: 0.46,
       weightScale: 0.82,
@@ -1518,10 +2037,11 @@ function buildDistributedSpines(grid, count, tier, queue, placement = {}) {
 }
 
 function buildDistributedFloating(grid, count, tier, queue, placement = {}) {
-  const points = createDistributedPoints(count, placement.bounds, {
+  const effectiveCount = Math.max(0, Math.round(count * 0.55));
+  const points = createDistributedPoints(effectiveCount, placement.bounds, {
     rowBias: placement.rowBias,
-    jitterX: placement.jitterX ?? 0.22,
-    jitterY: placement.jitterY ?? 0.22,
+    jitterX: placement.jitterX ?? 0.18,
+    jitterY: placement.jitterY ?? 0.18,
   });
 
   for (const point of points) {
@@ -1795,6 +2315,43 @@ function chooseBoundaryTangentDirection(x, y, tangentAngle, role = "spine") {
     : opposite;
 }
 
+function contourGuideMetadata(x, y, launchAngle, outwardNormal, role) {
+  const grammar = getActiveGrammar();
+  const outwardAngle = Math.atan2(outwardNormal[1], outwardNormal[0]);
+  const tangentLaunch = chooseBoundaryTangentDirection(x, y, launchAngle, role);
+  const exactTangentLaunch =
+    appState.motifPreset === "voidContour" && role !== "floating";
+  if (exactTangentLaunch) {
+    const leftNormal = [-Math.sin(tangentLaunch), Math.cos(tangentLaunch)];
+    const preferredSign =
+      leftNormal[0] * outwardNormal[0] + leftNormal[1] * outwardNormal[1] >= 0 ? 1 : -1;
+    return {
+      launchAngle: tangentLaunch,
+      preferredSign,
+      contourBias: 1,
+      contourScale: grammar.contourScaleBoost ?? 1,
+    };
+  }
+  const peeledLaunch = blendAngles(
+    tangentLaunch,
+    outwardAngle,
+    role === "floating" ? grammar.contourOutwardBias * 0.6 : grammar.contourOutwardBias
+  );
+  const finalLaunch = blendAngles(tangentLaunch, peeledLaunch, grammar.contourTangentBlend);
+  const leftNormal = [-Math.sin(finalLaunch), Math.cos(finalLaunch)];
+  const preferredSign =
+    leftNormal[0] * outwardNormal[0] + leftNormal[1] * outwardNormal[1] >= 0 ? 1 : -1;
+  const peelAmount = Math.abs(angleBetween(finalLaunch, tangentLaunch)) / (PI * 0.5);
+  const contourBias = Math.max(0, 1 - peelAmount);
+  return {
+    launchAngle: finalLaunch,
+    preferredSign,
+    contourBias,
+    contourScale:
+      1 + contourBias * ((grammar.contourScaleBoost ?? 1) - 1) * (role === "floating" ? 0.6 : 1),
+  };
+}
+
 function createVoidBoundaryGuidePoints(count, role = "spine", options = {}) {
   if (!params.voidOn || count <= 0) {
     return [];
@@ -1817,11 +2374,8 @@ function createVoidBoundaryGuidePoints(count, role = "spine", options = {}) {
       const index = Math.floor(((i + 0.5) / count) * boundary.length) % boundary.length;
       const sample = boundary[index];
       const { x, y, tangentAngle, outwardNormal } = sample;
-      const launchAngle = chooseBoundaryTangentDirection(x, y, tangentAngle, role);
-      const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
-      const preferredSign =
-        leftNormal[0] * outwardNormal[0] + leftNormal[1] * outwardNormal[1] >= 0 ? 1 : -1;
-      points.push({ x, y, launchAngle, preferredSign, lockToGuide: true });
+      const contour = contourGuideMetadata(x, y, tangentAngle, outwardNormal, role);
+      points.push({ x, y, ...contour, lockToGuide: true });
     }
     return points;
   }
@@ -1868,10 +2422,8 @@ function createVoidBoundaryGuidePoints(count, role = "spine", options = {}) {
       }
 
       const tangentAngle = Math.atan2(ty, tx);
-      const launchAngle = chooseBoundaryTangentDirection(x, y, tangentAngle, role);
-      const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
-      const preferredSign = leftNormal[0] * nx + leftNormal[1] * ny >= 0 ? 1 : -1;
-      points.push({ x, y, launchAngle, preferredSign, lockToGuide: true });
+      const contour = contourGuideMetadata(x, y, tangentAngle, [nx, ny], role);
+      points.push({ x, y, ...contour, lockToGuide: true });
     }
     return points;
   }
@@ -1892,10 +2444,8 @@ function createVoidBoundaryGuidePoints(count, role = "spine", options = {}) {
     const tangentAngle = Math.atan2(ty, tx);
     const nx = Math.cos(angle) / Math.max(currentVoid.rx, 1e-6);
     const ny = Math.sin(angle) / Math.max(currentVoid.ry, 1e-6);
-    const launchAngle = chooseBoundaryTangentDirection(x, y, tangentAngle, role);
-    const leftNormal = [-Math.sin(launchAngle), Math.cos(launchAngle)];
-    const preferredSign = leftNormal[0] * nx + leftNormal[1] * ny >= 0 ? 1 : -1;
-    points.push({ x, y, launchAngle, preferredSign, lockToGuide: true });
+    const contour = contourGuideMetadata(x, y, tangentAngle, [nx, ny], role);
+    points.push({ x, y, ...contour, lockToGuide: true });
   }
 
   return points;
@@ -1970,10 +2520,12 @@ function selectVoidContourGuidePoints(grid, count, role = "spine", options = {})
 
 function queuePointsAsSpines(grid, points, tier, queue, placement = {}) {
   for (const point of points) {
+    const pointRole = roleForTier(tier.role, point);
     pushIfChain(
       queue,
       buildSpine(grid, 0, 1, {
         ...tier,
+        role: pointRole,
         preferredPoint: point,
         spreadX: placement.spreadX ?? su(14),
         spreadY: placement.spreadY ?? su(14),
@@ -1987,10 +2539,12 @@ function queuePointsAsSpines(grid, points, tier, queue, placement = {}) {
 
 function queuePointsAsFloating(grid, points, tier, queue, placement = {}) {
   for (const point of points) {
+    const pointRole = roleForTier(tier.role, point);
     pushIfChain(
       queue,
       buildFloating(grid, {
         ...tier,
+        role: pointRole,
         preferredPoint: point,
         spreadX: placement.spreadX ?? su(12),
         spreadY: placement.spreadY ?? su(12),
@@ -2026,12 +2580,14 @@ function seedFreeFieldMotif(grid, queue, tiers, bounds, aspect) {
     makeGuidePoint(
       lerp(bounds.xMin, bounds.xMax, 0.18),
       lerp(bounds.yMin, bounds.yMax, 0.82),
-      -0.98
+      -0.98,
+      { role: "hero" }
     ),
     makeGuidePoint(
       lerp(bounds.xMin, bounds.xMax, 0.34),
       lerp(bounds.yMin, bounds.yMax, 0.58),
-      -1.14
+      -1.14,
+      { role: "hero" }
     ),
   ];
   queuePointsAsSpines(grid, heroPoints.slice(0, Math.min(params.largeSpines, heroPoints.length)), tiers.large, queue, {
@@ -2092,9 +2648,9 @@ function seedBottomBaselineMotif(grid, queue, tiers, bounds) {
 function seedCenterAxisMotif(grid, queue, tiers, bounds) {
   const axisX = (bounds.xMin + bounds.xMax) * 0.5;
   const largePoints = [
-    makeGuidePoint(axisX - su(8), lerp(bounds.yMin, bounds.yMax, 0.82), -1.08),
-    makeGuidePoint(axisX + su(10), lerp(bounds.yMin, bounds.yMax, 0.56), -1.42),
-    makeGuidePoint(axisX - su(14), lerp(bounds.yMin, bounds.yMax, 0.32), -1.02),
+    makeGuidePoint(axisX - su(8), lerp(bounds.yMin, bounds.yMax, 0.82), -1.08, { role: "hero" }),
+    makeGuidePoint(axisX + su(10), lerp(bounds.yMin, bounds.yMax, 0.56), -1.42, { role: "hero" }),
+    makeGuidePoint(axisX - su(14), lerp(bounds.yMin, bounds.yMax, 0.32), -1.02, { role: "support" }),
   ].slice(0, params.largeSpines);
   const mediumPoints = [
     makeGuidePoint(axisX - su(18), lerp(bounds.yMin, bounds.yMax, 0.7), -0.92),
@@ -2247,12 +2803,21 @@ function seedBorderFrameMotif(grid, queue, tiers, bounds) {
 }
 
 function seedVoidContourMotif(grid, queue, tiers, bounds) {
-  const largePoints = selectVoidContourGuidePoints(grid, params.largeSpines, "spine", { bounds });
-  const mediumPoints = selectVoidContourGuidePoints(grid, params.mediumSpines, "spine", { bounds });
-  const floatingPoints = selectVoidContourGuidePoints(grid, params.smallSpines, "floating", { bounds });
+  const largePoints = selectVoidContourGuidePoints(grid, params.largeSpines, "spine", { bounds }).map((point, index) => ({
+    ...point,
+    role: index < Math.max(1, Math.ceil(params.largeSpines * 0.4)) ? "hero" : "support",
+  }));
+  const mediumPoints = selectVoidContourGuidePoints(grid, params.mediumSpines, "spine", { bounds }).map((point) => ({
+    ...point,
+    role: "support",
+  }));
+  const floatingPoints = selectVoidContourGuidePoints(grid, params.smallSpines, "floating", { bounds }).map((point) => ({
+    ...point,
+    role: "filler",
+  }));
   const largeTier = { ...tiers.large, rootScale: (tiers.large.rootScale ?? 1) * 0.84, bodyChance: 0.6 };
   const mediumTier = { ...tiers.medium, rootScale: (tiers.medium.rootScale ?? 1) * 0.88, bodyChance: 0.5 };
-  const floatingTier = { ...tiers.small, scaleMin: 0.26, scaleMax: 0.46, wantsOffshoot: true };
+  const floatingTier = { ...tiers.small, scaleMin: 0.22, scaleMax: 0.4, wantsOffshoot: false };
   queuePointsAsSpines(grid, largePoints, largeTier, queue, { spreadX: 0, spreadY: 0, bounds });
   queuePointsAsSpines(grid, mediumPoints, mediumTier, queue, { spreadX: su(4), spreadY: su(6), bounds });
   queuePointsAsFloating(grid, floatingPoints, floatingTier, queue, { spreadX: su(6), spreadY: su(8), bounds });
@@ -2343,6 +2908,10 @@ function buildSpine(grid, col, nCols, tier = {}) {
   const sharedSpawnSkip = tier.sharedSpawnSkip ?? 0;
   const startClearanceSkipOverride = tier.startClearanceSkip ?? null;
   const parentId = tier.parentId ?? null;
+  const role = tier.role ?? "support";
+  const target = stemGestureTarget(0, 0, tier, { bounds: sourceBounds() });
+  let bestCandidate = null;
+  let bestScore = -Infinity;
 
   for (let tries = 0; tries < 30; tries++) {
     const rawPoint = {
@@ -2368,120 +2937,104 @@ function buildSpine(grid, col, nCols, tier = {}) {
       preferredPoint && preferredPoint.launchAngle !== undefined
         ? preferredPoint.launchAngle
         : flowAngleAt(px, py, "spine");
-    const ang = launchAngle;
-    const T = [Math.cos(ang), Math.sin(ang)];
-    const sA = preferredPoint?.preferredSign ?? (chance(0.5) ? 1 : -1);
-    const q = quartersFromTurns();
-    const baseRadius = rnd(su(180), su(280)) * rootScale;
-    const launchRadius = baseRadius * rnd(1.06, 1.18);
-    const bodyRadius = baseRadius * rnd(0.82, 0.96);
-    const returnRadius = baseRadius * rnd(0.56, 0.7);
-
-    let arcs = [];
-    let P = [px, py];
-    let Tc = T.slice();
-    let phase = appendArcPhase(
-      arcs,
-      P,
-      Tc,
-      sA,
-      [launchRadius, launchRadius * 1.04],
-      [0.62, 0.96]
-    );
-    P = phase.P;
-    Tc = phase.T;
-
-    if (chance(bodyChance)) {
-      phase = appendArcPhase(
-        arcs,
-        P,
-        Tc,
-        sA,
-        [bodyRadius, bodyRadius * 1.03],
-        [0.42, 0.72]
-      );
-      P = phase.P;
-      Tc = phase.T;
-    }
-    const bodyEndIndex = arcs.length - 1;
-
-    const hasReturn = chance(0.55);
-    let sClose = sA;
-    if (hasReturn) {
-      phase = appendArcPhase(
-        arcs,
-        P,
-        Tc,
-        -sA,
-        [returnRadius, returnRadius * 1.03],
-        [0.26, 0.48]
-      );
-      P = phase.P;
-      Tc = phase.T;
-      sClose = -sA;
-    }
-
-    const hostRadius = arcs[arcs.length - 1].r;
-    const closingRadius = Math.max(su(18) * rootScale, Math.min(su(34) * rootScale, hostRadius * 0.22));
-    phase = appendTerminalTransition(
-      arcs,
-      P,
-      Tc,
-      sClose,
-      hostRadius,
-      hasReturn ? closingRadius * 0.82 : closingRadius,
+    const contourScale = preferredPoint?.contourScale ?? 1;
+    const bendSign = chooseGestureBendSign(px, py, launchAngle, tier, {
+      preferredSign: preferredPoint?.preferredSign,
+      flowAngle: launchAngle,
+      bounds: sourceBounds(),
+    });
+    const candidate = buildGestureStemCandidate({
+      px,
+      py,
+      launchAngle,
+      startSign: bendSign,
       rootScale,
-      "spine"
-    );
-    P = phase.P;
-    Tc = phase.T;
-    const transitionIndex = arcs.length - 1;
-    const sp1 = spiralArcs(
-      P[0],
-      P[1],
-      Tc[0],
-      Tc[1],
-      sClose,
-      hasReturn ? closingRadius * 0.82 : closingRadius,
-      params.decay,
-      terminalQuarterTurns(hasReturn, "spine")
-    );
-    arcs = arcs.concat(sp1.arcs);
-    const terminalStartIndex = transitionIndex + 1;
-
-    const samples = sampleArcs(arcs, 3);
+      role,
+      contourScale,
+      contourBias: preferredPoint?.contourBias ?? 0,
+      isCorner: false,
+    });
+    const samples = sampleArcs(candidate.arcs, 3);
     if (!testChain(samples, grid, startClearanceSkip)) {
       continue;
     }
-
-    const chain = {
-      kind: "stroke",
-      arcs,
-      depth: 0,
-      parentId,
-      profile: "spine",
-      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
-      terminalLeaf: buildTerminalLeafFromSpiral(sp1.arcs, "spine"),
-      wBase: STROKE_WEIGHT,
-      spawnPoint: { x: px, y: py },
-      launchAngle,
-      rootScale,
-    };
-    acceptChain(chain, samples, grid);
-    if (
-      sharedSpawnPoints &&
-      !findNearbySpawnPoint(sharedSpawnPoints, chain.spawnPoint, sharedSpawnThreshold * 0.35)
-    ) {
-      sharedSpawnPoints.push(chain.spawnPoint);
+    const breathing = measureStemBreathing(samples, grid, {
+      startT: 0.16,
+      endT: 0.7,
+      maxDistance: Math.max(su(role === "hero" ? 96 : 80), params.spacing * (role === "hero" ? 3.4 : 2.9)),
+    });
+    const contourBias = preferredPoint?.contourBias ?? 0;
+    const minBreathing =
+      role === "hero"
+        ? Math.max(su(30), params.spacing * 0.92)
+        : role === "support"
+          ? Math.max(su(22), params.spacing * 0.72)
+          : Math.max(su(16), params.spacing * 0.5);
+    if (breathing.minSide < minBreathing * (1 - contourBias * 0.45)) {
+      continue;
     }
-    return chain;
+    const targetAngle = Math.atan2(target.y - py, target.x - px);
+    const score = scoreSpineCandidate(
+      {
+        arcs: candidate.arcs,
+        launchAngle,
+        curlRadius: candidate.closingRadius,
+        hasReversal: candidate.hasReversal,
+        transitionStartIndex: candidate.transitionStartIndex,
+        targetAngle,
+        breathing,
+      },
+      { role, contourBias }
+    );
+    if (score <= bestScore) {
+      continue;
+    }
+
+    bestScore = score;
+    bestCandidate = {
+      chain: {
+        kind: "stroke",
+        arcs: candidate.arcs,
+        depth: 0,
+        parentId,
+        profile: "spine",
+        role,
+        zoneBias: role === "hero" ? -0.04 : role === "filler" ? 0.08 : 0,
+        contourBias: preferredPoint?.contourBias ?? 0,
+        debugMeta: makeDebugMeta(
+          candidate.bodyEndIndex,
+          candidate.transitionIndex,
+          candidate.terminalStartIndex
+        ),
+        terminalLeaf: buildTerminalLeafFromSpiral(candidate.spiral.arcs, "spine"),
+        wBase: STROKE_WEIGHT,
+        spawnPoint: { x: px, y: py },
+        launchAngle,
+        rootScale,
+      },
+      samples,
+      spawnPoint: { x: px, y: py },
+    };
   }
 
-  return null;
+  if (!bestCandidate) {
+    return null;
+  }
+
+  const chain = bestCandidate.chain;
+  acceptChain(chain, bestCandidate.samples, grid);
+  if (
+    sharedSpawnPoints &&
+    !findNearbySpawnPoint(sharedSpawnPoints, bestCandidate.spawnPoint, sharedSpawnThreshold * 0.35)
+  ) {
+    sharedSpawnPoints.push(bestCandidate.spawnPoint);
+  }
+  return chain;
 }
 
 function buildCornerSpine(grid, side = "left", tier = {}) {
   const rootScale = tier.rootScale ?? 1.16;
+  const role = tier.role ?? "hero";
   const m = margin();
   const startX =
     side === "left"
@@ -2489,108 +3042,83 @@ function buildCornerSpine(grid, side = "left", tier = {}) {
       : stageWidth() - m - (tier.edgeInset ?? su(12));
   const startY = tier.startY ?? (stageHeight() - m - su(28));
   const angBase = -PI / 2 + (side === "left" ? 0.08 : -0.08);
-  const ang = angBase + rnd(-0.06, 0.06);
-  const T = [Math.cos(ang), Math.sin(ang)];
-  const sA = side === "left" ? 1 : -1;
+  const bendSign = side === "left" ? 1 : -1;
+  let bestCandidate = null;
+  let bestScore = -Infinity;
 
   for (let tries = 0; tries < 24; tries++) {
     const px = startX + rnd(-su(6), su(6));
     const py = startY + rnd(-su(18), su(18));
-    const baseRadius = rnd(su(240), su(340)) * rootScale;
-    const launchRadius = baseRadius * rnd(1.18, 1.28);
-    const bodyRadius = baseRadius * rnd(0.88, 0.98);
-    const returnRadius = baseRadius * rnd(0.58, 0.7);
-
-    let arcs = [];
-    let P = [px, py];
-    let Tc = T.slice();
-    let phase = appendArcPhase(
-      arcs,
-      P,
-      Tc,
-      sA,
-      [launchRadius, launchRadius * 1.02],
-      [0.24, 0.42]
-    );
-    P = phase.P;
-    Tc = phase.T;
-
-    phase = appendArcPhase(
-      arcs,
-      P,
-      Tc,
-      sA,
-      [bodyRadius, bodyRadius * 1.02],
-      [0.32, 0.56]
-    );
-    P = phase.P;
-    Tc = phase.T;
-    const bodyEndIndex = arcs.length - 1;
-
-    const hasReturn = chance(0.45);
-    let sClose = sA;
-    if (hasReturn) {
-      phase = appendArcPhase(
-        arcs,
-        P,
-        Tc,
-        -sA,
-        [returnRadius, returnRadius * 1.02],
-        [0.18, 0.34]
-      );
-      P = phase.P;
-      Tc = phase.T;
-      sClose = -sA;
-    }
-
-    const hostRadius = arcs[arcs.length - 1].r;
-    const closingRadius = Math.max(su(20) * rootScale, Math.min(su(34) * rootScale, hostRadius * 0.2));
-    phase = appendTerminalTransition(
-      arcs,
-      P,
-      Tc,
-      sClose,
-      hostRadius,
-      hasReturn ? closingRadius * 0.82 : closingRadius,
+    const launchAngle = angBase + rnd(-0.06, 0.06);
+    const candidate = buildGestureStemCandidate({
+      px,
+      py,
+      launchAngle,
+      startSign: bendSign,
       rootScale,
-      "spine"
-    );
-    P = phase.P;
-    Tc = phase.T;
-    const transitionIndex = arcs.length - 1;
-    const sp = spiralArcs(
-      P[0],
-      P[1],
-      Tc[0],
-      Tc[1],
-      sClose,
-      hasReturn ? closingRadius * 0.82 : closingRadius,
-      params.decay,
-      terminalQuarterTurns(hasReturn, "spine")
-    );
-    arcs = arcs.concat(sp.arcs);
-    const terminalStartIndex = transitionIndex + 1;
-
-    const samples = sampleArcs(arcs, 3);
+      role,
+      contourScale: 1,
+      contourBias: 0,
+      isCorner: true,
+    });
+    const samples = sampleArcs(candidate.arcs, 3);
     if (!testChain(samples, grid, 0)) {
       continue;
     }
-
-    const chain = {
-      kind: "stroke",
-      arcs,
-      depth: 0,
-      parentId: null,
-      profile: "spine",
-      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
-      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "spine"),
-      wBase: STROKE_WEIGHT,
+    const breathing = measureStemBreathing(samples, grid, {
+      startT: 0.14,
+      endT: 0.68,
+      maxDistance: Math.max(su(84), params.spacing * 3.1),
+    });
+    if (breathing.minSide < Math.max(su(20), params.spacing * 0.68)) {
+      continue;
+    }
+    const targetAngle = Math.atan2(stageHeight() * 0.16 - py, stageWidth() * 0.5 - px);
+    const score = scoreSpineCandidate(
+      {
+        arcs: candidate.arcs,
+        launchAngle,
+        curlRadius: candidate.closingRadius,
+        hasReversal: candidate.hasReversal,
+        transitionStartIndex: candidate.transitionStartIndex,
+        targetAngle,
+        breathing,
+      },
+      { role, contourBias: 0 }
+    );
+    if (score <= bestScore) {
+      continue;
+    }
+    bestScore = score;
+    bestCandidate = {
+      chain: {
+        kind: "stroke",
+        arcs: candidate.arcs,
+        depth: 0,
+        parentId: null,
+        profile: "spine",
+        role,
+        zoneBias: -0.06,
+        contourBias: 0,
+        debugMeta: makeDebugMeta(
+          candidate.bodyEndIndex,
+          candidate.transitionIndex,
+          candidate.terminalStartIndex
+        ),
+        terminalLeaf: buildTerminalLeafFromSpiral(candidate.spiral.arcs, "spine"),
+        wBase: STROKE_WEIGHT,
+        launchAngle,
+      },
+      samples,
     };
-    acceptChain(chain, samples, grid);
-    return chain;
   }
 
-  return null;
+  if (!bestCandidate) {
+    return null;
+  }
+
+  acceptChain(bestCandidate.chain, bestCandidate.samples, grid);
+  return bestCandidate.chain;
 }
 
 function tangentialSkip(r1, sChild, pr, pdir) {
@@ -2601,7 +3129,9 @@ function tangentialSkip(r1, sChild, pr, pdir) {
   return Math.sqrt((2 * params.clearance) / kRel) * 1.1;
 }
 
-function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5, parentId = null) {
+function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5, parentId = null, role = "support") {
+  let bestCandidate = null;
+  let bestScore = -Infinity;
   for (let tries = 0; tries < 10; tries++) {
     let Tc = T.slice();
     const r1 = rnd(su(24), su(62)) * scale;
@@ -2653,26 +3183,55 @@ function buildChild(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5
     if (samples[samples.length - 1].s < skip * 1.4 || !testChain(samples, grid, skip)) {
       continue;
     }
+    const breathing = measureCandidateBreathing(samples, grid, {
+      startT: 0.16,
+      endT: 0.9,
+      maxDistance: Math.max(su(36), params.spacing * 1.55),
+    });
+    const minBreathing =
+      role === "support" ? Math.max(su(14), params.spacing * 0.42) : Math.max(su(10), params.spacing * 0.3);
+    if (breathing.minSide < minBreathing) {
+      continue;
+    }
+    const score =
+      breathing.avgMinSide * 1.8 +
+      breathing.avgClearance * 0.55 +
+      breathing.balance * su(28) +
+      samples[samples.length - 1].s * 0.08;
+    if (score <= bestScore) {
+      continue;
+    }
 
-    const chain = {
-      kind: "stroke",
-      arcs,
-      depth,
-      parentId,
-      profile: "branch",
-      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
-      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
-      wBase: STROKE_WEIGHT,
-      wantsOffshoot: true,
+    bestScore = score;
+    bestCandidate = {
+      chain: {
+        kind: "stroke",
+        arcs,
+        depth,
+        parentId,
+        profile: "branch",
+        role,
+        zoneBias: role === "filler" ? 0.1 : 0.02,
+        contourBias: 0,
+        debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+        terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
+        wBase: STROKE_WEIGHT,
+        wantsOffshoot: true,
+      },
+      samples,
     };
-    acceptChain(chain, samples, grid);
-    return chain;
   }
 
-  return null;
+  if (!bestCandidate) {
+    return null;
+  }
+  acceptChain(bestCandidate.chain, bestCandidate.samples, grid);
+  return bestCandidate.chain;
 }
 
-function buildLeaf(P, T, side, pr, pdir, depth, scale, grid, parentId = null) {
+function buildLeaf(P, T, side, pr, pdir, depth, scale, grid, parentId = null, role = "terminal") {
+  let bestCandidate = null;
+  let bestScore = -Infinity;
   for (let tries = 0; tries < 4; tries++) {
     const r1 = rnd(su(26), su(52)) * scale;
     const skip = tangentialSkip(r1, side, pr, pdir);
@@ -2690,23 +3249,47 @@ function buildLeaf(P, T, side, pr, pdir, depth, scale, grid, parentId = null) {
     if (samples[samples.length - 1].s < skip * 1.3 || !testChain(samples, grid, skip)) {
       continue;
     }
+    const breathing = measureCandidateBreathing(samples, grid, {
+      startT: 0.08,
+      endT: 0.96,
+      maxDistance: Math.max(su(28), params.spacing * 1.3),
+    });
+    if (breathing.minSide < Math.max(su(8), params.spacing * 0.22)) {
+      continue;
+    }
+    const score =
+      breathing.avgMinSide * 1.7 +
+      breathing.balance * su(18) +
+      samples[samples.length - 1].s * 0.05;
+    if (score <= bestScore) {
+      continue;
+    }
 
-    const chain = {
-      kind: "leaf",
-      stem: [arc],
-      tear,
-      depth,
-      parentId,
-      wBase: STROKE_WEIGHT,
+    bestScore = score;
+    bestCandidate = {
+      chain: {
+        kind: "leaf",
+        stem: [arc],
+        tear,
+        depth,
+        parentId,
+        role,
+        wBase: STROKE_WEIGHT,
+      },
+      samples,
     };
-    acceptChain(chain, samples, grid);
-    return chain;
   }
 
-  return null;
+  if (!bestCandidate) {
+    return null;
+  }
+  acceptChain(bestCandidate.chain, bestCandidate.samples, grid);
+  return bestCandidate.chain;
 }
 
 function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalBias = 0.5, parentId = null) {
+  let bestCandidate = null;
+  let bestScore = -Infinity;
   for (let tries = 0; tries < 6; tries++) {
     let Tc = T.slice();
     const r1 = rnd(su(14), su(28)) * scale;
@@ -2746,28 +3329,53 @@ function buildAttachedInfill(P, T, side, pr, pdir, depth, scale, grid, terminalB
     if (samples[samples.length - 1].s < skip * 1.05 || !testChain(samples, grid, skip)) {
       continue;
     }
+    const breathing = measureCandidateBreathing(samples, grid, {
+      startT: 0.14,
+      endT: 0.92,
+      maxDistance: Math.max(su(26), params.spacing * 1.12),
+    });
+    if (breathing.minSide < Math.max(su(8), params.spacing * 0.18)) {
+      continue;
+    }
+    const score =
+      breathing.avgMinSide * 1.4 +
+      breathing.avgClearance * 0.4 +
+      breathing.balance * su(14);
+    if (score <= bestScore) {
+      continue;
+    }
 
-    const chain = {
-      kind: "stroke",
-      arcs,
-      depth,
-      parentId,
-      profile: "branch",
-      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
-      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
-      wBase: STROKE_WEIGHT,
-      wantsOffshoot: false,
-      mustHaveOffshoot: false,
-      hasOffshoot: true,
+    bestScore = score;
+    bestCandidate = {
+      chain: {
+        kind: "stroke",
+        arcs,
+        depth,
+        parentId,
+        profile: "branch",
+        role: "filler",
+        zoneBias: 0.12,
+        contourBias: 0,
+        debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+        terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
+        wBase: STROKE_WEIGHT,
+        wantsOffshoot: false,
+        mustHaveOffshoot: false,
+        hasOffshoot: true,
+      },
+      samples,
     };
-    acceptChain(chain, samples, grid);
-    return chain;
   }
 
-  return null;
+  if (!bestCandidate) {
+    return null;
+  }
+  acceptChain(bestCandidate.chain, bestCandidate.samples, grid);
+  return bestCandidate.chain;
 }
 
 function enrichAttachedInfill(grid) {
+  const grammar = getActiveGrammar();
   const sourceChains = model.chains.filter(
     (ch) => ch.kind === "stroke" && ch.profile && !shouldSuppressUnresolvedCurl(ch)
   );
@@ -2778,6 +3386,9 @@ function enrichAttachedInfill(grid) {
       break;
     }
     if (chain.depth > 1) {
+      continue;
+    }
+    if (chain.role === "hero" && chance(0.45)) {
       continue;
     }
 
@@ -2794,7 +3405,7 @@ function enrichAttachedInfill(grid) {
       }
 
       next = p.s + params.spacing * rnd(1.15, 1.55);
-      if (!chance(0.32)) {
+      if (!chance(0.32 * (grammar.pocketFillBias ?? 1))) {
         continue;
       }
 
@@ -2833,6 +3444,9 @@ function buildFloating(grid, tier = {}) {
   const spreadX = tier.spreadX ?? 30;
   const spreadY = tier.spreadY ?? 30;
   const parentId = tier.parentId ?? null;
+  const role = tier.role ?? "filler";
+  let bestCandidate = null;
+  let bestScore = -Infinity;
 
   for (let tries = 0; tries < 10; tries++) {
     const P = preferredPoint
@@ -2853,10 +3467,11 @@ function buildFloating(grid, tier = {}) {
     const T = [Math.cos(ang), Math.sin(ang)];
     const side = preferredPoint?.preferredSign ?? (chance(0.5) ? 1 : -1);
     const scale = rnd(scaleMin, scaleMax);
+    const contourScale = preferredPoint?.contourScale ?? 1;
     let arcs = [];
     let Pp = P.slice();
     let Tc = T.slice();
-    let phase = appendArcPhase(arcs, Pp, Tc, side, [su(34) * scale, su(82) * scale], [0.9, 1.5]);
+    let phase = appendArcPhase(arcs, Pp, Tc, side, [su(44) * scale * contourScale, su(104) * scale * contourScale], [0.9, 1.5]);
     Pp = phase.P;
     Tc = phase.T;
     const bodyEndIndex = arcs.length - 1;
@@ -2896,25 +3511,52 @@ function buildFloating(grid, tier = {}) {
     if (!testChain(samples, grid, 0)) {
       continue;
     }
+    const breathing = measureCandidateBreathing(samples, grid, {
+      startT: 0.14,
+      endT: 0.94,
+      maxDistance: Math.max(su(38), params.spacing * 1.6),
+    });
+    const minBreathing =
+      role === "filler" ? Math.max(su(12), params.spacing * 0.34) : Math.max(su(10), params.spacing * 0.28);
+    if (breathing.minSide < minBreathing) {
+      continue;
+    }
+    const score =
+      breathing.avgMinSide * 1.9 +
+      breathing.avgClearance * 0.5 +
+      breathing.balance * su(22) +
+      samples[samples.length - 1].s * 0.04;
+    if (score <= bestScore) {
+      continue;
+    }
 
-    const chain = {
-      kind: "stroke",
-      arcs,
-      depth: 1,
-      parentId,
-      profile: "branch",
-      debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
-      terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
-      wBase: STROKE_WEIGHT,
-      wantsOffshoot,
-      mustHaveOffshoot: wantsOffshoot,
-      hasOffshoot: !wantsOffshoot,
+    bestScore = score;
+    bestCandidate = {
+      chain: {
+        kind: "stroke",
+        arcs,
+        depth: 1,
+        parentId,
+        profile: "branch",
+        role,
+        zoneBias: role === "filler" ? 0.14 : 0.06,
+        contourBias: preferredPoint?.contourBias ?? 0,
+        debugMeta: makeDebugMeta(bodyEndIndex, transitionIndex, terminalStartIndex),
+        terminalLeaf: buildTerminalLeafFromSpiral(sp.arcs, "branch"),
+        wBase: STROKE_WEIGHT,
+        wantsOffshoot,
+        mustHaveOffshoot: wantsOffshoot,
+        hasOffshoot: !wantsOffshoot,
+      },
+      samples,
     };
-    acceptChain(chain, samples, grid);
-    return chain;
   }
 
-  return null;
+  if (!bestCandidate) {
+    return null;
+  }
+  acceptChain(bestCandidate.chain, bestCandidate.samples, grid);
+  return bestCandidate.chain;
 }
 
 function generate() {
@@ -2935,6 +3577,7 @@ function generate() {
     yMax: lerp(bounds.yMin, bounds.yMax, 0.94),
     bodyChance: 0.82,
     weightScale: 1.08,
+    role: "hero",
   };
   const mediumTier = {
     rootScale: 0.78,
@@ -2942,14 +3585,16 @@ function generate() {
     yMax: lerp(bounds.yMin, bounds.yMax, 0.82),
     bodyChance: 0.58,
     weightScale: 0.9,
+    role: "support",
   };
-  const smallTier = {
-    scaleMin: 0.34,
-    scaleMax: 0.55,
+    const smallTier = {
+    scaleMin: 0.42,
+    scaleMax: 0.72,
     yMin: lerp(bounds.yMin, bounds.yMax, 0.06),
     yMax: lerp(bounds.yMin, bounds.yMax, 0.88),
     wantsOffshoot: true,
     weightScale: 0.72,
+    role: "filler",
   };
 
   const allowCornerSpines =
@@ -2999,6 +3644,7 @@ function generate() {
         rootScale: 0.66,
         bodyChance: 0.42,
         weightScale: 0.8,
+        role: "support",
         preferredPoint: seed,
         spreadX: su(26),
         spreadY: su(34),
@@ -3010,14 +3656,15 @@ function generate() {
       }
     }
 
-    const smallPocketSeeds = collectPocketSeeds(grid, 4, su(54), pockets);
+    const smallPocketSeeds = collectPocketSeeds(grid, 2, su(72), pockets);
     for (const seed of smallPocketSeeds) {
       const sp = buildFloating(grid, {
         ...smallTier,
-        scaleMin: 0.24,
-        scaleMax: 0.42,
+        scaleMin: 0.34,
+        scaleMax: 0.56,
         weightScale: 0.58,
         wantsOffshoot: true,
+        role: "filler",
         preferredPoint: seed,
         spreadX: su(18),
         spreadY: su(18),
@@ -3071,19 +3718,26 @@ function growQueue(queue, grid) {
 
     const samples = sampleArcs(chain.arcs, 4);
     const total = samples[samples.length - 1].s;
-    let next = params.spacing * rnd(0.6, 1.0) + total * 0.08;
+    const branchWindow = branchWindowForChain(chain);
+    let next = branchWindow.spacing * rnd(0.72, 1.04) + total * Math.max(0.06, branchWindow.start * 0.34);
 
     for (const p of samples) {
-      if (p.s < next || p.r < 12 || p.s > total * 0.96) {
+      const terminalBias = p.s / total;
+      const zone = sampleZoneAt(terminalBias, branchWindow);
+      if (p.s < next || p.r < 12 || p.s > total * 0.96 || zone === "launch" || zone === "tail") {
         continue;
       }
-      next = p.s + params.spacing * rnd(0.8, 1.25);
-      const side = chance(0.75) ? -p.dir : p.dir;
+      if (!chance(branchChanceForZone(zone, branchWindow, chain))) {
+        continue;
+      }
+      next = p.s + branchWindow.spacing * rnd(zone === "body" ? 0.86 : 1.02, zone === "body" ? 1.18 : 1.34);
+      const sideBias = chain.contourBias > 0.12 ? -p.dir : p.dir;
+      const side = chance(zone === "terminal" ? 0.84 : 0.72) ? -p.dir : sideBias;
       const childScale = scale * params.falloff;
-      const terminalBias = p.s / total;
+      const childRole = chooseChildRole(chain.role, zone, false);
       let child = null;
 
-      if (chance(params.leafProb)) {
+      if (zone === "terminal" || chance(params.leafProb * branchWindow.leafBias)) {
         child = buildLeaf(
           [p.x, p.y],
           [p.tx, p.ty],
@@ -3093,7 +3747,8 @@ function growQueue(queue, grid) {
           d + 1,
           childScale,
           grid,
-          chain.chainId
+          chain.chainId,
+          chooseChildRole(chain.role, zone, true)
         );
       } else {
         child = buildChild(
@@ -3106,7 +3761,8 @@ function growQueue(queue, grid) {
           childScale,
           grid,
           terminalBias,
-          chain.chainId
+          chain.chainId,
+          childRole
         );
       }
 
@@ -3656,8 +4312,9 @@ function drawTerminalLeaf(ch) {
 }
 
 function drawDebugChain(ch) {
+  const roleColor = roleDebugColor(ch.role);
   if (ch.kind === "leaf") {
-    drawArcPath(ch.stem, "#5ec8ff", 2.4);
+    drawArcPath(ch.stem, roleColor, 2.4);
     drawArcPath([ch.tear[0]], "#ff5e7a", 2.2);
     drawArcPath([ch.tear[1]], "#ffb85e", 2.2);
     return;
@@ -3674,15 +4331,22 @@ function drawDebugChain(ch) {
 
   const meta = ch.debugMeta;
   if (!meta) {
-    drawArcPath(ch.arcs, "#5ec8ff", 2.4);
+    drawArcPath(ch.arcs, roleColor, 2.4);
     return;
   }
 
-  drawArcPath(ch.arcs.slice(0, meta.bodyEndIndex + 1), "#5ec8ff", 2.4);
+  drawArcPath(ch.arcs.slice(0, meta.bodyEndIndex + 1), roleColor, 2.4);
   drawArcPath(ch.arcs.slice(meta.bodyEndIndex + 1, meta.transitionIndex + 1), "#ffb85e", 2.8);
   drawArcPath(ch.arcs.slice(meta.terminalStartIndex), "#7dff7a", 2.6);
   if (ch.terminalLeaf?.inner?.length) {
     drawArcPath(ch.terminalLeaf.inner, "#ff5ef1", 2.2);
+  }
+  if (ch.spawnPoint) {
+    push();
+    noStroke();
+    fill(roleColor);
+    circle(ch.spawnPoint.x, ch.spawnPoint.y, Math.max(5, su(8)));
+    pop();
   }
 }
 
