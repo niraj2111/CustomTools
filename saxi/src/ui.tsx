@@ -1149,6 +1149,18 @@ function Root() {
   const { isPlanning, plan, setPlan } = usePlan(state.paths, state.planOptions);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
 
+  const loadSvgString = React.useCallback(
+    (svgString: string) => {
+      setPlan(null);
+      try {
+        dispatch(setPaths(readSvg(svgString)));
+      } catch (error) {
+        console.error("Failed to parse streamed SVG:", error);
+      }
+    },
+    [setPlan],
+  );
+
   useEffect(() => {
     window.localStorage.setItem("planOptions", JSON.stringify(state.planOptions));
   }, [state.planOptions]);
@@ -1172,12 +1184,16 @@ function Root() {
     driver.onplan = (plan: Plan) => {
       setPlan(plan);
     };
+    driver.onincomingSvg = (svg: string) => {
+      dispatch({ type: "SET_PLAN_OPTION", value: { fitPage: false, cropToMargins: false } });
+      loadSvgString(svg);
+    };
     if (driver instanceof SaxiDriver) {
       driver.svgioEnabled = (enabled: boolean) => {
         dispatch({ type: "SET_SVGIO_OPTION", value: { enabled } });
       };
     }
-  }, [driver, state.planOptions]);
+  }, [driver, loadSvgString, setPlan, state.planOptions]);
 
   useEffect(() => {
     // poll the driver so React notices connection changes
@@ -1189,6 +1205,24 @@ function Root() {
     }, 100);
     return () => clearInterval(interval);
   }, [driver, state.connected]);
+
+  useEffect(() => {
+    if (!(driver instanceof SaxiDriver)) return;
+    if (!state.connected) return;
+    driver.sendPlanOptions({
+      paperSize: {
+        x: state.planOptions.paperSize.size.x,
+        y: state.planOptions.paperSize.size.y,
+      },
+      marginMm: state.planOptions.marginMm,
+    });
+  }, [
+    driver,
+    state.planOptions.paperSize.size.x,
+    state.planOptions.paperSize.size.y,
+    state.planOptions.marginMm,
+    state.connected,
+  ]);
 
   const handleFile = React.useCallback(
     (file: File) => {

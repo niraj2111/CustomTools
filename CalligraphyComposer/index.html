@@ -235,6 +235,25 @@
         backdrop-filter: blur(10px);
       }
 
+      .pen-marker {
+        position: absolute;
+        z-index: 8;
+        pointer-events: none;
+        border: 1.5px solid rgba(33, 37, 44, 0.7);
+        border-radius: 999px;
+        background: rgba(255, 141, 40, 0.12);
+        transform-origin: center center;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .pen-marker.flat {
+        border-radius: 4px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
       #wrap canvas {
         display: block;
         z-index: 1;
@@ -247,6 +266,7 @@
         background: var(--canvas-bg);
       }
 
+      #wrap canvas.draw-layer,
       #wrap canvas.glyph-layer,
       #wrap canvas.overlay-layer {
         background: transparent;
@@ -362,6 +382,31 @@
         line-height: 1.45;
       }
 
+      .status-stack {
+        display: grid;
+        gap: 8px;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(248, 248, 251, 0.96);
+        border: 1px solid rgba(30, 33, 40, 0.08);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .draw-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+
       .text-editor textarea {
         width: 100%;
         min-height: 138px;
@@ -425,7 +470,9 @@
       #docPane,
       #toolPane,
       #scriptPane,
-      #modifierPane {
+      #modifierPane,
+      #drawPane,
+      #streamPane {
         font-family: "Inter", sans-serif;
         --tp-font-family: "Inter", sans-serif;
         --tp-base-background-color: transparent;
@@ -454,35 +501,45 @@
       #docPane .tp-dfwv,
       #toolPane .tp-dfwv,
       #scriptPane .tp-dfwv,
-      #modifierPane .tp-dfwv {
+      #modifierPane .tp-dfwv,
+      #drawPane .tp-dfwv,
+      #streamPane .tp-dfwv {
         gap: 2px;
       }
 
       #docPane .tp-rotv,
       #toolPane .tp-rotv,
       #scriptPane .tp-rotv,
-      #modifierPane .tp-rotv {
+      #modifierPane .tp-rotv,
+      #drawPane .tp-rotv,
+      #streamPane .tp-rotv {
         box-shadow: none;
       }
 
       #docPane .tp-fldv,
       #toolPane .tp-fldv,
       #scriptPane .tp-fldv,
-      #modifierPane .tp-fldv {
+      #modifierPane .tp-fldv,
+      #drawPane .tp-fldv,
+      #streamPane .tp-fldv {
         border-radius: 0;
       }
 
       #docPane .tp-fldv_t,
       #toolPane .tp-fldv_t,
       #scriptPane .tp-fldv_t,
-      #modifierPane .tp-fldv_t {
+      #modifierPane .tp-fldv_t,
+      #drawPane .tp-fldv_t,
+      #streamPane .tp-fldv_t {
         display: none;
       }
 
       #docPane .tp-lblv,
       #toolPane .tp-lblv,
       #scriptPane .tp-lblv,
-      #modifierPane .tp-lblv {
+      #modifierPane .tp-lblv,
+      #drawPane .tp-lblv,
+      #streamPane .tp-lblv {
         min-height: 38px;
         padding: 7px 0;
       }
@@ -490,7 +547,9 @@
       #docPane .tp-lblv_l,
       #toolPane .tp-lblv_l,
       #scriptPane .tp-lblv_l,
-      #modifierPane .tp-lblv_l {
+      #modifierPane .tp-lblv_l,
+      #drawPane .tp-lblv_l,
+      #streamPane .tp-lblv_l {
         font-size: 14px;
         font-weight: 500;
         color: var(--text);
@@ -499,7 +558,9 @@
       #docPane .tp-lblv_v,
       #toolPane .tp-lblv_v,
       #scriptPane .tp-lblv_v,
-      #modifierPane .tp-lblv_v {
+      #modifierPane .tp-lblv_v,
+      #drawPane .tp-lblv_v,
+      #streamPane .tp-lblv_v {
         min-width: 120px;
       }
 
@@ -518,7 +579,15 @@
       #modifierPane .tp-txtv_i,
       #modifierPane .tp-lstv_s,
       #modifierPane .tp-ckbv_w,
-      #modifierPane .tp-sldv_t {
+      #modifierPane .tp-sldv_t,
+      #drawPane .tp-txtv_i,
+      #drawPane .tp-lstv_s,
+      #drawPane .tp-ckbv_w,
+      #drawPane .tp-sldv_t,
+      #streamPane .tp-txtv_i,
+      #streamPane .tp-lstv_s,
+      #streamPane .tp-ckbv_w,
+      #streamPane .tp-sldv_t {
         border-radius: 8px;
       }
 
@@ -624,11 +693,39 @@
               <div id="modifierPane"></div>
             </div>
           </details>
+
+          <details class="panel-card accordion" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Draw</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <p class="panel-note">Freehand strokes, lasso selection, transform, and brush controls.</p>
+              <div id="drawPane"></div>
+            </div>
+          </details>
+
+          <details class="panel-card accordion" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Stream</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <p class="panel-note">Send text, draw strokes, or both through a shared SAXI stream module.</p>
+              <div id="streamPane"></div>
+            </div>
+          </details>
         </aside>
 
         <main class="stage-area">
-          <div id="wrap"></div>
-          <div class="stage-hint">Drag empty space to pan. Use the wheel to zoom.</div>
+          <div id="wrap">
+            <div id="penMarker" class="pen-marker hidden" aria-hidden="true"></div>
+          </div>
+          <div class="stage-hint">Drag empty space to pan. Two-finger scroll pans. Pinch to zoom.</div>
         </main>
 
         <aside class="rail rail-right">
@@ -671,6 +768,44 @@
           </details>
 
           <button id="addBoxBtn" class="panel-button" type="button">New Text Layer</button>
+
+          <details class="panel-card accordion" id="drawActionsCard" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Draw Actions</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <div class="status-stack">
+                <div class="status-pill" id="drawStatus">Draw mode ready</div>
+                <div class="status-pill" id="brushBadge">brush: flat</div>
+              </div>
+              <div class="draw-actions">
+                <button id="undoDrawBtn" class="action-button" type="button">Undo</button>
+                <button id="clearDrawBtn" class="action-button" type="button">Clear</button>
+                <button id="brushSvgBtn" class="action-button" type="button">Export Draw</button>
+              </div>
+            </div>
+          </details>
+
+          <details class="panel-card accordion" id="streamActionsCard" open>
+            <summary>
+              <div class="summary-row">
+                <h2 class="panel-title">Stream Actions</h2>
+                <span class="summary-caret">›</span>
+              </div>
+            </summary>
+            <div class="accordion-body">
+              <div class="status-stack">
+                <div class="status-pill" id="streamStatus">Stream module ready</div>
+                <div class="status-pill" id="connectionBadge">socket: disconnected</div>
+              </div>
+              <div class="draw-actions">
+                <button id="streamBtn" class="action-button" type="button">Stream</button>
+              </div>
+            </div>
+          </details>
         </aside>
       </div>
 

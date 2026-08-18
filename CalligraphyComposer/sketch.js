@@ -13,9 +13,15 @@ const UPM = 1000;
 const MIN_RATIO = 0.02;
 const NIB_SEGS = 24;
 const ITALIC_SHEAR = 0.22;
+const SVG_UNITS_PER_MM = 96 / 25.4;
+const DRAW_FLAT_NIB_RATIO = 0.18;
 
 function fmt(value, digits = 3) {
   return ExportUtils.fmt(value, digits);
+}
+
+function mmToSvgUnits(value) {
+  return value * SVG_UNITS_PER_MM;
 }
 
 function escapeHTML(value) {
@@ -27,17 +33,22 @@ let canvas;
 let ctx;
 let bgCanvas;
 let bgCtx;
+let drawCanvas;
+let drawCtx;
 let glyphCanvas;
 let overlayCtx;
 let wrapEl;
 let variantMenuEl;
 let boxTextInputEl;
 let paperColorInputEl;
+let penMarkerEl;
 let paperFolder;
 let sceneFolder;
 let fontFolder;
 let boxFolder;
 let modifierFolder;
+let drawFolder;
+let streamFolder;
 let fontBinding;
 let marginBinding;
 let showMarginsBinding;
@@ -78,6 +89,9 @@ const glRenderer = {
   uPxPerMM: null,
   uColor: null,
   ready: false,
+};
+const appState = {
+  mode: "text",
 };
 
 const P = {
@@ -155,6 +169,46 @@ const selectionState = {
   inkOverlapGain: 1.2,
   inkTexture: 0.16,
 };
+const drawUI = {
+  tool: "draw",
+  showGrid: true,
+  snapGrid: false,
+  brushType: "flat",
+  roundSize: 1.6,
+  flatWidth: 3.2,
+  flatAngle: 40,
+  streamline: 0.45,
+  smoothing: 0.25,
+  minDistance: 0.6,
+  exportTolerance: 0.18,
+};
+const streamUI = {
+  target: "current",
+  autoStream: false,
+  streamHost: "127.0.0.1:9080",
+  streamPath: "/chat",
+};
+const drawState = {
+  strokes: [],
+  selectedStrokeIds: new Set(),
+  currentStroke: null,
+  lassoPoints: [],
+  transformState: null,
+  nextStrokeId: 1,
+  hoverPointer: null,
+  activeTouchPointers: new Map(),
+  gestureState: null,
+  committedDirty: true,
+  committedLayer: null,
+  activeLayer: null,
+};
+const streamState = {
+  socket: null,
+  connected: false,
+  reconnectTimer: null,
+  streamTimer: null,
+  statusText: "Stream module ready",
+};
 
 window.addEventListener("load", () => {
   PaperUtils.applyPaperPreset(P, P.paperPreset);
@@ -163,7 +217,9 @@ window.addEventListener("load", () => {
   bindUI();
   syncCanvasSize();
   initFonts();
+  connectStreamSocket();
   refreshSelectionMonitor();
+  syncModeVisibility();
   requestRender();
   window.addEventListener("resize", syncDisplaySize);
 });
@@ -172,6 +228,7 @@ function createCanvas() {
   wrapEl = document.getElementById("wrap");
   boxTextInputEl = document.getElementById("boxTextInput");
   paperColorInputEl = document.getElementById("paperColorInput");
+  penMarkerEl = document.getElementById("penMarker");
   bgCanvas = document.createElement("canvas");
   bgCanvas.className = "paper-layer";
   bgCanvas.setAttribute("aria-hidden", "true");
@@ -180,11 +237,21 @@ function createCanvas() {
   bgCtx = bgCanvas.getContext("2d");
   wrapEl.appendChild(bgCanvas);
 
+  drawCanvas = document.createElement("canvas");
+  drawCanvas.className = "draw-layer";
+  drawCanvas.setAttribute("aria-hidden", "true");
+  drawCanvas.style.pointerEvents = "none";
+  drawCanvas.style.zIndex = "2";
+  drawCtx = drawCanvas.getContext("2d");
+  wrapEl.appendChild(drawCanvas);
+  drawState.committedLayer = document.createElement("canvas");
+  drawState.activeLayer = document.createElement("canvas");
+
   glyphCanvas = document.createElement("canvas");
   glyphCanvas.className = "glyph-layer";
   glyphCanvas.setAttribute("aria-hidden", "true");
   glyphCanvas.style.pointerEvents = "none";
-  glyphCanvas.style.zIndex = "2";
+  glyphCanvas.style.zIndex = "3";
   glyphCanvas.style.background = "transparent";
   wrapEl.appendChild(glyphCanvas);
   initGlyphRenderer();
@@ -193,7 +260,7 @@ function createCanvas() {
   canvas.className = "overlay-layer";
   canvas.tabIndex = 0;
   canvas.setAttribute("aria-label", "CalligraphyComposer canvas");
-  canvas.style.zIndex = "3";
+  canvas.style.zIndex = "4";
   overlayCtx = canvas.getContext("2d");
   ctx = overlayCtx;
   wrapEl.appendChild(canvas);
@@ -208,12 +275,24 @@ function createCanvas() {
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointerleave", onPointerLeave);
+  canvas.addEventListener("pointercancel", onPointerLeave);
   variantMenuEl.addEventListener("pointerleave", onHoverPointerLeave);
 }
 
 function buildPane() {
   panes = [];
   paperFolder = createPane("docPane");
+  paperFolder
+    .addInput(appState, "mode", {
+      label: "Mode",
+      options: {
+        Text: "text",
+        Draw: "draw",
+      },
+    })
+    .on("change", (ev) => {
+      setAppMode(ev.value);
+    });
   paperFolder
     .addInput(P, "paperPreset", {
       label: "Paper Size",
@@ -225,6 +304,7 @@ function buildPane() {
     .on("change", (ev) => {
       PaperUtils.applyPaperPreset(P, ev.value);
       syncCanvasSize();
+      queueAutoStream();
     });
   marginBinding = paperFolder.addInput(P, "marginMM", { label: "Margin", min: 0, max: 80, step: 0.5 });
   marginBinding.on("change", requestRender);
@@ -375,16 +455,94 @@ function buildPane() {
         syncNibWidthToPen();
       }
       applySelectionStateToBox();
+      queueAutoStream();
       requestRender();
     });
   }
   for (const blade of Object.values(modifierDetailBindings)) {
     blade.on("change", () => {
       applySelectionStateToBox();
+      queueAutoStream();
       requestRender();
     });
   }
+
+  drawFolder = createPane("drawPane");
+  drawFolder
+    .addInput(drawUI, "tool", {
+      label: "Tool",
+      options: {
+        Draw: "draw",
+        Lasso: "lasso",
+        Transform: "transform",
+      },
+    })
+    .on("change", () => {
+      clearDrawTransientState();
+      requestRender();
+      syncModeVisibility();
+    });
+  drawFolder.addInput(drawUI, "showGrid", { label: "Show grid" }).on("change", requestRender);
+  drawFolder.addInput(drawUI, "snapGrid", { label: "Snap grid" }).on("change", () => {
+    applyCurrentBrushToExistingDrawStrokes();
+    updateDrawStatus();
+    requestRender();
+  });
+  drawFolder
+    .addInput(drawUI, "brushType", {
+      label: "Brush",
+      options: {
+        Round: "round",
+        "Flat nib": "flat",
+      },
+    })
+    .on("change", () => {
+      applyCurrentBrushToExistingDrawStrokes();
+      updateDrawStatus();
+      requestRender();
+    });
+  drawFolder.addInput(drawUI, "roundSize", { label: "Round size", min: 0.4, max: 8, step: 0.1 }).on("change", () => {
+    applyCurrentBrushToExistingDrawStrokes();
+    updateDrawStatus();
+    requestRender();
+  });
+  drawFolder.addInput(drawUI, "flatWidth", { label: "Flat width", min: 0.6, max: 12, step: 0.1 }).on("change", () => {
+    applyCurrentBrushToExistingDrawStrokes();
+    updateDrawStatus();
+    requestRender();
+  });
+  drawFolder.addInput(drawUI, "flatAngle", { label: "Nib angle", min: 0, max: 180, step: 1 }).on("change", () => {
+    applyCurrentBrushToExistingDrawStrokes();
+    updateDrawStatus();
+    requestRender();
+  });
+  drawFolder.addInput(drawUI, "streamline", { min: 0, max: 2, step: 0.01 }).on("change", applyCurrentBrushToExistingDrawStrokes);
+  drawFolder.addInput(drawUI, "smoothing", { min: 0, max: 2, step: 0.01 }).on("change", applyCurrentBrushToExistingDrawStrokes);
+  drawFolder.addInput(drawUI, "minDistance", { label: "Min distance", min: 0.1, max: 5, step: 0.1 }).on(
+    "change",
+    applyCurrentBrushToExistingDrawStrokes,
+  );
+  drawFolder.addInput(drawUI, "exportTolerance", { label: "Export fit", min: 0.03, max: 1, step: 0.01 });
+
+  streamFolder = createPane("streamPane");
+  streamFolder.addInput(streamUI, "target", {
+    label: "Source",
+    options: {
+      "Current mode": "current",
+      "Text only": "text",
+      "Draw only": "draw",
+      "Text + Draw": "combined",
+    },
+  }).on("change", () => {
+    updateStreamStatus();
+  });
+  streamFolder.addInput(streamUI, "autoStream", { label: "Auto stream" }).on("change", () => {
+    updateStreamStatus();
+  });
+  streamFolder.addInput(streamUI, "streamHost", { label: "SAXI host" }).on("change", reconnectStreamSocket);
+  streamFolder.addInput(streamUI, "streamPath", { label: "SAXI path" }).on("change", reconnectStreamSocket);
   syncModifierVisibility();
+  syncModeVisibility();
 }
 
 function createPane(id) {
@@ -399,6 +557,7 @@ function refreshPanes() {
   }
   syncMarginVisibility();
   syncModifierVisibility();
+  syncModeVisibility();
 }
 
 function bindUI() {
@@ -406,6 +565,7 @@ function bindUI() {
     selectionState.text = boxTextInputEl.value;
     applySelectionStateToBox();
     trimVariantMap(getActiveBox());
+    queueAutoStream();
     requestRender();
   });
 
@@ -425,6 +585,7 @@ function bindUI() {
     state.boxes.push(next);
     activeBoxId = next.id;
     refreshSelectionMonitor();
+    queueAutoStream();
     requestRender();
   });
 
@@ -440,16 +601,17 @@ function bindUI() {
     state.boxes.push(copy);
     activeBoxId = copy.id;
     refreshSelectionMonitor();
+    queueAutoStream();
     requestRender();
   });
 
   document.getElementById("deleteBoxBtn").addEventListener("click", () => {
-    if (state.boxes.length <= 1) return;
     const index = state.boxes.findIndex((box) => box.id === activeBoxId);
     if (index < 0) return;
     state.boxes.splice(index, 1);
-    activeBoxId = state.boxes[Math.max(0, index - 1)].id;
+    activeBoxId = state.boxes.length ? state.boxes[Math.max(0, index - 1)]?.id ?? state.boxes[0].id : null;
     refreshSelectionMonitor();
+    queueAutoStream();
     requestRender();
   });
 
@@ -469,6 +631,10 @@ function bindUI() {
 
   document.getElementById("svgBtn").addEventListener("click", exportSvg);
   document.getElementById("pathSvgBtn").addEventListener("click", exportPathSvg);
+  document.getElementById("brushSvgBtn")?.addEventListener("click", exportDrawBrushSvg);
+  document.getElementById("streamBtn")?.addEventListener("click", streamAppNow);
+  document.getElementById("undoDrawBtn")?.addEventListener("click", undoLastDrawStroke);
+  document.getElementById("clearDrawBtn")?.addEventListener("click", clearAllDrawStrokes);
   document.getElementById("alignLeftBtn").addEventListener("click", () => setAlignment("left"));
   document.getElementById("alignCenterBtn").addEventListener("click", () => setAlignment("center"));
   document.getElementById("alignRightBtn").addEventListener("click", () => setAlignment("right"));
@@ -484,6 +650,7 @@ function bindUI() {
     syncColorIndicators();
     requestRender();
   });
+  updateDrawStatus();
 }
 
 function syncCanvasSize() {
@@ -492,13 +659,27 @@ function syncCanvasSize() {
     bgCanvas.width = size.width;
     bgCanvas.height = size.height;
   }
+  if (drawCanvas) {
+    drawCanvas.width = size.width;
+    drawCanvas.height = size.height;
+  }
   if (glyphCanvas) {
     glyphCanvas.width = size.width;
     glyphCanvas.height = size.height;
   }
+  if (drawState.committedLayer) {
+    drawState.committedLayer.width = size.width;
+    drawState.committedLayer.height = size.height;
+  }
+  if (drawState.activeLayer) {
+    drawState.activeLayer.width = size.width;
+    drawState.activeLayer.height = size.height;
+  }
   canvas.width = size.width;
   canvas.height = size.height;
   resizeGlyphRenderer();
+  drawState.committedDirty = true;
+  clearDrawLayer(drawState.activeLayer);
   syncDisplaySize();
   requestRender();
 }
@@ -522,7 +703,7 @@ function syncDisplaySize() {
 
 function applyViewportTransform() {
   const pxSize = PaperUtils.getCanvasPixelSize(P);
-  for (const layer of [bgCanvas, glyphCanvas, canvas]) {
+  for (const layer of [bgCanvas, drawCanvas, glyphCanvas, canvas]) {
     if (!layer) continue;
     layer.style.width = `${pxSize.width}px`;
     layer.style.height = `${pxSize.height}px`;
@@ -612,6 +793,7 @@ function buildFontBinding(options) {
   fontBinding = fontFolder.addInput(P, "fontId", { label: "Font", options });
   fontBinding.on("change", async () => {
     await ensureCurrentFontDoc();
+    queueAutoStream();
     requestRender();
   });
 }
@@ -628,6 +810,72 @@ function syncModifierVisibility() {
     const el = blade?.element || blade?.controller?.view?.element || blade?.controller_?.view?.element;
     if (!el) continue;
     el.style.display = visible ? "" : "none";
+  }
+}
+
+function clearDrawTransientState() {
+  drawState.currentStroke = null;
+  drawState.lassoPoints = [];
+  drawState.transformState = null;
+  clearDrawLayer(drawState.activeLayer);
+  hidePenMarker();
+}
+
+function setAppMode(mode) {
+  appState.mode = mode === "draw" ? "draw" : "text";
+  hideVariantMenu(true);
+  clearDrawTransientState();
+  syncModeVisibility();
+  updateStreamStatus();
+  requestRender();
+}
+
+function syncModeVisibility() {
+  const isDrawMode = appState.mode === "draw";
+  document.getElementById("drawActionsCard")?.classList.toggle("hidden", !isDrawMode);
+  document.getElementById("addBoxBtn")?.classList.toggle("hidden", isDrawMode);
+  document.getElementById("inkSwatches")?.classList.toggle("hidden", isDrawMode);
+  const textEditorCard = document.getElementById("activeLayerTitle")?.closest(".panel-card");
+  textEditorCard?.classList.toggle("hidden", isDrawMode);
+  const scriptPaneCard = document.getElementById("scriptPane")?.closest(".panel-card");
+  scriptPaneCard?.classList.toggle("hidden", isDrawMode);
+  const modifierPaneCard = document.getElementById("modifierPane")?.closest(".panel-card");
+  modifierPaneCard?.classList.toggle("hidden", isDrawMode);
+  const drawPaneCard = document.getElementById("drawPane")?.closest(".panel-card");
+  drawPaneCard?.classList.toggle("hidden", false);
+  canvas.style.cursor = isDrawMode ? "crosshair" : "default";
+  updateDrawStatus();
+  updateStreamStatus();
+}
+
+function updateDrawStatus(message = "") {
+  const brushBadge = document.getElementById("brushBadge");
+  const drawStatus = document.getElementById("drawStatus");
+  if (brushBadge) brushBadge.textContent = getDrawBrushDisplayLabel(getDrawBrushSnapshot());
+  if (drawStatus) {
+    drawStatus.textContent =
+      message ||
+      (appState.mode === "draw"
+        ? `tool: ${drawUI.tool}${drawState.selectedStrokeIds.size ? `, selected ${drawState.selectedStrokeIds.size}` : ""}`
+        : "Draw mode ready");
+  }
+}
+
+function updateStreamStatus(message = "") {
+  if (message) streamState.statusText = message;
+  const streamStatus = document.getElementById("streamStatus");
+  const connectionBadge = document.getElementById("connectionBadge");
+  if (streamStatus) {
+    const targetLabel =
+      streamUI.target === "current"
+        ? `current (${appState.mode})`
+        : streamUI.target === "combined"
+          ? "text + draw"
+          : streamUI.target;
+    streamStatus.textContent = message || `source: ${targetLabel}${streamUI.autoStream ? ", auto" : ""}`;
+  }
+  if (connectionBadge) {
+    connectionBadge.textContent = `socket: ${streamState.connected ? "connected" : "disconnected"}`;
   }
 }
 
@@ -663,6 +911,7 @@ function requestRender() {
 function render() {
   if (!canvas || !bgCtx || !overlayCtx) return;
   bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  drawCtx?.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
   overlayCtx.clearRect(0, 0, canvas.width, canvas.height);
 
   const pxPerMM = PaperUtils.getPxPerMM(P);
@@ -680,14 +929,16 @@ function render() {
     renderGlyphScene(state.currentDoc);
   }
   ctx.restore();
+  renderDrawScene();
 
-  if (state.currentDoc) {
-    ctx = overlayCtx;
-    ctx.save();
-    ctx.scale(pxPerMM, pxPerMM);
+  ctx = overlayCtx;
+  ctx.save();
+  ctx.scale(pxPerMM, pxPerMM);
+  if (state.currentDoc && appState.mode === "text") {
     drawBoxesOverlay(state.currentDoc);
-    ctx.restore();
   }
+  drawDrawOverlay();
+  ctx.restore();
   updateStats();
 }
 
@@ -701,6 +952,29 @@ function drawPaper() {
 }
 
 function drawGuides() {
+  if (appState.mode === "draw" && drawUI.showGrid) {
+    ctx.strokeStyle = "#dfe4ef";
+    ctx.lineWidth = 0.12;
+    for (let x = 0; x <= P.canvasWMM; x += 5) {
+      const major = x % 25 === 0;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, P.canvasHMM);
+      ctx.strokeStyle = major ? "#cbd3e2" : "#e7ebf3";
+      ctx.lineWidth = major ? 0.16 : 0.1;
+      ctx.stroke();
+    }
+    for (let y = 0; y <= P.canvasHMM; y += 5) {
+      const major = y % 25 === 0;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(P.canvasWMM, y);
+      ctx.strokeStyle = major ? "#cbd3e2" : "#e7ebf3";
+      ctx.lineWidth = major ? 0.16 : 0.1;
+      ctx.stroke();
+    }
+    return;
+  }
   if (!P.showGuides || P.guideSpacingMM <= 0) return;
   ctx.strokeStyle = P.guideColor;
   ctx.lineWidth = 0.12;
@@ -1350,13 +1624,18 @@ function getActiveBox() {
 
 function refreshSelectionMonitor() {
   const active = getActiveBox();
+  const duplicateBtn = document.getElementById("duplicateBoxBtn");
+  const deleteBtn = document.getElementById("deleteBoxBtn");
   document.getElementById("boxCountLabel").textContent = `${state.boxes.length} text box${state.boxes.length === 1 ? "" : "es"}`;
   if (!active) {
     selectionState.activeName = "None";
     refreshPanes();
     if (boxTextInputEl) {
       boxTextInputEl.value = "";
+      boxTextInputEl.disabled = true;
     }
+    if (duplicateBtn) duplicateBtn.disabled = true;
+    if (deleteBtn) deleteBtn.disabled = true;
     document.getElementById("activeLayerTitle").textContent = "No text layer selected";
     syncAlignmentButtons(null);
     updateStats();
@@ -1369,7 +1648,10 @@ function refreshSelectionMonitor() {
   refreshPanes();
   if (boxTextInputEl) {
     boxTextInputEl.value = active.text || "";
+    boxTextInputEl.disabled = false;
   }
+  if (duplicateBtn) duplicateBtn.disabled = false;
+  if (deleteBtn) deleteBtn.disabled = false;
   document.getElementById("activeLayerTitle").textContent = layerLabelForBox(active);
   syncAlignmentButtons(active.align);
   syncColorIndicators();
@@ -1390,6 +1672,7 @@ function setAlignment(align) {
   applySelectionStateToBox();
   syncAlignmentButtons(align);
   refreshPanes();
+  queueAutoStream();
   requestRender();
 }
 
@@ -1434,6 +1717,10 @@ function layerLabelForBox(box) {
 }
 
 function onPointerDown(event) {
+  if (appState.mode === "draw") {
+    onDrawPointerDown(event);
+    return;
+  }
   const point = pointerToMM(event);
   if (!point || !state.currentDoc) return;
   const now = Date.now();
@@ -1480,6 +1767,9 @@ function onPointerDown(event) {
 
 function onStagePointerDown(event) {
   if (event.target !== wrapEl) return;
+  if (appState.mode === "draw") {
+    clearDrawSelection();
+  }
   activeBoxId = null;
   state.activeGlyphItem = null;
   hideVariantMenu(true);
@@ -1495,6 +1785,10 @@ function onPointerMove(event) {
     P.fitToViewport = false;
     applyViewportTransform();
     requestRender();
+    return;
+  }
+  if (appState.mode === "draw") {
+    onDrawPointerMove(event);
     return;
   }
   const point = pointerToMM(event);
@@ -1524,6 +1818,10 @@ function onPointerMove(event) {
 }
 
 function onPointerUp(event) {
+  if (appState.mode === "draw") {
+    onDrawPointerUp(event);
+  }
+  const shouldQueueTextStream = !!dragState && dragState.kind !== "pan" && appState.mode !== "draw";
   if (dragState) {
     wrapEl.classList.remove("is-panning");
     dragState = null;
@@ -1533,16 +1831,21 @@ function onPointerUp(event) {
     if (wrapEl.hasPointerCapture?.(event.pointerId)) {
       wrapEl.releasePointerCapture(event.pointerId);
     }
+    if (shouldQueueTextStream) queueAutoStream();
     requestRender();
   }
 }
 
 function onPointerLeave() {
+  if (appState.mode === "draw") {
+    onDrawPointerLeave();
+  }
   hoverHandle = null;
   if (!dragState) requestRender();
 }
 
 function onHoverPointerMove(event) {
+  if (appState.mode === "draw") return;
   if (!state.currentDoc || dragState) return;
   const point = pointerToMM(event);
   if (!point) return;
@@ -1568,6 +1871,7 @@ function onHoverPointerMove(event) {
 }
 
 function onHoverPointerLeave(event) {
+  if (appState.mode === "draw") return;
   if (event.relatedTarget && wrapEl.contains(event.relatedTarget)) return;
   hoverGlyphKey = null;
   state.hoveredGlyphItem = null;
@@ -1605,6 +1909,7 @@ function showVariantMenu(item, anchorX, anchorY, isActive = false) {
       const boxIndex = state.boxes.findIndex((candidate) => candidate.id === item.boxId);
       const layout = layoutBox(state.currentDoc, box);
       cachedLayouts[boxIndex] = layout;
+      queueAutoStream();
       requestRender();
       const live = previewItemAt(box, layout, state.currentDoc, { x: item.xMM + 0.1, y: item.yMM + 0.1 }, false) || item;
       state.activeGlyphItem = live;
@@ -1632,6 +1937,7 @@ function showVariantMenu(item, anchorX, anchorY, isActive = false) {
       cachedLayouts[boxIndex] = layoutBox(state.currentDoc, targetBox);
       const valueEl = controls.querySelector("#glyphKernValue");
       if (valueEl) valueEl.textContent = `${fmt(next, 2)} mm`;
+      queueAutoStream();
       requestRender();
     });
   }
@@ -1676,6 +1982,14 @@ function startPanDrag(event) {
 
 function onStageWheel(event) {
   event.preventDefault();
+  if (!event.ctrlKey) {
+    viewport.x -= event.deltaX;
+    viewport.y -= event.deltaY;
+    P.fitToViewport = false;
+    applyViewportTransform();
+    requestRender();
+    return;
+  }
   const rect = wrapEl.getBoundingClientRect();
   const cursorX = event.clientX - rect.left;
   const cursorY = event.clientY - rect.top;
@@ -2252,7 +2566,1105 @@ function polysToPathData(polys, precision = 3) {
     .join(" ");
 }
 
+function clearDrawLayer(layer) {
+  const layerCtx = layer?.getContext?.("2d");
+  if (!layerCtx || !layer) return;
+  layerCtx.clearRect(0, 0, layer.width, layer.height);
+}
+
+function getDrawBrushSnapshot() {
+  return {
+    type: drawUI.brushType,
+    roundSizeMM: Number(drawUI.roundSize),
+    flatWidthMM: Number(drawUI.flatWidth),
+    flatAngleDeg: Number(drawUI.flatAngle),
+    streamline: Number(drawUI.streamline),
+    smoothing: Number(drawUI.smoothing),
+    minDistanceMM: Number(drawUI.minDistance),
+    snapToGrid: !!drawUI.snapGrid,
+  };
+}
+
+function getDrawBrushDisplayLabel(brush) {
+  if (brush.type === "flat") {
+    return `brush: flat ${fmt(brush.flatWidthMM)} mm @ ${fmt(brush.flatAngleDeg)} deg`;
+  }
+  return `brush: round ${fmt(brush.roundSizeMM)} mm`;
+}
+
+function isPenPointerEvent(event) {
+  return event && event.pointerType === "pen";
+}
+
+function eventShowsHover(event) {
+  return isPenPointerEvent(event) && (event.buttons === 0 || event.pressure === 0);
+}
+
+function updatePenMarkerFromPointer(pointMm, brush, pointerEvent = null) {
+  if (!penMarkerEl || !pointMm) return;
+  const pxPerMM = PaperUtils.getPxPerMM(P);
+  const pointPx = {
+    x: pointMm.x * pxPerMM * viewport.scale + viewport.x,
+    y: pointMm.y * pxPerMM * viewport.scale + viewport.y,
+  };
+  const sizePx = Math.max(8, getDrawBrushSizeMM(brush) * pxPerMM * viewport.scale);
+  penMarkerEl.style.width = `${sizePx}px`;
+  penMarkerEl.style.height = `${Math.max(8, brush.type === "flat" ? sizePx * 0.26 : sizePx)}px`;
+  penMarkerEl.style.left = `${pointPx.x}px`;
+  penMarkerEl.style.top = `${pointPx.y}px`;
+  penMarkerEl.classList.toggle("flat", brush.type === "flat");
+  const angle = brush.type === "flat" ? brush.flatAngleDeg : 0;
+  const pressure = pointerEvent && Number.isFinite(pointerEvent.pressure) ? pointerEvent.pressure : 0;
+  const opacity = eventShowsHover(pointerEvent) ? 0.7 : clamp(0.45 + pressure * 0.5, 0.45, 1);
+  penMarkerEl.style.opacity = `${opacity}`;
+  penMarkerEl.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+  penMarkerEl.classList.remove("hidden");
+}
+
+function hidePenMarker() {
+  penMarkerEl?.classList.add("hidden");
+  drawState.hoverPointer = null;
+}
+
+function getDrawBrushSizeMM(brush) {
+  return brush.type === "flat" ? brush.flatWidthMM : brush.roundSizeMM;
+}
+
+function getDrawBrushStampRadiusMM(brush) {
+  if (brush.type === "flat") return Math.max(0.12, brush.flatWidthMM * 0.16);
+  return Math.max(0.12, brush.roundSizeMM * 0.5);
+}
+
+function getDrawBrushStampStepMM(brush) {
+  return Math.max(0.2, getDrawBrushStampRadiusMM(brush) * 1.6);
+}
+
+function drawPointDistance(a, b) {
+  return Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
+}
+
+function lerpPoint(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+function subtractDrawPoints(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y };
+}
+
+function addDrawPoints(a, b) {
+  return { x: a.x + b.x, y: a.y + b.y };
+}
+
+function scaleDrawPoint(point, factor) {
+  return { x: point.x * factor, y: point.y * factor };
+}
+
+function normalizeDrawPoint(point) {
+  const length = Math.hypot(point.x, point.y);
+  if (length <= 1e-6) return { x: 0, y: 0 };
+  return { x: point.x / length, y: point.y / length };
+}
+
+function invalidateDrawStrokeCaches(stroke) {
+  stroke.pathDirty = true;
+  stroke.brushDirty = true;
+  stroke.bezierDirty = true;
+}
+
+function rebuildDrawStrokePointsFromRaw(rawPoints, brush) {
+  if (!rawPoints.length) return { points: [], filtered: null };
+  let filtered = rawPoints[0];
+  let point = filtered;
+  if (brush.snapToGrid) {
+    point = {
+      x: Math.round(point.x / 5) * 5,
+      y: Math.round(point.y / 5) * 5,
+    };
+  }
+  const points = [point];
+  for (let i = 1; i < rawPoints.length; i += 1) {
+    filtered = lerpPoint(filtered, rawPoints[i], clamp(1 - brush.streamline * 0.45, 0.015, 1));
+    point = filtered;
+    if (brush.snapToGrid) {
+      point = {
+        x: Math.round(point.x / 5) * 5,
+        y: Math.round(point.y / 5) * 5,
+      };
+    }
+    const last = points[points.length - 1];
+    if (!last || drawPointDistance(last, point) >= brush.minDistanceMM) {
+      points.push(point);
+    }
+  }
+  return { points, filtered };
+}
+
+function applyCurrentBrushToExistingDrawStrokes() {
+  const nextBrush = getDrawBrushSnapshot();
+  for (const stroke of drawState.strokes) {
+    stroke.brush = { ...nextBrush };
+    const rebuilt = rebuildDrawStrokePointsFromRaw(stroke.rawPoints, stroke.brush);
+    stroke.points = rebuilt.points;
+    stroke.filtered = rebuilt.filtered || stroke.filtered;
+    invalidateDrawStrokeCaches(stroke);
+  }
+  clearDrawLayer(drawState.activeLayer);
+  drawState.committedDirty = true;
+  updateDrawStatus();
+  requestRender();
+}
+
+function createDrawStroke(point) {
+  const brush = getDrawBrushSnapshot();
+  const id = globalThis.crypto?.randomUUID?.() || `draw-stroke-${drawState.nextStrokeId++}`;
+  return {
+    id,
+    rawPoints: [point],
+    points: [point],
+    filtered: point,
+    brush,
+    pathCache: [],
+    brushCache: [],
+    bezierCache: null,
+    pathDirty: true,
+    brushDirty: true,
+    bezierDirty: true,
+  };
+}
+
+function smoothDrawPath(points, smoothing) {
+  if (points.length < 3 || smoothing <= 0.001) return points.slice();
+  const passes = Math.max(1, Math.min(5, Math.round(1 + smoothing * 2)));
+  const alpha = clamp(0.08 + smoothing * 0.12, 0.08, 0.28);
+  let out = points.slice();
+  for (let pass = 0; pass < passes; pass += 1) {
+    const next = [out[0]];
+    for (let i = 1; i < out.length - 1; i += 1) {
+      const prev = out[i - 1];
+      const cur = out[i];
+      const after = out[i + 1];
+      next.push({
+        x: cur.x * (1 - alpha * 2) + (prev.x + after.x) * alpha,
+        y: cur.y * (1 - alpha * 2) + (prev.y + after.y) * alpha,
+      });
+    }
+    next.push(out[out.length - 1]);
+    out = next;
+  }
+  return out;
+}
+
+function getDrawStrokePathPoints(stroke) {
+  if (!stroke.pathDirty) return stroke.pathCache;
+  stroke.pathCache = smoothDrawPath(stroke.points, stroke.brush.smoothing).filter(
+    (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
+  );
+  stroke.pathDirty = false;
+  return stroke.pathCache;
+}
+
+function perpendicularDrawDistance(point, a, b) {
+  const length = drawPointDistance(a, b);
+  if (length <= 1e-6) return drawPointDistance(point, a);
+  const area = Math.abs((b.x - a.x) * (a.y - point.y) - (a.x - point.x) * (b.y - a.y));
+  return area / length;
+}
+
+function simplifyDrawRadial(points, tolerance) {
+  if (points.length <= 2) return points.slice();
+  const out = [points[0]];
+  let previous = points[0];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    if (drawPointDistance(points[i], previous) >= tolerance) {
+      out.push(points[i]);
+      previous = points[i];
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function simplifyDrawDouglas(points, tolerance) {
+  if (points.length <= 2) return points.slice();
+  let maxDistance = 0;
+  let splitIndex = -1;
+  const start = points[0];
+  const end = points[points.length - 1];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const nextDistance = perpendicularDrawDistance(points[i], start, end);
+    if (nextDistance > maxDistance) {
+      maxDistance = nextDistance;
+      splitIndex = i;
+    }
+  }
+  if (maxDistance <= tolerance || splitIndex < 0) {
+    return [start, end];
+  }
+  const left = simplifyDrawDouglas(points.slice(0, splitIndex + 1), tolerance);
+  const right = simplifyDrawDouglas(points.slice(splitIndex), tolerance);
+  return left.slice(0, -1).concat(right);
+}
+
+function cornerAwareSimplifyDraw(points, tolerance) {
+  if (points.length <= 2) return points.slice();
+  const cornerCosine = Math.cos((35 * Math.PI) / 180);
+  const segments = [];
+  let segmentStart = 0;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const incoming = normalizeDrawPoint(subtractDrawPoints(points[i], points[i - 1]));
+    const outgoing = normalizeDrawPoint(subtractDrawPoints(points[i + 1], points[i]));
+    const cosine = incoming.x * outgoing.x + incoming.y * outgoing.y;
+    if (cosine > cornerCosine) continue;
+    segments.push(points.slice(segmentStart, i + 1));
+    segmentStart = i;
+  }
+  segments.push(points.slice(segmentStart));
+  const out = [];
+  for (const segment of segments) {
+    const radial = simplifyDrawRadial(segment, tolerance * 0.5);
+    const simplified = simplifyDrawDouglas(radial, tolerance);
+    if (!out.length) out.push(...simplified);
+    else out.push(...simplified.slice(1));
+  }
+  return out;
+}
+
+function catmullRomToBezierDraw(points) {
+  if (!points.length) return [];
+  if (points.length === 1) return [{ type: "move", point: points[0] }];
+  const segments = [{ type: "move", point: points[0] }];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const cp1 = addDrawPoints(p1, scaleDrawPoint(subtractDrawPoints(p2, p0), 1 / 6));
+    const cp2 = subtractDrawPoints(p2, scaleDrawPoint(subtractDrawPoints(p3, p1), 1 / 6));
+    segments.push({ type: "cubic", cp1, cp2, point: p2 });
+  }
+  return segments;
+}
+
+function buildDrawBezierPathCache(stroke) {
+  const tolerance = clamp(Number(drawUI.exportTolerance) || 0.18, 0.03, 1);
+  if (!stroke.bezierDirty && stroke.bezierCache && Math.abs(stroke.bezierCache.tolerance - tolerance) < 1e-6) {
+    return stroke.bezierCache;
+  }
+  const path = getDrawStrokePathPoints(stroke);
+  const simplified = cornerAwareSimplifyDraw(path, tolerance);
+  const segments = catmullRomToBezierDraw(simplified);
+  stroke.bezierCache = { tolerance, segments };
+  stroke.bezierDirty = false;
+  return stroke.bezierCache;
+}
+
+function bezierSegmentsToPathData(segments) {
+  if (!segments?.length) return "";
+  const commands = [];
+  for (const segment of segments) {
+    if (segment.type === "move") commands.push(`M ${fmt(segment.point.x)} ${fmt(segment.point.y)}`);
+    else if (segment.type === "cubic") {
+      commands.push(
+        `C ${fmt(segment.cp1.x)} ${fmt(segment.cp1.y)} ${fmt(segment.cp2.x)} ${fmt(segment.cp2.y)} ${fmt(segment.point.x)} ${fmt(segment.point.y)}`,
+      );
+    }
+  }
+  return commands.join(" ");
+}
+
+function bezierSegmentsToStreamPathData(segments) {
+  if (!segments?.length) return "";
+  const commands = [];
+  for (const segment of segments) {
+    if (segment.type === "move") {
+      commands.push(`M ${fmt(mmToSvgUnits(segment.point.x))} ${fmt(mmToSvgUnits(segment.point.y))}`);
+    } else if (segment.type === "cubic") {
+      commands.push(
+        `C ${fmt(mmToSvgUnits(segment.cp1.x))} ${fmt(mmToSvgUnits(segment.cp1.y))} ${fmt(mmToSvgUnits(segment.cp2.x))} ${fmt(mmToSvgUnits(segment.cp2.y))} ${fmt(mmToSvgUnits(segment.point.x))} ${fmt(mmToSvgUnits(segment.point.y))}`,
+      );
+    }
+  }
+  return commands.join(" ");
+}
+
+function pointOnFlatDrawStamp(center, width, angleRad, xDir, yDir) {
+  const halfWidth = width * 0.5;
+  const thickness = Math.max(0.12, width * 0.18);
+  return {
+    x: center.x + xDir * Math.cos(angleRad) * halfWidth + yDir * -Math.sin(angleRad) * thickness * 0.5,
+    y: center.y + xDir * Math.sin(angleRad) * halfWidth + yDir * Math.cos(angleRad) * thickness * 0.5,
+  };
+}
+
+function buildFlatDrawPolygon(center, width, angleDeg) {
+  const angleRad = (angleDeg * Math.PI) / 180;
+  return [
+    pointOnFlatDrawStamp(center, width, angleRad, -1, -1),
+    pointOnFlatDrawStamp(center, width, angleRad, 1, -1),
+    pointOnFlatDrawStamp(center, width, angleRad, 1, 1),
+    pointOnFlatDrawStamp(center, width, angleRad, -1, 1),
+  ];
+}
+
+function buildFlatNibStampPolygon(center, width, angleDeg) {
+  return nibPolygon(width, DRAW_FLAT_NIB_RATIO, angleDeg).map(([x, y]) => ({
+    x: center.x + x,
+    y: center.y + y,
+  }));
+}
+
+function buildDrawBrushStampCache(stroke) {
+  if (!stroke.brushDirty) return stroke.brushCache;
+  const brush = stroke.brush;
+  const path = getDrawStrokePathPoints(stroke);
+  const step = getDrawBrushStampStepMM(brush);
+  const stamps = [];
+  const pushStamp = (point) => {
+    if (brush.type === "flat") {
+      stamps.push({ kind: "polygon", points: buildFlatNibStampPolygon(point, brush.flatWidthMM, brush.flatAngleDeg) });
+      return;
+    }
+    stamps.push({ kind: "circle", x: point.x, y: point.y, r: getDrawBrushStampRadiusMM(brush) });
+  };
+  if (path.length === 1) {
+    pushStamp(path[0]);
+  } else if (path.length > 1) {
+    pushStamp(path[0]);
+    for (let i = 1; i < path.length; i += 1) {
+      const a = path[i - 1];
+      const b = path[i];
+      const length = drawPointDistance(a, b);
+      const steps = Math.max(1, Math.ceil(length / step));
+      for (let j = 1; j <= steps; j += 1) {
+        pushStamp(lerpPoint(a, b, j / steps));
+      }
+    }
+  }
+  stroke.brushCache = stamps;
+  stroke.brushDirty = false;
+  return stroke.brushCache;
+}
+
+function drawDrawStampGeometry(targetCtx, stamp) {
+  if (stamp.kind === "circle") {
+    targetCtx.beginPath();
+    targetCtx.arc(stamp.x, stamp.y, stamp.r, 0, Math.PI * 2);
+    targetCtx.fill();
+    return;
+  }
+  const points = stamp.points || [];
+  if (!points.length) return;
+  targetCtx.beginPath();
+  targetCtx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) targetCtx.lineTo(points[i].x, points[i].y);
+  targetCtx.closePath();
+  targetCtx.fill();
+}
+
+function withMmScale(targetCtx, fn) {
+  targetCtx.save();
+  const pxPerMM = PaperUtils.getPxPerMM(P);
+  targetCtx.setTransform(pxPerMM, 0, 0, pxPerMM, 0, 0);
+  fn(targetCtx);
+  targetCtx.restore();
+}
+
+function drawDrawStrokeToLayer(layer, stroke) {
+  const layerCtx = layer?.getContext?.("2d");
+  const stamps = buildDrawBrushStampCache(stroke);
+  if (!layerCtx || !stamps.length) return;
+  withMmScale(layerCtx, (scaledCtx) => {
+    scaledCtx.fillStyle = "rgba(17, 17, 17, 0.92)";
+    for (const stamp of stamps) drawDrawStampGeometry(scaledCtx, stamp);
+  });
+}
+
+function drawIncrementalDrawStrokeSegment(layer, stroke, fromPoint, toPoint) {
+  const layerCtx = layer?.getContext?.("2d");
+  const brush = stroke.brush;
+  const step = getDrawBrushStampStepMM(brush);
+  if (!layerCtx) return;
+  withMmScale(layerCtx, (scaledCtx) => {
+    scaledCtx.fillStyle = "rgba(17, 17, 17, 0.92)";
+    if (!fromPoint) {
+      const firstStamp =
+        brush.type === "flat"
+          ? { kind: "polygon", points: buildFlatNibStampPolygon(toPoint, brush.flatWidthMM, brush.flatAngleDeg) }
+          : { kind: "circle", x: toPoint.x, y: toPoint.y, r: getDrawBrushStampRadiusMM(brush) };
+      drawDrawStampGeometry(scaledCtx, firstStamp);
+      return;
+    }
+    const length = drawPointDistance(fromPoint, toPoint);
+    const steps = Math.max(1, Math.ceil(length / step));
+    for (let i = 1; i <= steps; i += 1) {
+      const point = lerpPoint(fromPoint, toPoint, i / steps);
+      drawDrawStampGeometry(
+        scaledCtx,
+        brush.type === "flat"
+          ? { kind: "polygon", points: buildFlatNibStampPolygon(point, brush.flatWidthMM, brush.flatAngleDeg) }
+          : { kind: "circle", x: point.x, y: point.y, r: getDrawBrushStampRadiusMM(brush) },
+      );
+    }
+  });
+}
+
+function rerenderCommittedDrawLayer() {
+  clearDrawLayer(drawState.committedLayer);
+  for (const stroke of drawState.strokes) drawDrawStrokeToLayer(drawState.committedLayer, stroke);
+  drawState.committedDirty = false;
+}
+
+function renderDrawScene() {
+  if (!drawCtx || !drawCanvas) return;
+  if (drawState.committedDirty) rerenderCommittedDrawLayer();
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  if (drawState.committedLayer) drawCtx.drawImage(drawState.committedLayer, 0, 0);
+  if (drawState.activeLayer) drawCtx.drawImage(drawState.activeLayer, 0, 0);
+}
+
+function drawPolylineMM(targetCtx, points, color, widthMM) {
+  if (points.length < 2) return;
+  targetCtx.save();
+  targetCtx.strokeStyle = color;
+  targetCtx.lineWidth = widthMM;
+  targetCtx.beginPath();
+  targetCtx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) targetCtx.lineTo(points[i].x, points[i].y);
+  targetCtx.stroke();
+  targetCtx.restore();
+}
+
+function computeDrawSelectionBounds() {
+  const selected = drawState.strokes.filter((stroke) => drawState.selectedStrokeIds.has(stroke.id));
+  if (!selected.length) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const stroke of selected) {
+    for (const point of stroke.points) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+  }
+  return { minX, minY, maxX, maxY, centerX: (minX + maxX) * 0.5, centerY: (minY + maxY) * 0.5 };
+}
+
+function getDrawTransformHandles(bounds) {
+  return {
+    tl: { x: bounds.minX, y: bounds.minY },
+    tr: { x: bounds.maxX, y: bounds.minY },
+    bl: { x: bounds.minX, y: bounds.maxY },
+    br: { x: bounds.maxX, y: bounds.maxY },
+    rotate: { x: bounds.centerX, y: bounds.minY - 10 },
+  };
+}
+
+function hitTestDrawTransform(pointMm) {
+  const bounds = computeDrawSelectionBounds();
+  if (!bounds) return null;
+  const handles = getDrawTransformHandles(bounds);
+  for (const [name, handle] of Object.entries(handles)) {
+    if (drawPointDistance(pointMm, handle) <= 4) {
+      return { type: name === "rotate" ? "rotate" : "scale", handle: name, bounds };
+    }
+  }
+  if (pointMm.x >= bounds.minX && pointMm.x <= bounds.maxX && pointMm.y >= bounds.minY && pointMm.y <= bounds.maxY) {
+    return { type: "move", bounds };
+  }
+  return null;
+}
+
+function transformDrawPoint(point, centerX, centerY, moveX, moveY, scaleX, scaleY, angle) {
+  let x = point.x - centerX;
+  let y = point.y - centerY;
+  x *= scaleX;
+  y *= scaleY;
+  if (angle !== 0) {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const rx = x * cos - y * sin;
+    const ry = x * sin + y * cos;
+    x = rx;
+    y = ry;
+  }
+  return {
+    x: clamp(centerX + x + moveX, 0, P.canvasWMM),
+    y: clamp(centerY + y + moveY, 0, P.canvasHMM),
+  };
+}
+
+function applyDrawTransformFromState(pointMm) {
+  if (!drawState.transformState) return;
+  const { bounds, anchor, type } = drawState.transformState;
+  const cx = bounds.centerX;
+  const cy = bounds.centerY;
+  let moveX = 0;
+  let moveY = 0;
+  let scaleX = 1;
+  let scaleY = 1;
+  let angle = 0;
+  if (type === "move") {
+    moveX = pointMm.x - anchor.x;
+    moveY = pointMm.y - anchor.y;
+  } else if (type === "rotate") {
+    const startAngle = Math.atan2(anchor.y - cy, anchor.x - cx);
+    const nextAngle = Math.atan2(pointMm.y - cy, pointMm.x - cx);
+    angle = nextAngle - startAngle;
+  } else if (type === "scale") {
+    const sx0 = anchor.x - cx;
+    const sy0 = anchor.y - cy;
+    const sx1 = pointMm.x - cx;
+    const sy1 = pointMm.y - cy;
+    scaleX = Math.abs(sx0) < 0.001 ? 1 : sx1 / sx0;
+    scaleY = Math.abs(sy0) < 0.001 ? 1 : sy1 / sy0;
+    scaleX = Math.sign(scaleX || 1) * Math.max(0.05, Math.abs(scaleX || 1));
+    scaleY = Math.sign(scaleY || 1) * Math.max(0.05, Math.abs(scaleY || 1));
+  }
+  for (const stroke of drawState.strokes) {
+    if (!drawState.selectedStrokeIds.has(stroke.id)) continue;
+    const original = drawState.transformState.snapshot.get(stroke.id);
+    stroke.rawPoints = original.rawPoints.map((point) => transformDrawPoint(point, cx, cy, moveX, moveY, scaleX, scaleY, angle));
+    stroke.points = original.points.map((point) => transformDrawPoint(point, cx, cy, moveX, moveY, scaleX, scaleY, angle));
+    stroke.filtered = stroke.points[stroke.points.length - 1] || stroke.filtered;
+    invalidateDrawStrokeCaches(stroke);
+  }
+  drawState.committedDirty = true;
+}
+
+function drawDrawOverlay() {
+  const bounds = computeDrawSelectionBounds();
+  if (bounds) {
+    for (const stroke of drawState.strokes) {
+      if (drawState.selectedStrokeIds.has(stroke.id)) {
+        drawPolylineMM(ctx, getDrawStrokePathPoints(stroke), "rgba(45, 139, 131, 0.9)", 0.5);
+      }
+    }
+    ctx.save();
+    ctx.setLineDash([2, 1.5]);
+    ctx.strokeStyle = "#2d8b83";
+    ctx.lineWidth = 0.35;
+    ctx.strokeRect(bounds.minX, bounds.minY, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+    ctx.restore();
+    const handles = getDrawTransformHandles(bounds);
+    for (const [name, point] of Object.entries(handles)) {
+      if (name === "rotate") {
+        ctx.beginPath();
+        ctx.moveTo(bounds.centerX, bounds.minY);
+        ctx.lineTo(point.x, point.y);
+        ctx.strokeStyle = "#2d8b83";
+        ctx.lineWidth = 0.25;
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 1.4, 0, Math.PI * 2);
+      ctx.fillStyle = name === "rotate" ? "#2d8b83" : "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#2d8b83";
+      ctx.lineWidth = 0.3;
+      ctx.stroke();
+    }
+  }
+  if (drawState.lassoPoints.length > 1) {
+    ctx.save();
+    ctx.setLineDash([1.8, 1.4]);
+    ctx.strokeStyle = "#2d8b83";
+    ctx.lineWidth = 0.3;
+    ctx.beginPath();
+    ctx.moveTo(drawState.lassoPoints[0].x, drawState.lassoPoints[0].y);
+    for (let i = 1; i < drawState.lassoPoints.length; i += 1) {
+      ctx.lineTo(drawState.lassoPoints[i].x, drawState.lassoPoints[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function pointInDrawPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x;
+    const yi = polygon[i].y;
+    const xj = polygon[j].x;
+    const yj = polygon[j].y;
+    const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function clearDrawSelection() {
+  drawState.selectedStrokeIds.clear();
+  drawState.transformState = null;
+  drawState.lassoPoints = [];
+  updateDrawStatus();
+  requestRender();
+}
+
+function finishDrawLasso() {
+  drawState.selectedStrokeIds.clear();
+  if (drawState.lassoPoints.length >= 3) {
+    for (const stroke of drawState.strokes) {
+      if (stroke.points.some((point) => pointInDrawPolygon(point, drawState.lassoPoints))) {
+        drawState.selectedStrokeIds.add(stroke.id);
+      }
+    }
+  }
+  drawState.lassoPoints = [];
+  if (drawState.selectedStrokeIds.size > 0) {
+    drawUI.tool = "transform";
+    refreshPanes();
+    updateDrawStatus("Selection ready");
+  } else {
+    updateDrawStatus("Nothing selected");
+  }
+  requestRender();
+}
+
+function beginDrawTransform(hit, pointMm) {
+  drawState.transformState = {
+    type: hit.type,
+    handle: hit.handle || null,
+    bounds: hit.bounds,
+    anchor: pointMm,
+    snapshot: new Map(
+      drawState.strokes
+        .filter((stroke) => drawState.selectedStrokeIds.has(stroke.id))
+        .map((stroke) => [
+          stroke.id,
+          {
+            rawPoints: stroke.rawPoints.map((point) => ({ ...point })),
+            points: stroke.points.map((point) => ({ ...point })),
+          },
+        ]),
+    ),
+  };
+}
+
+function finalizeCurrentDrawStroke() {
+  if (!drawState.currentStroke) return;
+  invalidateDrawStrokeCaches(drawState.currentStroke);
+  drawDrawStrokeToLayer(drawState.committedLayer, drawState.currentStroke);
+  clearDrawLayer(drawState.activeLayer);
+  drawState.currentStroke = null;
+  drawState.committedDirty = false;
+}
+
+function beginDrawStroke(point) {
+  drawState.currentStroke = createDrawStroke(point);
+  drawState.strokes.push(drawState.currentStroke);
+  clearDrawLayer(drawState.activeLayer);
+  drawIncrementalDrawStrokeSegment(drawState.activeLayer, drawState.currentStroke, null, point);
+  updateDrawStatus();
+}
+
+function handleDrawMove(point) {
+  if (!drawState.currentStroke) return;
+  drawState.currentStroke.rawPoints.push(point);
+  let filtered = lerpPoint(
+    drawState.currentStroke.filtered,
+    point,
+    clamp(1 - drawState.currentStroke.brush.streamline * 0.45, 0.015, 1),
+  );
+  drawState.currentStroke.filtered = filtered;
+  if (drawState.currentStroke.brush.snapToGrid) {
+    filtered = { x: Math.round(filtered.x / 5) * 5, y: Math.round(filtered.y / 5) * 5 };
+  }
+  const last = drawState.currentStroke.points[drawState.currentStroke.points.length - 1];
+  if (!last || drawPointDistance(last, filtered) >= drawState.currentStroke.brush.minDistanceMM) {
+    drawState.currentStroke.points.push(filtered);
+    invalidateDrawStrokeCaches(drawState.currentStroke);
+    drawIncrementalDrawStrokeSegment(drawState.activeLayer, drawState.currentStroke, last || null, filtered);
+    requestRender();
+  }
+  queueDrawAutoStream();
+}
+
+function handleDrawPenPreview(event) {
+  if (!isPenPointerEvent(event)) return;
+  const point = pointerToMM(event);
+  if (!point) return;
+  drawState.hoverPointer = { pointMm: point, event };
+  updatePenMarkerFromPointer(point, getDrawBrushSnapshot(), event);
+}
+
+function undoLastDrawStroke() {
+  if (!drawState.strokes.length) return;
+  const removed = drawState.strokes.pop();
+  drawState.selectedStrokeIds.delete(removed.id);
+  drawState.committedDirty = true;
+  updateDrawStatus();
+  requestRender();
+  streamIfDrawAutoEnabled();
+}
+
+function clearAllDrawStrokes() {
+  drawState.strokes.length = 0;
+  drawState.selectedStrokeIds.clear();
+  drawState.lassoPoints = [];
+  drawState.transformState = null;
+  clearDrawLayer(drawState.activeLayer);
+  clearDrawLayer(drawState.committedLayer);
+  drawState.committedDirty = false;
+  updateDrawStatus("Cleared");
+  requestRender();
+  streamIfDrawAutoEnabled();
+}
+
+function onDrawPointerDown(event) {
+  const point = pointerToMM(event);
+  if (!point) return;
+  if (isPenPointerEvent(event)) handleDrawPenPreview(event);
+  if (drawUI.tool === "draw") {
+    beginDrawStroke(point);
+  } else if (drawUI.tool === "lasso") {
+    drawState.lassoPoints = [point];
+    updateDrawStatus("Tracing selection");
+  } else if (drawUI.tool === "transform") {
+    const hit = hitTestDrawTransform(point);
+    if (hit) {
+      beginDrawTransform(hit, point);
+      updateDrawStatus(hit.type === "move" ? "Moving selection" : hit.type === "rotate" ? "Rotating selection" : "Scaling selection");
+    } else {
+      clearDrawSelection();
+    }
+  }
+  canvas.setPointerCapture?.(event.pointerId);
+  requestRender();
+}
+
+function onDrawPointerMove(event) {
+  if (isPenPointerEvent(event)) handleDrawPenPreview(event);
+  const sourceEvents =
+    drawState.currentStroke && drawUI.tool === "draw" && typeof event.getCoalescedEvents === "function"
+      ? event.getCoalescedEvents()
+      : [event];
+  if (drawUI.tool === "draw" && drawState.currentStroke) {
+    for (const sourceEvent of sourceEvents) {
+      const point = pointerToMM(sourceEvent);
+      if (!point) continue;
+      handleDrawMove(point);
+    }
+    return;
+  }
+  const point = pointerToMM(event);
+  if (!point) return;
+  if (drawUI.tool === "lasso" && drawState.lassoPoints.length > 0) {
+    const last = drawState.lassoPoints[drawState.lassoPoints.length - 1];
+    if (!last || drawPointDistance(last, point) >= 1) {
+      drawState.lassoPoints.push(point);
+      requestRender();
+    }
+    return;
+  }
+  if (drawUI.tool === "transform" && drawState.transformState) {
+    applyDrawTransformFromState(point);
+    updateDrawStatus();
+    requestRender();
+  }
+}
+
+function onDrawPointerUp(event) {
+  if (drawUI.tool === "draw") {
+    finalizeCurrentDrawStroke();
+    requestRender();
+    streamIfDrawAutoEnabled();
+  } else if (drawUI.tool === "lasso") {
+    finishDrawLasso();
+  } else if (drawUI.tool === "transform" && drawState.transformState) {
+    drawState.transformState = null;
+    requestRender();
+    streamIfDrawAutoEnabled();
+  }
+  if (canvas.hasPointerCapture?.(event.pointerId)) {
+    canvas.releasePointerCapture(event.pointerId);
+  }
+}
+
+function onDrawPointerLeave() {
+  if (drawUI.tool === "draw" && drawState.currentStroke) {
+    finalizeCurrentDrawStroke();
+    requestRender();
+  }
+  hidePenMarker();
+}
+
+function buildDrawPathSvgDocument() {
+  const parts = [];
+  parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+  parts.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(P.canvasWMM)}mm" height="${fmt(P.canvasHMM)}mm" viewBox="0 0 ${fmt(P.canvasWMM)} ${fmt(P.canvasHMM)}">`,
+  );
+  parts.push('<g fill="none" stroke="#000" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round">');
+  for (const stroke of drawState.strokes) {
+    const bezier = buildDrawBezierPathCache(stroke);
+    const d = bezierSegmentsToPathData(bezier.segments);
+    if (d) parts.push(`<path d="${d}"/>`);
+  }
+  parts.push("</g>");
+  parts.push("</svg>");
+  return parts.join("\n");
+}
+
+function polygonToDrawPath(points) {
+  if (!points?.length) return "";
+  const commands = [`M ${fmt(points[0].x)} ${fmt(points[0].y)}`];
+  for (let i = 1; i < points.length; i += 1) commands.push(`L ${fmt(points[i].x)} ${fmt(points[i].y)}`);
+  commands.push("Z");
+  return commands.join(" ");
+}
+
+function buildDrawBrushSvgDocument() {
+  const parts = [];
+  parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+  parts.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(P.canvasWMM)}mm" height="${fmt(P.canvasHMM)}mm" viewBox="0 0 ${fmt(P.canvasWMM)} ${fmt(P.canvasHMM)}">`,
+  );
+  parts.push('<g fill="#000" stroke="none">');
+  for (const stroke of drawState.strokes) {
+    const stamps = buildDrawBrushStampCache(stroke);
+    for (const stamp of stamps) {
+      if (stamp.kind === "circle") {
+        parts.push(`<circle cx="${fmt(stamp.x)}" cy="${fmt(stamp.y)}" r="${fmt(stamp.r)}"/>`);
+      } else {
+        const pathData = polygonToDrawPath(stamp.points);
+        if (pathData) parts.push(`<path d="${pathData}"/>`);
+      }
+    }
+  }
+  parts.push("</g>");
+  parts.push("</svg>");
+  return parts.join("\n");
+}
+
+function buildDrawStreamSvgDocument() {
+  const svgWidth = mmToSvgUnits(P.canvasWMM);
+  const svgHeight = mmToSvgUnits(P.canvasHMM);
+  const parts = [];
+  parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(svgWidth)} ${fmt(svgHeight)}">`);
+  parts.push('<g fill="none" stroke="black" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">');
+  for (const stroke of drawState.strokes) {
+    const bezier = buildDrawBezierPathCache(stroke);
+    const d = bezierSegmentsToStreamPathData(bezier.segments);
+    if (d) parts.push(`<path d="${d}"/>`);
+  }
+  parts.push("</g>");
+  parts.push("</svg>");
+  return parts.join("\n");
+}
+
+function appendDrawStreamPaths(parts) {
+  parts.push('<g fill="none" stroke="black" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">');
+  for (const stroke of drawState.strokes) {
+    const bezier = buildDrawBezierPathCache(stroke);
+    const d = bezierSegmentsToStreamPathData(bezier.segments);
+    if (d) parts.push(`<path d="${d}"/>`);
+  }
+  parts.push("</g>");
+}
+
+function appendTextStreamPaths(parts) {
+  if (!state.currentDoc) return;
+  const doc = state.currentDoc;
+  parts.push('<g fill="none" stroke="black" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">');
+  for (let i = 0; i < state.boxes.length; i++) {
+    const box = state.boxes[i];
+    const layout = cachedLayouts[i] || layoutBox(doc, box);
+    const totalLines = Math.max(layout.lines.length, 1);
+    for (let lineIndex = 0; lineIndex < layout.lines.length; lineIndex++) {
+      const line = layout.lines[lineIndex];
+      const baselineY = box.yMM + box.paddingMM + line.baselineMM;
+      const totalItems = Math.max(line.items.filter((item) => item.glyph).length, 1);
+      let glyphIndex = 0;
+      for (const item of line.items) {
+        if (!item.glyph) continue;
+        const drawX = box.xMM + box.paddingMM + line.offsetMM + item.xMM;
+        const modifier = resolveGlyphModifier(box, lineIndex, totalLines, glyphIndex, totalItems);
+        const transformed = transformGlyphSkeleton(item.glyph, modifier.slantShear, modifier.verticalScale);
+        const tx = mmToSvgUnits(drawX);
+        const ty = mmToSvgUnits(baselineY);
+        const scale = (box.fontSizeMM / UPM) * SVG_UNITS_PER_MM;
+        parts.push(`<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(scale)} ${fmt(-scale)})">`);
+        for (const st of transformed.strokes || []) {
+          const d = strokePathData(st, 3);
+          if (d) parts.push(`<path d="${d}"/>`);
+        }
+        parts.push("</g>");
+        glyphIndex += 1;
+      }
+    }
+  }
+  parts.push("</g>");
+}
+
+function resolveStreamTarget() {
+  if (streamUI.target === "current") return appState.mode === "draw" ? "draw" : "text";
+  return streamUI.target;
+}
+
+function buildTextStreamSvgDocument() {
+  const svgWidth = mmToSvgUnits(P.canvasWMM);
+  const svgHeight = mmToSvgUnits(P.canvasHMM);
+  const parts = [];
+  parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(svgWidth)} ${fmt(svgHeight)}">`);
+  appendTextStreamPaths(parts);
+  parts.push("</svg>");
+  return parts.join("\n");
+}
+
+function buildCombinedStreamSvgDocument() {
+  const svgWidth = mmToSvgUnits(P.canvasWMM);
+  const svgHeight = mmToSvgUnits(P.canvasHMM);
+  const parts = [];
+  parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(svgWidth)} ${fmt(svgHeight)}">`);
+  appendTextStreamPaths(parts);
+  appendDrawStreamPaths(parts);
+  parts.push("</svg>");
+  return parts.join("\n");
+}
+
+function buildStreamSvgDocument() {
+  const target = resolveStreamTarget();
+  if (target === "draw") return buildDrawStreamSvgDocument();
+  if (target === "combined") return buildCombinedStreamSvgDocument();
+  return buildTextStreamSvgDocument();
+}
+
+function exportDrawPathSvg() {
+  ExportUtils.downloadText(buildDrawPathSvgDocument(), "calligraphy-composer-draw-paths.svg", "image/svg+xml");
+}
+
+function exportDrawBrushSvg() {
+  ExportUtils.downloadText(buildDrawBrushSvgDocument(), "calligraphy-composer-draw-brush.svg", "image/svg+xml");
+}
+
+function streamAppNow() {
+  if (!streamState.socket || streamState.socket.readyState !== WebSocket.OPEN) {
+    updateStreamStatus("Socket not connected");
+    return;
+  }
+  streamState.socket.send(
+    JSON.stringify({
+      c: "incoming-svg",
+      p: { svg: buildStreamSvgDocument() },
+    }),
+  );
+  updateStreamStatus(`Streamed at ${new Date().toLocaleTimeString()}`);
+}
+
+function queueAutoStream() {
+  if (!streamUI.autoStream || streamState.streamTimer) return;
+  streamState.streamTimer = setTimeout(() => {
+    streamState.streamTimer = null;
+    streamAppNow();
+  }, 110);
+}
+
+function streamIfAutoEnabled() {
+  if (streamUI.autoStream) streamAppNow();
+}
+
+function queueDrawAutoStream() {
+  queueAutoStream();
+}
+
+function streamIfDrawAutoEnabled() {
+  streamIfAutoEnabled();
+}
+
+function getStreamSocketUrl() {
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const host = String(streamUI.streamHost || "").trim() || "127.0.0.1:9080";
+  const rawPath = String(streamUI.streamPath || "").trim() || "/chat";
+  const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+  return `${protocol}://${host}${path}`;
+}
+
+function disconnectStreamSocket() {
+  if (streamState.reconnectTimer) {
+    window.clearTimeout(streamState.reconnectTimer);
+    streamState.reconnectTimer = null;
+  }
+  if (streamState.socket) {
+    const socket = streamState.socket;
+    streamState.socket = null;
+    try {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      socket.close();
+    } catch (_error) {
+      // Ignore close errors.
+    }
+  }
+  streamState.connected = false;
+  updateStreamStatus("Disconnected");
+}
+
+function reconnectStreamSocket() {
+  disconnectStreamSocket();
+  connectStreamSocket();
+}
+
+function connectStreamSocket() {
+  const socketUrl = getStreamSocketUrl();
+  try {
+    streamState.socket = new WebSocket(socketUrl);
+  } catch (_error) {
+    updateStreamStatus("Socket unavailable");
+    return;
+  }
+  streamState.socket.addEventListener("open", () => {
+    streamState.connected = true;
+    updateStreamStatus("Connected");
+  });
+  streamState.socket.addEventListener("message", (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (
+        msg.c === "plan-options" &&
+        msg.p &&
+        msg.p.paperSize &&
+        Number.isFinite(msg.p.paperSize.x) &&
+        Number.isFinite(msg.p.paperSize.y) &&
+        Number.isFinite(msg.p.marginMm)
+      ) {
+        P.canvasWMM = Math.max(10, Number(msg.p.paperSize.x));
+        P.canvasHMM = Math.max(10, Number(msg.p.paperSize.y));
+        P.marginMM = Math.max(0, Number(msg.p.marginMm));
+        PaperUtils.syncPresetFromSize(P);
+        refreshPanes();
+        syncCanvasSize();
+      }
+    } catch (_error) {
+      // Ignore non-json messages.
+    }
+  });
+  streamState.socket.addEventListener("close", () => {
+    streamState.connected = false;
+    updateStreamStatus("Disconnected");
+    streamState.reconnectTimer = window.setTimeout(() => {
+      streamState.reconnectTimer = null;
+      connectStreamSocket();
+    }, 1000);
+  });
+  streamState.socket.addEventListener("error", () => {
+    streamState.connected = false;
+    updateStreamStatus("Socket error");
+  });
+}
+
 function exportSvg() {
+  if (appState.mode === "draw") {
+    exportDrawBrushSvg();
+    return;
+  }
   if (!state.currentDoc) return;
   const doc = state.currentDoc;
   const svg = [];
@@ -2300,6 +3712,10 @@ function exportSvg() {
 }
 
 function exportPathSvg() {
+  if (appState.mode === "draw") {
+    exportDrawPathSvg();
+    return;
+  }
   if (!state.currentDoc) return;
   const doc = state.currentDoc;
   const filename = P.svgFilename.replace(/\.svg$/i, "-paths.svg");
@@ -2369,6 +3785,14 @@ function strokePathData(st, precision = 3) {
 }
 
 function updateStats() {
+  if (appState.mode === "draw") {
+    const brush = getDrawBrushSnapshot();
+    document.getElementById("stat-active-box").textContent = `${drawState.strokes.length} stroke${drawState.strokes.length === 1 ? "" : "s"}`;
+    document.getElementById("stat-paper").textContent = `${P.canvasWMM} x ${P.canvasHMM} mm`;
+    document.getElementById("stat-font").textContent = `${drawUI.tool} tool`;
+    document.getElementById("stat-nib").textContent = getDrawBrushDisplayLabel(brush);
+    return;
+  }
   const active = getActiveBox();
   const doc = state.currentDoc;
   if (!active || !doc) return;

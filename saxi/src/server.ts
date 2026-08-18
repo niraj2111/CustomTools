@@ -14,14 +14,18 @@ import type { PortInfo } from "@serialport/bindings-interface";
 import cors from "cors";
 import type { Request, Response } from "express";
 import express from "express";
+import { flattenSVG } from "flatten-svg";
+import { createSVGWindow } from "svgdom";
 import type WebSocket from "ws";
 import { WebSocketServer } from "ws";
 import { createMockSerialPort } from "./__tests__/mocks/serialport.js";
 import { EBB, type EBBPort, type Hardware } from "./ebb.js";
-import { type Motion, PenMotion, Plan } from "./planning.js";
+import { PaperSize } from "./paper-size.js";
+import { Device, defaultPlanOptions, type Motion, PenMotion, plan as buildPlan, Plan } from "./planning.js";
 import { SerialPortSerialPort } from "./serialport-serialport.js";
 import * as _self from "./server.js"; // use self-import for test mocking
 import { formatDuration } from "./util.js";
+import { vmul } from "./vec.js";
 
 type Com = string;
 
@@ -36,6 +40,144 @@ const getDeviceInfo = (ebb: EBB | null, _com: Com) => {
   const portPath = (ebb?.port as any)?._path ?? null;
   return { path: portPath, hardware: ebb?.hardware };
 };
+
+type IncomingSvgPayload = {
+  svg: string;
+  paperSize?: { x?: number; y?: number };
+  marginMm?: number;
+};
+
+type PlanOptionsSyncPayload = {
+  paperSize: { x: number; y: number };
+  marginMm: number;
+};
+
+const SVG_UNITS_PER_MM = 96 / 25.4;
+
+function parseSvgRoot(svg: string) {
+  const window = createSVGWindow();
+  window.document.documentElement.innerHTML = svg;
+  const root = window.document.documentElement.firstElementChild;
+  if (root?.nodeName?.toLowerCase() === "svg") return root as SVGElement;
+  return window.document.documentElement;
+}
+
+function dimensionToMm(value: string | null | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const match = /^\s*([0-9]*\.?[0-9]+)\s*(mm|cm|in|px)?\s*$/i.exec(String(value));
+  if (!match) return fallback;
+  const amount = Number(match[1]);
+  const unit = (match[2] || "mm").toLowerCase();
+  if (!Number.isFinite(amount)) return fallback;
+  if (unit === "cm") return amount * 10;
+  if (unit === "in") return amount * 25.4;
+  if (unit === "px") return (amount * 25.4) / 96;
+  return amount;
+}
+
+function parseViewBox(svgRoot: SVGElement): [number, number, number, number] | null {
+  const viewBox = svgRoot.getAttribute("viewBox");
+  if (!viewBox) return null;
+  const nums = viewBox
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
+  if (nums.length !== 4) return null;
+  return [nums[0], nums[1], nums[2], nums[3]];
+}
+
+function inferPaperSize(svgRoot: SVGElement, payload?: IncomingSvgPayload): PaperSize {
+  const payloadX = Number(payload?.paperSize?.x);
+  const payloadY = Number(payload?.paperSize?.y);
+  if (Number.isFinite(payloadX) && Number.isFinite(payloadY) && payloadX > 0 && payloadY > 0) {
+    return new PaperSize({ x: payloadX, y: payloadY });
+  }
+  const widthMm = dimensionToMm(svgRoot.getAttribute("width"), defaultPlanOptions.paperSize.size.x);
+  const heightMm = dimensionToMm(svgRoot.getAttribute("height"), defaultPlanOptions.paperSize.size.y);
+  if (svgRoot.hasAttribute("width") || svgRoot.hasAttribute("height")) {
+    return new PaperSize({ x: widthMm, y: heightMm });
+  }
+  const viewBox = parseViewBox(svgRoot);
+  if (viewBox && viewBox[2] > 0 && viewBox[3] > 0) {
+    return new PaperSize({ x: viewBox[2] / SVG_UNITS_PER_MM, y: viewBox[3] / SVG_UNITS_PER_MM });
+  }
+  return new PaperSize({ x: widthMm, y: heightMm });
+}
+
+function getSvgPointScale(svgRoot: SVGElement, paperSize: PaperSize) {
+  const viewBox = parseViewBox(svgRoot);
+  if (viewBox && viewBox[2] > 0 && viewBox[3] > 0) {
+    return {
+      offsetX: viewBox[0],
+      offsetY: viewBox[1],
+      scaleX: paperSize.size.x / viewBox[2],
+      scaleY: paperSize.size.y / viewBox[3],
+    };
+  }
+  return {
+    offsetX: 0,
+    offsetY: 0,
+    scaleX: 1,
+    scaleY: 1,
+  };
+}
+
+function svgPointToMm(
+  point: { x: number; y: number } | [number, number],
+  pointScale: { offsetX: number; offsetY: number; scaleX: number; scaleY: number },
+) {
+  const x = Array.isArray(point) ? point[0] : point.x;
+  const y = Array.isArray(point) ? point[1] : point.y;
+  return {
+    x: (x - pointScale.offsetX) * pointScale.scaleX,
+    y: (y - pointScale.offsetY) * pointScale.scaleY,
+  };
+}
+
+function composerSvgToPlan(payload: IncomingSvgPayload, hardware: Hardware): Plan {
+  const svgRoot = parseSvgRoot(payload.svg);
+  const flattened = flattenSVG(svgRoot, {});
+  const paperSize = inferPaperSize(svgRoot, payload);
+  const pointScale = getSvgPointScale(svgRoot, paperSize);
+  const mmPaths = flattened
+    .map((path) => path.points.map((point) => svgPointToMm(point, pointScale)))
+    .filter((points) => points.length > 1);
+  const planOptions = {
+    ...defaultPlanOptions,
+    hardware,
+    paperSize,
+    marginMm: Math.max(0, Number(payload.marginMm) || 0),
+    selectedGroupLayers: new Set<string>(),
+    selectedStrokeLayers: new Set<string>(),
+    layerMode: "all" as const,
+    sortPaths: false,
+    fitPage: false,
+    cropToMargins: false,
+  };
+  const device = Device(planOptions.hardware);
+  const steppedPaths = mmPaths.map((points) => points.map((point) => vmul(point, device.stepsPerMm)));
+  return buildPlan(
+    steppedPaths,
+    {
+      penUpPos: device.penPctToPos(planOptions.penUpHeight),
+      penDownPos: device.penPctToPos(planOptions.penDownHeight),
+      penDownProfile: {
+        acceleration: planOptions.penDownAcceleration * device.stepsPerMm,
+        maximumVelocity: planOptions.penDownMaxVelocity * device.stepsPerMm,
+        corneringFactor: planOptions.penDownCorneringFactor * device.stepsPerMm,
+      },
+      penUpProfile: {
+        acceleration: planOptions.penUpAcceleration * device.stepsPerMm,
+        maximumVelocity: planOptions.penUpMaxVelocity * device.stepsPerMm,
+        corneringFactor: 0,
+      },
+      penDropDuration: planOptions.penDropDuration,
+      penLiftDuration: planOptions.penLiftDuration,
+    },
+    vmul(planOptions.penHome, device.stepsPerMm),
+  );
+}
 
 /**
  * Start the express server.
@@ -71,8 +213,54 @@ export async function startServer(
   let signalUnpause: (() => void) | null = null;
   let motionIdx: number | null = null;
   let currentPlan: Plan | null = null;
+  let latestIncomingSvg: string | null = null;
+  let latestPlanOptions: PlanOptionsSyncPayload = {
+    paperSize: {
+      x: defaultPlanOptions.paperSize.size.x,
+      y: defaultPlanOptions.paperSize.size.y,
+    },
+    marginMm: defaultPlanOptions.marginMm,
+  };
   let plotting = false;
   let controller: AbortController | null = null;
+
+  async function executePlan(plan: Plan) {
+    if (plotting) {
+      throw new Error("Plot in progress");
+    }
+    plotting = true;
+    controller = new AbortController();
+    const { signal } = controller;
+    try {
+      currentPlan = plan;
+      console.log(`Received plan of estimated duration ${formatDuration(plan.duration())}`);
+      console.log(ebb !== null ? "Beginning plot..." : "Simulating plot...");
+
+      const begin = Date.now();
+      let wakeLock: { release(): void } | null = null;
+      if (process.platform === "darwin") {
+        try {
+          const { WakeLock } = await import("wake-lock");
+          wakeLock = new WakeLock("saxi plotting");
+        } catch (_error) {
+          console.warn("Couldn't acquire wake lock. Ensure your machine does not sleep during plotting");
+        }
+      } else {
+        console.log("Wake lock not available on this platform. Ensure your machine does not sleep during plotting");
+      }
+      try {
+        const plotEbb = ebb ?? new EBB(createMockSerialPort() as unknown as EBBPort);
+        await doPlot(createPlotter(plotEbb), plan, signal);
+        const end = Date.now();
+        console.log(`Plot took ${formatDuration((end - begin) / 1000)}`);
+      } finally {
+        wakeLock?.release();
+      }
+    } finally {
+      plotting = false;
+      controller = null;
+    }
+  }
 
   wss.on("connection", (ws) => {
     clients.push(ws);
@@ -93,8 +281,31 @@ export async function startServer(
               if (await ebb.supportsSR()) {
                 await ebb.setServoPowerTimeout(10000, true);
               }
-              await ebb.setPenHeight(msg.p.height, msg.p.rate);
+                await ebb.setPenHeight(msg.p.height, msg.p.rate);
             })();
+          }
+          break;
+        case "incoming-svg":
+          if (typeof msg.p?.svg === "string") {
+            latestIncomingSvg = msg.p.svg;
+            broadcast({ c: "incoming-svg", p: { svg: msg.p.svg } });
+          }
+          break;
+        case "plan-options":
+          if (
+            msg.p?.paperSize != null &&
+            Number.isFinite(msg.p.paperSize.x) &&
+            Number.isFinite(msg.p.paperSize.y) &&
+            Number.isFinite(msg.p.marginMm)
+          ) {
+            latestPlanOptions = {
+              paperSize: {
+                x: Number(msg.p.paperSize.x),
+                y: Number(msg.p.paperSize.y),
+              },
+              marginMm: Number(msg.p.marginMm),
+            };
+            broadcast({ c: "plan-options", p: latestPlanOptions });
           }
           break;
         case "changeHardware":
@@ -116,6 +327,12 @@ export async function startServer(
     if (currentPlan !== null) {
       ws.send(JSON.stringify({ c: "plan", p: { motions: currentPlan.toTransferable() } }));
     }
+    if (latestPlanOptions != null) {
+      ws.send(JSON.stringify({ c: "plan-options", p: latestPlanOptions }));
+    }
+    if (latestIncomingSvg != null) {
+      ws.send(JSON.stringify({ c: "incoming-svg", p: { svg: latestIncomingSvg } }));
+    }
 
     ws.on("close", () => {
       clients = clients.filter((w) => w !== ws);
@@ -126,49 +343,34 @@ export async function startServer(
    * /plot POST endpoint. Receive a plan on the POST body, and execute it.
    */
   app.post("/plot", async (req: Request, res: Response) => {
-    if (plotting) {
-      console.log("Received plot request, but a plot is already in progress!");
-      res.status(400).send("Plot in progress");
-      return;
-    }
-    plotting = true;
-    controller = new AbortController();
-    const { signal } = controller;
     try {
       const plan = Plan.deserialize(req.body);
-      currentPlan = plan;
-      console.log(`Received plan of estimated duration ${formatDuration(plan.duration())}`);
-      console.log(ebb !== null ? "Beginning plot..." : "Simulating plot...");
       res.status(200).end();
-
-      const begin = Date.now();
-      let wakeLock: { release(): void } | null = null;
-
-      // The wake-lock module is macOS-only.
-      if (process.platform === "darwin") {
-        try {
-          // Dynamically import wake-lock only on macOS
-          const { WakeLock } = await import("wake-lock");
-          wakeLock = new WakeLock("saxi plotting");
-        } catch (_error) {
-          console.warn("Couldn't acquire wake lock. Ensure your machine does not sleep during plotting");
-        }
-      } else {
-        console.log("Wake lock not available on this platform. Ensure your machine does not sleep during plotting");
+      await executePlan(plan);
+    } catch (error) {
+      const nextError = error instanceof Error ? error.message : String(error);
+      if (!res.headersSent) {
+        res.status(nextError === "Plot in progress" ? 400 : 500).send(nextError);
       }
-      try {
-        const plotEbb = ebb ?? new EBB(createMockSerialPort() as unknown as EBBPort);
-        await doPlot(createPlotter(plotEbb), plan, signal);
-        const end = Date.now();
-        console.log(`Plot took ${formatDuration((end - begin) / 1000)}`);
-      } finally {
-        if (wakeLock) {
-          wakeLock.release();
-        }
+      if (nextError !== "Plot in progress") {
+        console.error(nextError);
       }
-    } finally {
-      plotting = false;
-      controller = null;
+    }
+  });
+
+  app.post("/incoming-svg", async (req: Request, res: Response) => {
+    try {
+      if (typeof req.body?.svg === "string") {
+        latestIncomingSvg = req.body.svg;
+        broadcast({ c: "incoming-svg", p: { svg: req.body.svg } });
+      }
+      res.status(200).end();
+    } catch (error) {
+      const nextError = error instanceof Error ? error.message : String(error);
+      if (!res.headersSent) {
+        res.status(500).send(nextError);
+      }
+      console.error(`Error processing incoming SVG: ${nextError}`);
     }
   });
 

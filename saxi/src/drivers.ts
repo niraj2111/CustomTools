@@ -7,6 +7,11 @@ export interface DeviceInfo {
   svgIoEnabled: boolean;
 }
 
+export interface PlanOptionsSyncPayload {
+  paperSize: { x: number; y: number };
+  marginMm: number;
+}
+
 /**
  * Driver interface for the Axi machine.
  */
@@ -21,6 +26,14 @@ export abstract class BaseDriver {
    * Called when plan loaded
    */
   public onplan: (plan: Plan) => void = () => {};
+  /**
+   * Called when an SVG string is streamed into saxi over websocket.
+   */
+  public onincomingSvg: (svg: string) => void = () => {};
+  /**
+   * Called when plan options are broadcast for stream-input synchronization.
+   */
+  public onplanOptions: (payload: PlanOptionsSyncPayload) => void = () => {};
 
   abstract plot(plan: Plan): void;
   abstract cancel(): void;
@@ -237,6 +250,23 @@ export class SaxiDriver extends BaseDriver {
         case "plan": {
           this.onplan(Plan.fromTransferable(msg.p.motions));
         } break;
+        case "incoming-svg": {
+          if (typeof msg.p?.svg === "string") {
+            this.onincomingSvg(msg.p.svg);
+          }
+        } break;
+        case "plan-options": {
+          const paper = msg.p?.paperSize;
+          const margin = msg.p?.marginMm;
+          if (
+            paper != null &&
+            Number.isFinite(paper.x) &&
+            Number.isFinite(paper.y) &&
+            Number.isFinite(margin)
+          ) {
+            this.onplanOptions({ paperSize: { x: Number(paper.x), y: Number(paper.y) }, marginMm: Number(margin) });
+          }
+        } break;
         default: {
           console.log("Unknown message from server:", msg);
         } break;
@@ -295,5 +325,13 @@ export class SaxiDriver extends BaseDriver {
   }
   public ping() {
     this.send({ c: "ping" });
+  }
+
+  public streamSvg(svg: string) {
+    this.send({ c: "incoming-svg", p: { svg } });
+  }
+
+  public sendPlanOptions(payload: PlanOptionsSyncPayload) {
+    this.send({ c: "plan-options", p: payload });
   }
 }
