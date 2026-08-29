@@ -1254,30 +1254,43 @@ function buildSpineGestureSchedule(baseRadius, bendSign, options = {}) {
   };
 }
 
-function appendSpineTransitionBridge(arcs, P, T, sign, hostRadius, targetRadius, options = {}) {
-  const decay = Math.max(0.58, Math.min(0.86, params.decay));
+function buildSpineTerminalSchedule(hostRadius, targetRadius, options = {}) {
   const role = options.role ?? "support";
   const isCorner = options.isCorner ?? false;
-  const leadInFactor = role === "hero" ? 1.06 : role === "support" ? 1 : 0.94;
-  const bridgeRadii = [
-    Math.max(targetRadius * 2.3 * leadInFactor, lerp(hostRadius, targetRadius, 0.18)),
-    Math.max(targetRadius * 1.74 * leadInFactor, lerp(hostRadius, targetRadius, 0.38)),
-    Math.max(targetRadius * 1.28 * leadInFactor, lerp(hostRadius, targetRadius, 0.58)),
-    Math.max(targetRadius * 1.04, targetRadius / decay),
+  const hasReversal = options.hasReversal ?? false;
+  const leadFactor =
+    role === "hero" ? 1.14 : role === "support" ? 1 : 0.92;
+  const targetLead = Math.max(targetRadius * 1.08, targetRadius / Math.max(0.58, Math.min(0.9, params.decay)));
+  const baseRadii = [
+    Math.max(targetRadius * 2.6 * leadFactor, lerp(hostRadius, targetRadius, 0.24)),
+    Math.max(targetRadius * 2.05 * leadFactor, lerp(hostRadius, targetRadius, 0.42)),
+    Math.max(targetRadius * 1.62 * leadFactor, lerp(hostRadius, targetRadius, 0.6)),
+    Math.max(targetRadius * 1.28 * leadFactor, lerp(hostRadius, targetRadius, 0.76)),
+    Math.max(targetLead, targetRadius * 1.06),
   ];
-  const bridgeSweeps = isCorner
-    ? [rnd(0.06, 0.1), rnd(0.08, 0.12), rnd(0.1, 0.14), rnd(0.12, 0.18)]
-    : [rnd(0.07, 0.11), rnd(0.09, 0.13), rnd(0.11, 0.16), rnd(0.16, 0.22)];
+  const radii = hasReversal ? baseRadii.slice(1) : baseRadii;
+  const sweeps = isCorner
+    ? [rnd(0.08, 0.12), rnd(0.1, 0.14), rnd(0.12, 0.17), rnd(0.14, 0.2), rnd(0.16, 0.22)]
+    : [rnd(0.1, 0.14), rnd(0.12, 0.17), rnd(0.14, 0.2), rnd(0.16, 0.22), rnd(0.18, 0.24)];
+  return radii.map((radius, index) => ({
+    radius,
+    sweep: sweeps[Math.min(index, sweeps.length - 1)],
+  }));
+}
+
+function appendSpineTerminal(arcs, P, T, sign, hostRadius, targetRadius, options = {}) {
+  const schedule = buildSpineTerminalSchedule(hostRadius, targetRadius, options);
   let phase = { P, T };
   const transitionStartIndex = arcs.length;
-  for (let i = 0; i < bridgeRadii.length; i++) {
-    phase = appendPlannedArc(arcs, phase.P, phase.T, sign, bridgeRadii[i], bridgeSweeps[i]);
+  for (const step of schedule) {
+    phase = appendPlannedArc(arcs, phase.P, phase.T, sign, step.radius, step.sweep);
   }
   return {
     P: phase.P,
     T: phase.T,
     transitionStartIndex,
     transitionIndex: arcs.length - 1,
+    entryRadius: schedule.length ? schedule[schedule.length - 1].radius : targetRadius,
   };
 }
 
@@ -1364,16 +1377,16 @@ function buildGestureStemCandidate(config) {
     P = phase.P;
     Tc = phase.T;
   }
-
-  const bodyEndIndex = arcs.length - 1;
+  const bodyEndIndex = Math.max(0, arcs.length - 2);
   const hostRadius = arcs[arcs.length - 1].r;
   const closingRadius = Math.max(
     su(isCorner ? 20 : 18) * rootScale,
     Math.min(su(role === "hero" ? 40 : 36) * rootScale, hostRadius * (schedule.hasReversal ? 0.38 : 0.32))
   );
-  const bridge = appendSpineTransitionBridge(arcs, P, Tc, schedule.curlSign, hostRadius, closingRadius, {
+  const terminal = appendSpineTerminal(arcs, P, Tc, schedule.curlSign, hostRadius, closingRadius, {
     role,
     isCorner,
+    hasReversal: schedule.hasReversal,
   });
   const spiralTurns =
     role === "hero"
@@ -1382,10 +1395,10 @@ function buildGestureStemCandidate(config) {
         ? terminalQuarterTurns(schedule.hasReversal, "spine-support")
         : terminalQuarterTurns(schedule.hasReversal, "spine");
   const sp = spiralArcs(
-    bridge.P[0],
-    bridge.P[1],
-    bridge.T[0],
-    bridge.T[1],
+    terminal.P[0],
+    terminal.P[1],
+    terminal.T[0],
+    terminal.T[1],
     schedule.curlSign,
     closingRadius,
     params.decay,
@@ -1396,9 +1409,9 @@ function buildGestureStemCandidate(config) {
   return {
     arcs,
     bodyEndIndex,
-    transitionStartIndex: bridge.transitionStartIndex,
-    transitionIndex: bridge.transitionIndex,
-    terminalStartIndex: bridge.transitionIndex + 1,
+    transitionStartIndex: terminal.transitionStartIndex,
+    transitionIndex: terminal.transitionIndex,
+    terminalStartIndex: terminal.transitionIndex + 1,
     spiral: sp,
     closingRadius,
     hasReversal: schedule.hasReversal,
