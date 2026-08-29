@@ -22,6 +22,8 @@ let presetGeneralControlBlades = [];
 let presetActionBlades = [];
 let defaultSpringFolder;
 let spineStyles = [];
+let spineSourceSegments = [[]];
+let spineDisplayMappings = [[]];
 let activeSpineIdx = 0;
 let hoveredAnchorIndex = -1;
 let draggedAnchorIndex = -1;
@@ -87,6 +89,8 @@ const P = {
   presetInsetMM: 20,
   presetCols: 8,
   presetRows: 10,
+  presetMirrorVertical: false,
+  presetMirrorHorizontal: false,
   presetSeed: 42,
   presetPointCount: 64,
   presetTurnBias: 1.35,
@@ -129,6 +133,8 @@ const spinePoints = [];
 
 function setup() {
   spineStyles = [createSpineStyle()];
+  spineSourceSegments = [[]];
+  rebuildDisplayedSpinesFromSources();
   activeSpineIdx = 0;
   const size = getCanvasPixelSize();
   cnv = createCanvas(size.width, size.height);
@@ -208,12 +214,14 @@ function mousePressed() {
     return;
   }
 
-  const last = getLastSpinePoint();
+  const sourcePoints = getSourceSegment(activeSpineIdx);
+  const last = sourcePoints[sourcePoints.length - 1] || null;
   if (last && nearlyEqual(last.x, point.x) && nearlyEqual(last.y, point.y)) {
     return;
   }
 
-  spinePoints.push(point);
+  sourcePoints.push(copyPoint(point));
+  rebuildDisplayedSpinesFromSources();
   invalidateGeometry();
   refreshAnchorMonitor();
   redraw();
@@ -239,8 +247,17 @@ function mouseDragged() {
     return;
   }
 
-  spinePoints[draggedAnchorIndex] = point;
-  draggedAnchorMeta.flatIdx = draggedAnchorIndex;
+  const sourcePoints = getSourceSegment(draggedAnchorMeta.spineIdx);
+  if (!sourcePoints[draggedAnchorMeta.sourceIndex]) {
+    return;
+  }
+
+  sourcePoints[draggedAnchorMeta.sourceIndex] = unmirrorDisplayPoint(
+    point,
+    draggedAnchorMeta.mirrorVertical,
+    draggedAnchorMeta.mirrorHorizontal
+  );
+  rebuildDisplayedSpinesFromSources();
   updateHoveredAnchor();
   invalidateGeometry();
   redraw();
@@ -302,9 +319,12 @@ function keyPressed() {
     return;
   }
 
-  selectedAnchorIndices.delete(hoveredAnchorIndex);
-  shiftSelectedIndicesAfterRemoval(hoveredAnchorIndex);
-  spinePoints.splice(hoveredAnchorIndex, 1);
+  const sourcePoints = getSourceSegment(hoveredAnchorMeta.spineIdx);
+  if (hoveredAnchorMeta.sourceIndex >= 0 && hoveredAnchorMeta.sourceIndex < sourcePoints.length) {
+    sourcePoints.splice(hoveredAnchorMeta.sourceIndex, 1);
+  }
+  rebuildDisplayedSpinesFromSources();
+  selectedAnchorIndices = new Set();
   hoveredAnchorIndex = -1;
   draggedAnchorIndex = -1;
   hoveredAnchorMeta = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
@@ -320,12 +340,16 @@ function applyPreset() {
     return;
   }
 
-  const nextPoints = buildPresetPoints(P.presetMode);
-  if (!nextPoints) {
+  const presetResult = buildPresetPoints(P.presetMode);
+  if (!presetResult) {
     return;
   }
 
-  replaceActiveSpinePoints(nextPoints);
+  if (presetResult && typeof presetResult === "object" && Array.isArray(presetResult.spines)) {
+    replaceAllSpines(presetResult.spines, presetResult.styles);
+  } else {
+    replaceActiveSpinePoints(presetResult);
+  }
   selectedAnchorIndices = new Set();
   marqueeSelection = null;
   hoveredAnchorIndex = -1;
@@ -823,10 +847,161 @@ function buildPresetPoints(mode) {
       return buildTreePreset();
     case "hamiltonian":
       return buildHamiltonianPreset();
+    case "subdivision":
+      return buildSubdivisionPreset();
     case "none":
     default:
       return null;
   }
+}
+
+function applyPresetSymmetry(points) {
+  if (!Array.isArray(points) || points.length === 0) {
+    return points;
+  }
+
+  const mirrorVertical = !!P.presetMirrorVertical;
+  const mirrorHorizontal = !!P.presetMirrorHorizontal;
+  if (!mirrorVertical && !mirrorHorizontal) {
+    return points;
+  }
+
+  const basePoints = points.map(copyPoint);
+  const variants = [{ mirrorX: false, mirrorY: false }];
+
+  if (mirrorVertical) {
+    variants.push({ mirrorX: true, mirrorY: false });
+  }
+  if (mirrorVertical && mirrorHorizontal) {
+    variants.push({ mirrorX: true, mirrorY: true });
+  }
+  if (mirrorHorizontal) {
+    variants.push({ mirrorX: false, mirrorY: true });
+  }
+
+  const mirrored = [];
+  for (let i = 0; i < variants.length; i += 1) {
+    const variant = variants[i];
+    const source = i % 2 === 0 ? basePoints : basePoints.slice().reverse();
+    for (const point of source) {
+      mirrored.push(mirrorPresetPoint(point, variant.mirrorX, variant.mirrorY));
+    }
+  }
+
+  return snapPresetPoints(removeSequentialDuplicates(mirrored));
+}
+
+function mirrorPresetPoint(point, mirrorVertical, mirrorHorizontal) {
+  return {
+    x: mirrorVertical ? P.canvasWMM - point.x : point.x,
+    y: mirrorHorizontal ? P.canvasHMM - point.y : point.y,
+  };
+}
+
+function unmirrorDisplayPoint(point, mirrorVertical, mirrorHorizontal) {
+  return {
+    x: constrain(mirrorVertical ? P.canvasWMM - point.x : point.x, 0, P.canvasWMM),
+    y: constrain(mirrorHorizontal ? P.canvasHMM - point.y : point.y, 0, P.canvasHMM),
+  };
+}
+
+function getSymmetryVariants() {
+  const variants = [{ mirrorVertical: false, mirrorHorizontal: false }];
+  if (P.presetMirrorVertical) {
+    variants.push({ mirrorVertical: true, mirrorHorizontal: false });
+  }
+  if (P.presetMirrorVertical && P.presetMirrorHorizontal) {
+    variants.push({ mirrorVertical: true, mirrorHorizontal: true });
+  }
+  if (P.presetMirrorHorizontal) {
+    variants.push({ mirrorVertical: false, mirrorHorizontal: true });
+  }
+  return variants;
+}
+
+function appendDisplayPointIfDistinct(points, mappings, point, mapping) {
+  const last = points[points.length - 1];
+  if (!last || !nearlyEqual(last.x, point.x) || !nearlyEqual(last.y, point.y)) {
+    points.push(copyPoint(point));
+    mappings.push({ ...mapping });
+  }
+}
+
+function buildDisplayedSegmentFromSource(sourcePoints) {
+  const source = Array.isArray(sourcePoints) ? sourcePoints.map(copyPoint) : [];
+  const variants = getSymmetryVariants();
+  const points = [];
+  const mappings = [];
+
+  for (let variantIndex = 0; variantIndex < variants.length; variantIndex += 1) {
+    const variant = variants[variantIndex];
+    const reverse = variantIndex % 2 === 1;
+    for (let i = 0; i < source.length; i += 1) {
+      const sourceIndex = reverse ? source.length - 1 - i : i;
+      const mirrored = mirrorPresetPoint(
+        source[sourceIndex],
+        variant.mirrorVertical,
+        variant.mirrorHorizontal
+      );
+      appendDisplayPointIfDistinct(points, mappings, mirrored, {
+        sourceIndex,
+        mirrorVertical: variant.mirrorVertical,
+        mirrorHorizontal: variant.mirrorHorizontal,
+      });
+    }
+  }
+
+  return { points, mappings };
+}
+
+function rebuildDisplayedSpinesFromSources() {
+  spinePoints.length = 0;
+  spineDisplayMappings = [];
+
+  for (let spineIdx = 0; spineIdx < spineSourceSegments.length; spineIdx += 1) {
+    const { points, mappings } = buildDisplayedSegmentFromSource(spineSourceSegments[spineIdx]);
+    spineDisplayMappings.push(mappings);
+    if (points.length === 0) {
+      continue;
+    }
+    if (spinePoints.length > 0) {
+      spinePoints.push(null);
+    }
+    spinePoints.push(...points);
+  }
+}
+
+function getSourceSegment(spineIdx) {
+  while (spineSourceSegments.length <= spineIdx) {
+    spineSourceSegments.push([]);
+  }
+  return spineSourceSegments[spineIdx];
+}
+
+function getDisplayMetaForSpineAnchor(spineIdx, anchorIdx) {
+  const spineMappings = spineDisplayMappings[spineIdx];
+  if (!spineMappings || anchorIdx < 0 || anchorIdx >= spineMappings.length) {
+    return null;
+  }
+  return spineMappings[anchorIdx];
+}
+
+function getDisplayMetaForFlatIndex(flatIdx) {
+  let spineIdx = 0;
+  let anchorIdx = 0;
+  for (let i = 0; i < spinePoints.length; i += 1) {
+    const point = spinePoints[i];
+    if (point === null) {
+      spineIdx += 1;
+      anchorIdx = 0;
+      continue;
+    }
+    if (i === flatIdx) {
+      return getDisplayMetaForSpineAnchor(spineIdx, anchorIdx);
+    }
+    anchorIdx += 1;
+  }
+  return null;
 }
 
 function buildSpaceFillPreset() {
@@ -1072,6 +1247,121 @@ function buildHamiltonianPreset() {
 
   solve(0, 0);
   return snapPresetPoints(path);
+}
+
+function buildSubdivisionPreset() {
+  const inset = getPresetInset();
+  const minX = inset;
+  const minY = inset;
+  const maxX = Math.max(minX + 10, P.canvasWMM - inset);
+  const maxY = Math.max(minY + 10, P.canvasHMM - inset);
+  const targetSpines = Math.max(2, Math.floor(P.presetPointCount));
+  const minSpan = Math.max(8, Math.min(40, Math.min(maxX - minX, maxY - minY) * 0.12));
+  const rng = mulberry32(Math.floor(P.presetSeed));
+  const rects = [{ x: minX, y: minY, w: maxX - minX, h: maxY - minY }];
+
+  while (rects.length < targetSpines) {
+    let splitIndex = -1;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < rects.length; i += 1) {
+      const rect = rects[i];
+      const canSplitHorizontally = rect.h >= minSpan * 2;
+      const canSplitVertically = rect.w >= minSpan * 2;
+      if (!canSplitHorizontally && !canSplitVertically) {
+        continue;
+      }
+
+      const aspect = Math.max(rect.w, rect.h) / Math.max(1, Math.min(rect.w, rect.h));
+      const area = rect.w * rect.h;
+      const score = area * (1 + (aspect - 1) * 0.12) + rng() * 0.001;
+      if (score > bestScore) {
+        bestScore = score;
+        splitIndex = i;
+      }
+    }
+
+    if (splitIndex < 0) {
+      break;
+    }
+
+    const rect = rects.splice(splitIndex, 1)[0];
+    const splitVerticalPreferred = rect.w >= rect.h;
+    const canSplitHorizontally = rect.h >= minSpan * 2;
+    const canSplitVertically = rect.w >= minSpan * 2;
+    let splitVertical = splitVerticalPreferred;
+
+    if (!canSplitVertically) {
+      splitVertical = false;
+    } else if (!canSplitHorizontally) {
+      splitVertical = true;
+    } else if (rng() < 0.22) {
+      splitVertical = !splitVerticalPreferred;
+    }
+
+    if (splitVertical) {
+      const split = rect.x + rect.w * (0.35 + rng() * 0.3);
+      rects.push(
+        { x: rect.x, y: rect.y, w: split - rect.x, h: rect.h },
+        { x: split, y: rect.y, w: rect.x + rect.w - split, h: rect.h }
+      );
+    } else {
+      const split = rect.y + rect.h * (0.35 + rng() * 0.3);
+      rects.push(
+        { x: rect.x, y: rect.y, w: rect.w, h: split - rect.y },
+        { x: rect.x, y: split, w: rect.w, h: rect.y + rect.h - split }
+      );
+    }
+  }
+
+  const spineEntries = rects
+    .map((rect) => buildSubdivisionSpine(rect, rng))
+    .filter((entry) => entry && Array.isArray(entry.points) && entry.points.length >= 2)
+    .map((entry) => ({
+      points: snapPresetPoints(entry.points),
+      style: {
+        blackLetterAngleDeg: entry.horizontal ? 90 : 0,
+      },
+    }));
+
+  return spineEntries.length > 0
+    ? {
+        spines: spineEntries.map((entry) => entry.points),
+        styles: spineEntries.map((entry) => entry.style),
+      }
+    : null;
+}
+
+function buildSubdivisionSpine(rect, rng) {
+  const centerX = rect.x + rect.w * 0.5;
+  const centerY = rect.y + rect.h * 0.5;
+  const wide = rect.w >= rect.h;
+  const tall = rect.h > rect.w;
+  let horizontal = wide;
+
+  if (!wide && !tall) {
+    horizontal = rng() < 0.5;
+  } else if (rng() < 0.18) {
+    horizontal = !horizontal;
+  }
+
+  if (horizontal) {
+    return {
+      horizontal: true,
+      points: [
+        { x: rect.x, y: centerY },
+        { x: rect.x + rect.w, y: centerY },
+      ],
+    };
+  }
+
+  return {
+    horizontal: false,
+    points: [
+      { x: centerX, y: rect.y },
+      { x: centerX, y: rect.y + rect.h },
+    ],
+  };
 }
 
 function buildTreePreset() {
@@ -2155,17 +2445,34 @@ function handleArrowKeyMove() {
   }
 
   const orderedIndices = Array.from(selectedAnchorIndices).sort((a, b) => a - b);
+  const updates = new Map();
+
   for (const index of orderedIndices) {
-    const point = spinePoints[index];
+    const displayMeta = getDisplayMetaForFlatIndex(index);
+    if (!displayMeta) {
+      continue;
+    }
+    const sourceDx = displayMeta.mirrorVertical ? -dx : dx;
+    const sourceDy = displayMeta.mirrorHorizontal ? -dy : dy;
+    const existing = updates.get(displayMeta.sourceIndex) || { dx: 0, dy: 0 };
+    existing.dx += sourceDx;
+    existing.dy += sourceDy;
+    updates.set(displayMeta.sourceIndex, existing);
+  }
+
+  const sourcePoints = getSourceSegment(activeSpineIdx);
+  for (const [sourceIndex, delta] of updates.entries()) {
+    const point = sourcePoints[sourceIndex];
     if (!point) {
       continue;
     }
-    spinePoints[index] = {
-      x: constrain(point.x + dx, 0, P.canvasWMM),
-      y: constrain(point.y + dy, 0, P.canvasHMM),
+    sourcePoints[sourceIndex] = {
+      x: constrain(point.x + delta.dx, 0, P.canvasWMM),
+      y: constrain(point.y + delta.dy, 0, P.canvasHMM),
     };
   }
 
+  rebuildDisplayedSpinesFromSources();
   invalidateGeometry();
   refreshAnchorMonitor();
   redraw();
@@ -2192,12 +2499,26 @@ function updateHoveredAnchor() {
 function findHoveredAnchorMeta() {
   const point = getMousePointMM();
   if (!point) {
-    return { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+    return {
+      spineIdx: -1,
+      anchorIdx: -1,
+      flatIdx: -1,
+      sourceIndex: -1,
+      mirrorVertical: false,
+      mirrorHorizontal: false,
+    };
   }
 
   const threshold = Math.max(P.hoverRadiusMM, P.anchorRadiusMM);
   const thresholdSq = threshold * threshold;
-  let closest = { spineIdx: -1, anchorIdx: -1, flatIdx: -1 };
+  let closest = {
+    spineIdx: -1,
+    anchorIdx: -1,
+    flatIdx: -1,
+    sourceIndex: -1,
+    mirrorVertical: false,
+    mirrorHorizontal: false,
+  };
   let closestDistSq = Infinity;
   let spineIdx = 0;
   let anchorIdx = 0;
@@ -2213,7 +2534,15 @@ function findHoveredAnchorMeta() {
     const dy = anchor.y - point.y;
     const distSq = dx * dx + dy * dy;
     if (distSq <= thresholdSq && distSq < closestDistSq) {
-      closest = { spineIdx, anchorIdx, flatIdx: i };
+      const displayMeta = getDisplayMetaForSpineAnchor(spineIdx, anchorIdx);
+      closest = {
+        spineIdx,
+        anchorIdx,
+        flatIdx: i,
+        sourceIndex: displayMeta ? displayMeta.sourceIndex : anchorIdx,
+        mirrorVertical: displayMeta ? displayMeta.mirrorVertical : false,
+        mirrorHorizontal: displayMeta ? displayMeta.mirrorHorizontal : false,
+      };
       closestDistSq = distSq;
     }
     anchorIdx += 1;
@@ -2328,6 +2657,7 @@ function buildPane() {
         seedFill: "seedFill",
         tree: "tree",
         hamiltonian: "hamiltonian",
+        subdivision: "subdivision",
       },
       label: "Preset",
     })
@@ -2358,6 +2688,8 @@ function buildPane() {
       step: 1,
       label: "Rows",
     }),
+    presetFolder.addInput(P, "presetMirrorVertical", { label: "Vertical Sym" }),
+    presetFolder.addInput(P, "presetMirrorHorizontal", { label: "Horizontal Sym" }),
     presetFolder.addInput(P, "presetSeed", {
       min: 0,
       max: 999999,
@@ -2476,8 +2808,10 @@ function buildPane() {
 
   pane.on("change", () => {
     syncPaperPresetFromSize();
+    rebuildDisplayedSpinesFromSources();
     invalidateGeometry();
     syncCanvasSize();
+    refreshAnchorMonitor();
     redraw();
   });
 }
@@ -2811,27 +3145,16 @@ function getSpineSegments() {
   return segments;
 }
 
-function getLastSpinePoint() {
-  for (let i = spinePoints.length - 1; i >= 0; i -= 1) {
-    if (spinePoints[i]) {
-      return spinePoints[i];
-    }
-    if (spinePoints[i] === null) {
-      break;
-    }
-  }
-  return null;
-}
-
 function startNewSpine() {
-  const last = spinePoints[spinePoints.length - 1];
-  const hasAnyPoints = spinePoints.some(Boolean);
-  if (!hasAnyPoints || last === null) {
+  const activeSource = getSourceSegment(activeSpineIdx);
+  const hasAnyPoints = spineSourceSegments.some((segment) => segment.length > 0);
+  if (!hasAnyPoints || activeSource.length === 0) {
     return;
   }
 
-  spinePoints.push(null);
+  spineSourceSegments.push([]);
   spineStyles.push(createSpineStyle());
+  rebuildDisplayedSpinesFromSources();
   activeSpineIdx = spineStyles.length - 1;
   selectedAnchorIndices = new Set();
   hoveredAnchorIndex = -1;
@@ -2844,22 +3167,14 @@ function startNewSpine() {
 }
 
 function removeLastSpinePoint() {
-  while (spinePoints.length > 0 && spinePoints[spinePoints.length - 1] === null) {
-    spinePoints.pop();
-  }
-
-  if (spinePoints.length === 0) {
+  const sourcePoints = getSourceSegment(activeSpineIdx);
+  if (sourcePoints.length === 0) {
     return;
   }
 
-  const removedIndex = spinePoints.length - 1;
-  spinePoints.pop();
-  selectedAnchorIndices.delete(removedIndex);
-  shiftSelectedIndicesAfterRemoval(removedIndex);
-
-  while (spinePoints.length > 0 && spinePoints[spinePoints.length - 1] === null) {
-    spinePoints.pop();
-  }
+  sourcePoints.pop();
+  rebuildDisplayedSpinesFromSources();
+  selectedAnchorIndices = new Set();
   syncSpineStylesWithSegments();
 }
 
@@ -3018,7 +3333,7 @@ function applyDefaultSpringSettingsToStyle(style) {
 }
 
 function setActiveSpine(index) {
-  const segmentCount = getSpineSegments().length;
+  const segmentCount = Math.max(1, spineSourceSegments.length);
   activeSpineIdx = constrain(index, 0, Math.max(0, segmentCount - 1));
   selectedAnchorIndices = new Set();
   hoveredAnchorIndex = -1;
@@ -3030,7 +3345,7 @@ function setActiveSpine(index) {
 }
 
 function syncSpineStylesWithSegments() {
-  const segmentCount = getSpineSegments().length;
+  const segmentCount = Math.max(1, spineSourceSegments.length);
   while (spineStyles.length < segmentCount) {
     spineStyles.push(createSpineStyle());
   }
@@ -3041,44 +3356,39 @@ function syncSpineStylesWithSegments() {
 }
 
 function replaceActiveSpinePoints(nextPoints) {
-  const replacement = Array.isArray(nextPoints) ? nextPoints.map(copyPoint) : [];
-  const range = getFlatRangeForSpine(activeSpineIdx);
-  if (!range) {
-    spinePoints.length = 0;
-    spinePoints.push(...replacement);
-    return;
-  }
+  spineSourceSegments[activeSpineIdx] = Array.isArray(nextPoints) ? nextPoints.map(copyPoint) : [];
+  rebuildDisplayedSpinesFromSources();
+}
 
-  const before = spinePoints.slice(0, range.start);
-  const after = spinePoints.slice(range.end + 1);
-  spinePoints.length = 0;
-  spinePoints.push(...before, ...replacement, ...after);
+function replaceAllSpines(nextSegments, nextStyles = []) {
+  const cleanedSegments = Array.isArray(nextSegments)
+    ? nextSegments
+        .map((segment) => (Array.isArray(segment) ? segment.map(copyPoint) : []))
+        .filter((segment) => segment.length > 0)
+    : [];
+
+  spineSourceSegments = cleanedSegments.length > 0 ? cleanedSegments : [[]];
+  spineStyles = spineSourceSegments.map((_, index) => ({
+    ...(spineStyles[index] || createSpineStyle()),
+    ...((Array.isArray(nextStyles) && nextStyles[index]) || {}),
+  }));
+  rebuildDisplayedSpinesFromSources();
+  activeSpineIdx = 0;
 }
 
 function clearActiveSpine() {
-  const segmentCount = getSpineSegments().length;
+  const segmentCount = spineSourceSegments.length;
   if (segmentCount <= 1) {
-    spinePoints.length = 0;
+    spineSourceSegments = [[]];
     spineStyles = [createSpineStyle()];
+    rebuildDisplayedSpinesFromSources();
     activeSpineIdx = 0;
     return;
   }
 
-  const range = getFlatRangeForSpine(activeSpineIdx);
-  if (!range) {
-    return;
-  }
-
-  let removeStart = range.start;
-  let removeEnd = range.end;
-  if (removeEnd + 1 < spinePoints.length && spinePoints[removeEnd + 1] === null) {
-    removeEnd += 1;
-  } else if (removeStart > 0 && spinePoints[removeStart - 1] === null) {
-    removeStart -= 1;
-  }
-
-  spinePoints.splice(removeStart, removeEnd - removeStart + 1);
+  spineSourceSegments.splice(activeSpineIdx, 1);
   spineStyles.splice(activeSpineIdx, 1);
+  rebuildDisplayedSpinesFromSources();
   activeSpineIdx = constrain(activeSpineIdx, 0, Math.max(0, spineStyles.length - 1));
   syncSpineStylesWithSegments();
 }
