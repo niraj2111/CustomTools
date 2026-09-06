@@ -2,7 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>CalligraphyComposer</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>Calligraphy Composer · Ink studio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -14,628 +15,30 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
     />
-    <style>
-      :root {
-        --app-bg: #ececf2;
-        --card-bg: rgba(255, 255, 255, 0.9);
-        --card-stroke: rgba(30, 33, 40, 0.1);
-        --card-shadow: 0 2px 10px rgba(16, 18, 27, 0.05);
-        --text: #17181c;
-        --muted: #5f6571;
-        --accent: #ff8d28;
-        --accent-soft: rgba(255, 141, 40, 0.14);
-        --canvas-bg: #ffffff;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
-      body {
-        height: 100%;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: linear-gradient(180deg, #f3f3f7 0%, #e8e8ef 100%);
-        color: var(--text);
-        font-family: "Inter", sans-serif;
-      }
-
-      button,
-      input,
-      textarea {
-        font: inherit;
-      }
-
-      .app-shell {
-        height: 100vh;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-
-      .topbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 24px;
-        padding: 10px 16px;
-        background: rgba(245, 245, 249, 0.86);
-        border-bottom: 1px solid rgba(30, 33, 40, 0.08);
-        backdrop-filter: blur(14px);
-        position: sticky;
-        top: 0;
-        z-index: 30;
-      }
-
-      .brand {
-        font-size: 18px;
-        font-weight: 500;
-        letter-spacing: -0.02em;
-      }
-
-      .topbar-actions {
-        display: flex;
-        gap: 10px;
-      }
-
-      .action-button,
-      .panel-button,
-      .icon-toggle {
-        appearance: none;
-        border: 1px solid var(--card-stroke);
-        background: rgba(217, 217, 217, 0.96);
-        color: var(--text);
-        border-radius: 12px;
-        box-shadow: var(--card-shadow);
-      }
-
-      .icon-toggle img {
-        width: 24px;
-        height: 24px;
-        display: block;
-      }
-
-      .action-button,
-      .panel-button {
-        padding: 10px 14px;
-        font-size: 12px;
-        font-weight: 500;
-        cursor: pointer;
-      }
-
-      .workspace {
-        position: relative;
-        flex: 1 1 auto;
-        min-height: 0;
-        height: 100%;
-      }
-
-      .rail {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        position: absolute;
-        top: 24px;
-        z-index: 20;
-        pointer-events: auto;
-      }
-
-      .rail-left {
-        left: 16px;
-        width: 286px;
-        max-height: calc(100vh - 96px);
-        overflow: auto;
-        padding-right: 4px;
-      }
-
-      .rail-right {
-        right: 16px;
-        width: 285px;
-      }
-
-      .panel-card {
-        background: var(--card-bg);
-        border: 1px solid var(--card-stroke);
-        border-radius: 12px;
-        box-shadow: var(--card-shadow);
-        padding: 14px;
-        backdrop-filter: blur(12px);
-      }
-
-      .panel-title {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-
-      .accordion {
-        margin: 0;
-      }
-
-      .accordion > summary {
-        list-style: none;
-        cursor: pointer;
-      }
-
-      .accordion > summary::-webkit-details-marker {
-        display: none;
-      }
-
-      .summary-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-      }
-
-      .summary-caret {
-        width: 20px;
-        height: 20px;
-        border-radius: 999px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(95, 101, 113, 0.08);
-        color: var(--muted);
-        font-size: 12px;
-        transition: transform 0.18s ease;
-      }
-
-      .accordion[open] .summary-caret {
-        transform: rotate(90deg);
-      }
-
-      .accordion-body {
-        margin-top: 10px;
-      }
-
-      .stage-area {
-        position: absolute;
-        inset: 0;
-        min-width: 0;
-        min-height: 0;
-      }
-
-      #wrap {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        touch-action: none;
-        position: relative;
-        cursor: grab;
-        background-color: #ececf2;
-        background-image: radial-gradient(rgba(125, 132, 146, 0.18) 1.2px, transparent 1.2px);
-        background-size: 24px 24px;
-      }
-
-      #wrap.is-panning {
-        cursor: grabbing;
-      }
-
-      .stage-hint {
-        position: absolute;
-        left: 50%;
-        bottom: 18px;
-        transform: translateX(-50%);
-        z-index: 5;
-        padding: 8px 12px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.78);
-        border: 1px solid rgba(30, 33, 40, 0.08);
-        color: var(--muted);
-        font-size: 12px;
-        backdrop-filter: blur(10px);
-      }
-
-      .pen-marker {
-        position: absolute;
-        z-index: 8;
-        pointer-events: none;
-        border: 1.5px solid rgba(33, 37, 44, 0.7);
-        border-radius: 999px;
-        background: rgba(255, 141, 40, 0.12);
-        transform-origin: center center;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-      }
-
-      .pen-marker.flat {
-        border-radius: 4px;
-      }
-
-      .hidden {
-        display: none !important;
-      }
-
-      #wrap canvas {
-        display: block;
-        z-index: 1;
-        box-shadow:
-          0 2px 6px 2px rgba(0, 0, 0, 0.15),
-          0 1px 2px rgba(0, 0, 0, 0.3);
-      }
-
-      #wrap canvas.paper-layer {
-        background: var(--canvas-bg);
-      }
-
-      #wrap canvas.draw-layer,
-      #wrap canvas.glyph-layer,
-      #wrap canvas.overlay-layer {
-        background: transparent;
-        box-shadow: none;
-      }
-
-      .variant-menu {
-        position: absolute;
-        z-index: 20;
-        display: none;
-        min-width: 160px;
-        max-width: 220px;
-        background: rgba(255, 255, 255, 0.97);
-        border: 1px solid var(--card-stroke);
-        border-radius: 12px;
-        box-shadow: 0 12px 28px rgba(17, 20, 28, 0.12);
-        padding: 8px;
-      }
-
-      .variant-menu.open {
-        display: block;
-      }
-
-      .variant-title {
-        margin-bottom: 8px;
-        color: var(--muted);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-      }
-
-      .variant-list {
-        display: grid;
-        gap: 5px;
-      }
-
-      .variant-btn {
-        width: 100%;
-        padding: 7px 8px;
-        border: 1px solid var(--card-stroke);
-        border-radius: 8px;
-        background: #f6f6fa;
-        color: var(--text);
-        text-align: left;
-        cursor: pointer;
-      }
-
-      .variant-btn:hover,
-      .variant-btn[aria-pressed="true"] {
-        border-color: var(--accent);
-        background: #fff5eb;
-      }
-
-      .panel-meta {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 8px;
-      }
-
-      .panel-label {
-        font-size: 14px;
-        font-weight: 500;
-      }
-
-      .color-chip {
-        position: relative;
-        width: 40px;
-        height: 24px;
-        border: 1px solid rgba(27, 30, 37, 0.16);
-        border-radius: 8px;
-        background: #ffffff;
-        overflow: hidden;
-      }
-
-      .color-chip input {
-        position: absolute;
-        inset: 0;
-        opacity: 0;
-        cursor: pointer;
-      }
-
-      .swatches {
-        display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 10px;
-      }
-
-      .swatch {
-        width: 100%;
-        aspect-ratio: 1;
-        border: 2px solid transparent;
-        border-radius: 8px;
-        cursor: pointer;
-        box-shadow: inset 0 0 0 1px rgba(20, 22, 28, 0.06);
-      }
-
-      .swatch.active {
-        border-color: rgba(23, 24, 28, 0.5);
-      }
-
-      .text-editor {
-        margin-top: 4px;
-      }
-
-      .panel-note {
-        margin: 0 0 10px;
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.45;
-      }
-
-      .status-stack {
-        display: grid;
-        gap: 8px;
-      }
-
-      .status-pill {
-        display: inline-flex;
-        align-items: center;
-        min-height: 34px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: rgba(248, 248, 251, 0.96);
-        border: 1px solid rgba(30, 33, 40, 0.08);
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.35;
-      }
-
-      .draw-actions {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 12px;
-      }
-
-      .text-editor textarea {
-        width: 100%;
-        min-height: 138px;
-        padding: 10px;
-        border: 1px solid rgba(24, 28, 34, 0.08);
-        border-radius: 8px;
-        resize: vertical;
-        background: rgba(255, 255, 255, 0.92);
-        color: var(--text);
-        line-height: 1.5;
-      }
-
-      .text-editor textarea:focus {
-        outline: none;
-        border-color: rgba(255, 141, 40, 0.45);
-        box-shadow: 0 0 0 3px rgba(255, 141, 40, 0.16);
-      }
-
-      .align-actions {
-        display: flex;
-        gap: 10px;
-        margin-top: 10px;
-      }
-
-      .icon-toggle {
-        width: 36px;
-        height: 36px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        cursor: pointer;
-      }
-
-      .icon-toggle.active {
-        background: rgba(204, 204, 204, 0.98);
-        border-color: rgba(27, 30, 37, 0.16);
-      }
-
-      .secondary-actions {
-        display: flex;
-        gap: 8px;
-        margin-top: 12px;
-        flex-wrap: wrap;
-      }
-
-      .secondary-actions .action-button {
-        background: rgba(242, 242, 247, 0.92);
-      }
-
-      .panel-button {
-        width: 100%;
-        text-align: left;
-        background: var(--card-bg);
-      }
-
-      .hidden-utility {
-        display: none;
-      }
-
-      #docPane,
-      #toolPane,
-      #scriptPane,
-      #modifierPane,
-      #drawPane,
-      #streamPane {
-        font-family: "Inter", sans-serif;
-        --tp-font-family: "Inter", sans-serif;
-        --tp-base-background-color: transparent;
-        --tp-base-shadow-color: transparent;
-        --tp-button-background-color: rgba(230, 230, 234, 0.98);
-        --tp-button-background-color-active: rgba(255, 141, 40, 0.2);
-        --tp-button-background-color-focus: rgba(255, 141, 40, 0.16);
-        --tp-button-background-color-hover: rgba(240, 240, 244, 0.98);
-        --tp-button-foreground-color: var(--text);
-        --tp-container-background-color: transparent;
-        --tp-container-background-color-active: rgba(248, 248, 251, 0.96);
-        --tp-container-background-color-focus: rgba(248, 248, 251, 0.96);
-        --tp-container-background-color-hover: rgba(248, 248, 251, 0.96);
-        --tp-container-foreground-color: var(--text);
-        --tp-groove-foreground-color: rgba(27, 30, 37, 0.1);
-        --tp-input-background-color: transparent;
-        --tp-input-background-color-active: rgba(248, 248, 251, 0.96);
-        --tp-input-background-color-focus: rgba(248, 248, 251, 0.96);
-        --tp-input-background-color-hover: rgba(248, 248, 251, 0.96);
-        --tp-input-foreground-color: var(--text);
-        --tp-label-foreground-color: var(--text);
-        --tp-monitor-background-color: transparent;
-        --tp-monitor-foreground-color: var(--muted);
-      }
-
-      #docPane .tp-dfwv,
-      #toolPane .tp-dfwv,
-      #scriptPane .tp-dfwv,
-      #modifierPane .tp-dfwv,
-      #drawPane .tp-dfwv,
-      #streamPane .tp-dfwv {
-        gap: 2px;
-      }
-
-      #docPane .tp-rotv,
-      #toolPane .tp-rotv,
-      #scriptPane .tp-rotv,
-      #modifierPane .tp-rotv,
-      #drawPane .tp-rotv,
-      #streamPane .tp-rotv {
-        box-shadow: none;
-      }
-
-      #docPane .tp-fldv,
-      #toolPane .tp-fldv,
-      #scriptPane .tp-fldv,
-      #modifierPane .tp-fldv,
-      #drawPane .tp-fldv,
-      #streamPane .tp-fldv {
-        border-radius: 0;
-      }
-
-      #docPane .tp-fldv_t,
-      #toolPane .tp-fldv_t,
-      #scriptPane .tp-fldv_t,
-      #modifierPane .tp-fldv_t,
-      #drawPane .tp-fldv_t,
-      #streamPane .tp-fldv_t {
-        display: none;
-      }
-
-      #docPane .tp-lblv,
-      #toolPane .tp-lblv,
-      #scriptPane .tp-lblv,
-      #modifierPane .tp-lblv,
-      #drawPane .tp-lblv,
-      #streamPane .tp-lblv {
-        min-height: 38px;
-        padding: 7px 0;
-      }
-
-      #docPane .tp-lblv_l,
-      #toolPane .tp-lblv_l,
-      #scriptPane .tp-lblv_l,
-      #modifierPane .tp-lblv_l,
-      #drawPane .tp-lblv_l,
-      #streamPane .tp-lblv_l {
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text);
-      }
-
-      #docPane .tp-lblv_v,
-      #toolPane .tp-lblv_v,
-      #scriptPane .tp-lblv_v,
-      #modifierPane .tp-lblv_v,
-      #drawPane .tp-lblv_v,
-      #streamPane .tp-lblv_v {
-        min-width: 120px;
-      }
-
-      #docPane .tp-txtv_i,
-      #docPane .tp-lstv_s,
-      #docPane .tp-ckbv_w,
-      #docPane .tp-sldv_t,
-      #toolPane .tp-txtv_i,
-      #toolPane .tp-lstv_s,
-      #toolPane .tp-ckbv_w,
-      #toolPane .tp-sldv_t,
-      #scriptPane .tp-txtv_i,
-      #scriptPane .tp-lstv_s,
-      #scriptPane .tp-ckbv_w,
-      #scriptPane .tp-sldv_t,
-      #modifierPane .tp-txtv_i,
-      #modifierPane .tp-lstv_s,
-      #modifierPane .tp-ckbv_w,
-      #modifierPane .tp-sldv_t,
-      #drawPane .tp-txtv_i,
-      #drawPane .tp-lstv_s,
-      #drawPane .tp-ckbv_w,
-      #drawPane .tp-sldv_t,
-      #streamPane .tp-txtv_i,
-      #streamPane .tp-lstv_s,
-      #streamPane .tp-ckbv_w,
-      #streamPane .tp-sldv_t {
-        border-radius: 8px;
-      }
-
-      @media (max-width: 1180px) {
-        .workspace {
-          display: flex;
-          flex-direction: column;
-          height: auto;
-          padding: 12px;
-          gap: 12px;
-        }
-
-        .stage-area,
-        .rail {
-          position: static;
-        }
-
-        .rail-left,
-        .rail-right {
-          width: auto;
-          max-height: none;
-          overflow: visible;
-          padding-right: 0;
-        }
-
-        #wrap {
-          position: relative;
-          min-height: 60vh;
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="./studio.css?v=studio-1" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand">Logo</div>
+        <div class="brand"><span class="brand-mark" aria-hidden="true">c<span>c</span></span><div>Calligraphy <em>Composer</em><small>A LITTLE SPACE FOR LETTERS</small></div></div>
+        <button id="commandBtn" class="command-trigger" type="button">Quick actions <kbd>⌘ K</kbd></button>
         <div class="topbar-actions">
-          <button id="pathSvgBtn" class="action-button" type="button">Export Paths</button>
-          <button id="svgBtn" class="action-button" type="button">Export Artwork</button>
+          <button id="pathSvgBtn" class="action-button" type="button" title="Export centerline paths for plotting">Paths SVG</button>
+          <button id="svgBtn" class="action-button" type="button" title="Export the finished lettering artwork">Export artwork ↗</button>
         </div>
       </header>
 
       <div class="workspace">
-        <aside class="rail rail-left">
-          <details class="panel-card accordion" open>
+        <aside class="rail rail-left" aria-label="Studio settings">
+          <div class="rail-heading"><span>THE WORKBENCH</span><span class="tiny-dot"></span></div>
+          <nav class="inspector-tabs" aria-label="Settings categories">
+            <button data-section="style" aria-pressed="true">Lettering</button><button data-section="ink" aria-pressed="false">Ink</button><button data-section="paper" aria-pressed="false">Paper</button><button data-section="plot" aria-pressed="false">Plot</button>
+          </nav>
+          <p id="inspectorIntro" class="inspector-intro">Find the rhythm in every letter.</p>
+          <details class="panel-card accordion" data-section="paper" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Document Setup</h2>
+                <h2 class="panel-title">The paper</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
@@ -644,35 +47,35 @@
               <div class="panel-meta" style="margin-top:10px; margin-bottom:0">
                 <span class="panel-label">Paper Color</span>
                 <label class="color-chip" id="paperColorChip">
-                  <input id="paperColorInput" type="color" value="#ffffff" />
+                  <input aria-label="Paper color" id="paperColorInput" type="color" value="#ffffff" />
                 </label>
               </div>
             </div>
           </details>
 
-          <details class="panel-card accordion" open>
+          <details class="panel-card accordion" data-section="ink" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Tool</h2>
+                <h2 class="panel-title">Nib & texture</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
             <div class="accordion-body">
               <div id="toolPane"></div>
               <div class="swatches" id="inkSwatches">
-                <button class="swatch" type="button" data-color="#000000" style="background:#000000"></button>
-                <button class="swatch" type="button" data-color="#ff8d28" style="background:#ff8d28"></button>
-                <button class="swatch" type="button" data-color="#ffcc00" style="background:#ffcc00"></button>
-                <button class="swatch" type="button" data-color="#0088ff" style="background:#0088ff"></button>
-                <button class="swatch" type="button" data-color="#ff383c" style="background:#ff383c"></button>
+                <button class="swatch" type="button" aria-label="Carbon ink" title="Carbon" data-color="#000000" style="background:#000000"></button>
+                <button class="swatch" type="button" aria-label="Persimmon ink" title="Persimmon" data-color="#ff8d28" style="background:#ff8d28"></button>
+                <button class="swatch" type="button" aria-label="Golden ink" title="Golden" data-color="#ffcc00" style="background:#ffcc00"></button>
+                <button class="swatch" type="button" aria-label="Azure ink" title="Azure" data-color="#0088ff" style="background:#0088ff"></button>
+                <button class="swatch" type="button" aria-label="Vermilion ink" title="Vermilion" data-color="#ff383c" style="background:#ff383c"></button>
               </div>
             </div>
           </details>
 
-          <details class="panel-card accordion" open>
+          <details class="panel-card accordion" data-section="style" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Script</h2>
+                <h2 class="panel-title">Letterforms</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
@@ -681,10 +84,10 @@
             </div>
           </details>
 
-          <details class="panel-card accordion" open>
+          <details class="panel-card accordion" data-section="style" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Modifier</h2>
+                <h2 class="panel-title">Composition</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
@@ -694,10 +97,10 @@
             </div>
           </details>
 
-          <details class="panel-card accordion" open>
+          <details class="panel-card accordion" data-section="draw" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Draw</h2>
+                <h2 class="panel-title">Brush & gesture</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
@@ -707,28 +110,38 @@
             </div>
           </details>
 
-          <details class="panel-card accordion" open>
+          <details class="panel-card accordion" data-section="plot" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Stream</h2>
+                <h2 class="panel-title">Plotter connection</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
             <div class="accordion-body">
-              <p class="panel-note">Send text, draw strokes, or both through a shared SAXI stream module.</p>
+              <p class="panel-note">Connect your SAXI plotter and choose which marks to send.</p>
               <div id="streamPane"></div>
             </div>
           </details>
         </aside>
 
-        <main class="stage-area">
+        <main class="stage-area" aria-label="Composition workspace">
+          <div class="stage-top"><span class="document-chip"><span class="tiny-dot"></span><span id="paperSummary">A4 Portrait · 210 × 297 mm</span></span><button id="guidesToggle" class="quiet-button" aria-pressed="true">Guides on</button></div>
           <div id="wrap">
             <div id="penMarker" class="pen-marker hidden" aria-hidden="true"></div>
           </div>
-          <div class="stage-hint">Drag empty space to pan. Two-finger scroll pans. Pinch to zoom.</div>
+          <div class="canvas-dock" role="toolbar" aria-label="Canvas tools">
+            <button data-mode="text" aria-pressed="true" title="Compose text (T)"><span class="tool-symbol">T</span><span>Compose</span></button>
+            <button data-mode="draw" data-tool="draw" aria-pressed="false" title="Draw with a nib (B)"><span class="tool-symbol">✎</span><span>Draw</span></button>
+            <button data-mode="draw" data-tool="lasso" aria-pressed="false" title="Lasso strokes (L)"><span class="tool-symbol">◌</span><span>Lasso</span></button>
+            <button data-mode="draw" data-tool="transform" aria-pressed="false" title="Transform selected strokes (V)"><span class="tool-symbol">⌖</span><span>Transform</span></button>
+            <span class="dock-divider"></span><button id="focusBtn" aria-pressed="false" title="Toggle focus mode (F)"><span class="tool-symbol">⛶</span><span>Focus</span></button>
+          </div>
+          <div class="stage-bottom"><span id="stageHint">Select a text layer to begin · scroll to pan</span><div class="view-controls"><button id="zoomOutBtn" aria-label="Zoom out">−</button><span id="zoomLabel">100%</span><button id="zoomInBtn" aria-label="Zoom in">+</button><button id="fitBtn" title="Fit paper (0)">Fit</button><button id="resetViewBtn" title="Reset zoom to 100%">1:1</button></div></div>
         </main>
 
-        <aside class="rail rail-right">
+        <aside class="rail rail-right" aria-label="Layers and selection">
+          <div class="rail-heading"><span>YOUR COMPOSITION</span><span id="layerCount" class="count-badge">1</span></div>
+          <div id="layerList" class="layer-list" aria-label="Text layers"></div>
           <details class="panel-card accordion" open>
             <summary>
               <div class="summary-row">
@@ -738,26 +151,17 @@
             </summary>
             <div class="accordion-body">
               <div class="text-editor">
-                <textarea id="boxTextInput" spellcheck="false" placeholder="Placeholder text..."></textarea>
+                <textarea aria-label="Selected layer text" id="boxTextInput" spellcheck="false" placeholder="Select a layer to edit its words…"></textarea>
               </div>
               <div class="align-actions">
                 <button id="alignLeftBtn" class="icon-toggle active" type="button" aria-label="Align left">
-                  <img
-                    alt=""
-                    src="https://www.figma.com/api/mcp/asset/f0b2c39f-df0f-469d-9db3-7b0f875d5829.svg"
-                  />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h16M4 10h10M4 15h16M4 20h10"/></svg>
                 </button>
                 <button id="alignCenterBtn" class="icon-toggle" type="button" aria-label="Align center">
-                  <img
-                    alt=""
-                    src="https://www.figma.com/api/mcp/asset/302243ec-e4f6-4fc9-981b-e5f87f6ed1bf.svg"
-                  />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h16M7 10h10M4 15h16M7 20h10"/></svg>
                 </button>
                 <button id="alignRightBtn" class="icon-toggle" type="button" aria-label="Align right">
-                  <img
-                    alt=""
-                    src="https://www.figma.com/api/mcp/asset/0c9fbb97-6bb4-4a6e-b470-7f00ec7f122c.svg"
-                  />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h16M10 10h10M4 15h16M10 20h10"/></svg>
                 </button>
               </div>
               <div class="secondary-actions">
@@ -767,12 +171,12 @@
             </div>
           </details>
 
-          <button id="addBoxBtn" class="panel-button" type="button">New Text Layer</button>
+          <button id="addBoxBtn" class="panel-button" type="button">＋ Add text layer</button>
 
           <details class="panel-card accordion" id="drawActionsCard" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Draw Actions</h2>
+                <h2 class="panel-title">Your strokes</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
@@ -792,7 +196,7 @@
           <details class="panel-card accordion" id="streamActionsCard" open>
             <summary>
               <div class="summary-row">
-                <h2 class="panel-title">Stream Actions</h2>
+                <h2 class="panel-title">Send to plotter</h2>
                 <span class="summary-caret">›</span>
               </div>
             </summary>
@@ -815,8 +219,8 @@
         <span id="stat-paper"></span>
         <span id="stat-font"></span>
         <span id="stat-nib"></span>
-        <button id="fitBtn" type="button"></button>
-        <button id="resetViewBtn" type="button"></button>
+
+
       </div>
     </div>
 
@@ -824,6 +228,13 @@
     <script src="../shared/paper.js"></script>
     <script src="../shared/export.js"></script>
     <script src="./fonts/bundle.js"></script>
-    <script src="./sketch.js"></script>
+    <dialog id="commandDialog" aria-labelledby="commandTitle">
+      <div class="command-head"><h2 id="commandTitle">A little shortcut.</h2><button id="closeCommandBtn" aria-label="Close quick actions">Esc</button></div>
+      <input id="commandSearch" type="search" aria-label="Search actions" placeholder="What would you like to do?" autocomplete="off" />
+      <div id="commandResults"></div><p class="command-foot">↑ ↓ to navigate · Enter to choose</p>
+    </dialog>
+    <div id="studioNotice" class="studio-notice" role="status"></div>
+    <script src="./sketch.js?v=studio-1"></script>
+    <script src="./studio.js?v=studio-1"></script>
   </body>
 </html>

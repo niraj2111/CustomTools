@@ -162,9 +162,9 @@ const selectionState = {
   penId: "p4",
   nibMode: "fixed",
   nibWidthMM: 2.4,
-  stampSpacingFactor: 0.32,
+  stampSpacingFactor: 0.2,
   stampSizeBoost: 1,
-  inkOpacity: 0.2,
+  inkOpacity: 0.8,
   inkSoftness: 0.34,
   inkOverlapGain: 1.2,
   inkTexture: 0.16,
@@ -420,6 +420,7 @@ function buildPane() {
       Custom: "custom",
       Cascade: "cascade",
       "Line Spaced": "linespaced",
+      Composition: "composition",
     },
   });
   modifierDetailBindings = {
@@ -451,6 +452,12 @@ function buildPane() {
 
   for (const [key, blade] of Object.entries(selectedBoxBindings)) {
     blade.on("change", () => {
+      if (key === "modifierPreset" && selectionState.modifierPreset === "composition") {
+        applyCompositionPresetToActiveBox();
+        queueAutoStream();
+        requestRender();
+        return;
+      }
       if (key === "penId") {
         syncNibWidthToPen();
       }
@@ -625,6 +632,11 @@ function bindUI() {
   document.getElementById("resetViewBtn").addEventListener("click", () => {
     P.fitToViewport = false;
     P.previewScale = 1;
+    viewport.scale = 1;
+    const rect = wrapEl.getBoundingClientRect();
+    const size = PaperUtils.getCanvasPixelSize(P);
+    viewport.x = (rect.width - size.width) / 2;
+    viewport.y = (rect.height - size.height) / 2;
     syncDisplaySize();
     refreshPanes();
   });
@@ -688,13 +700,13 @@ function syncDisplaySize() {
   const pxSize = PaperUtils.getCanvasPixelSize(P);
   const wrapRect = wrapEl?.getBoundingClientRect();
   if (!wrapRect) return;
-  const availableW = Math.max(1, wrapRect.width - 120);
-  const availableH = Math.max(1, wrapRect.height - 120);
+  const availableW = Math.max(1, wrapRect.width - 64);
+  const availableH = Math.max(1, wrapRect.height - 220);
   const fitScale = Math.min(availableW / pxSize.width, availableH / pxSize.height, 1);
   if (P.fitToViewport || !viewport.initialized) {
     viewport.scale = fitScale * P.previewScale;
     viewport.x = (wrapRect.width - pxSize.width * viewport.scale) * 0.5;
-    viewport.y = (wrapRect.height - pxSize.height * viewport.scale) * 0.5;
+    viewport.y = (wrapRect.height - pxSize.height * viewport.scale) * 0.5 - 22;
     viewport.initialized = true;
   }
   applyViewportTransform();
@@ -909,6 +921,7 @@ function requestRender() {
 }
 
 function render() {
+  window.ComposerStudio?.refresh();
   if (!canvas || !bgCtx || !overlayCtx) return;
   bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
   drawCtx?.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
@@ -1569,6 +1582,151 @@ function applyLineSpacedPreset(lines, maxWidthU, align = "left") {
   }
 }
 
+function applyCompositionPresetToActiveBox() {
+  const source = getActiveBox();
+  const doc = state.currentDoc;
+  if (!source || !doc) return;
+  const words = String(source.text || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length <= 1) {
+    selectionState.modifierPreset = "custom";
+    refreshPanes();
+    return;
+  }
+
+  const sourceIndex = state.boxes.findIndex((box) => box.id === source.id);
+  if (sourceIndex < 0) return;
+
+  const availableX0 = P.showMargins ? P.marginMM : 8;
+  const availableX1 = P.showMargins ? P.canvasWMM - P.marginMM : P.canvasWMM - 8;
+  const availableY0 = P.showMargins ? P.marginMM : 8;
+  const availableY1 = P.showMargins ? P.canvasHMM - P.marginMM : P.canvasHMM - 8;
+  const compositionWidthMM = clamp(
+    Math.max(source.widthMM, Math.min((availableX1 - availableX0) * 0.72, 160)),
+    50,
+    availableX1 - availableX0,
+  );
+  const centerX = clamp(source.xMM + source.widthMM * 0.5, availableX0, availableX1);
+  const baseY = clamp(source.yMM, availableY0, availableY1);
+  const targetRowWidthMM = compositionWidthMM * 0.8;
+
+  const measured = words.map((word, index) => {
+    const fontScale = compositionWordScale(index, words.length);
+    const fontSizeMM = source.fontSizeMM * fontScale;
+    const lineHeightMM = source.lineHeightMM * (0.96 + (fontScale - 1) * 0.45);
+    const widthMM = measureWordBoxWidthMM(doc, source, word, fontSizeMM, lineHeightMM);
+    return {
+      word,
+      fontScale,
+      fontSizeMM,
+      lineHeightMM,
+      widthMM,
+      index,
+    };
+  });
+
+  const rows = [];
+  let currentRow = [];
+  let currentWidth = 0;
+  for (const item of measured) {
+    const gapMM = currentRow.length ? Math.max(5, source.fontSizeMM * 0.22) : 0;
+    const nextWidth = currentWidth + gapMM + item.widthMM;
+    if (currentRow.length && nextWidth > targetRowWidthMM) {
+      rows.push(currentRow);
+      currentRow = [item];
+      currentWidth = item.widthMM;
+    } else {
+      currentRow.push(item);
+      currentWidth = nextWidth;
+    }
+  }
+  if (currentRow.length) rows.push(currentRow);
+
+  const generated = [];
+  const rowGapMM = Math.max(source.lineHeightMM * 0.72, 11);
+  const totalHeightMM =
+    rows.reduce((sum, row) => sum + Math.max(...row.map((item) => item.lineHeightMM + source.paddingMM * 2)), 0) +
+    Math.max(0, rows.length - 1) * rowGapMM;
+  let yCursor = clamp(baseY, availableY0, Math.max(availableY0, availableY1 - totalHeightMM));
+
+  rows.forEach((row, rowIndex) => {
+    const rowWidthMM =
+      row.reduce((sum, item) => sum + item.widthMM, 0) + Math.max(0, row.length - 1) * Math.max(5, source.fontSizeMM * 0.22);
+    const staggerMM = ((rowIndex % 2) - 0.5) * Math.min(source.fontSizeMM * 0.9, 10);
+    let xCursor = clamp(centerX - rowWidthMM * 0.5 + staggerMM, availableX0, Math.max(availableX0, availableX1 - rowWidthMM));
+    let tallestMM = 0;
+
+    row.forEach((item, itemIndex) => {
+      const box = createTextBox({
+        ...source,
+        name: `${source.name} ${itemIndex + 1 + generated.length}`,
+        text: item.word,
+        xMM: clamp(xCursor, availableX0, Math.max(availableX0, availableX1 - item.widthMM)),
+        yMM: yCursor + compositionWordYOffset(rowIndex, itemIndex, row.length, source.fontSizeMM),
+        widthMM: item.widthMM,
+        fontSizeMM: item.fontSizeMM,
+        lineHeightMM: item.lineHeightMM,
+        slantShear: source.slantShear + compositionWordSlant(item.index, words.length),
+        verticalScale: Math.max(0.4, source.verticalScale * compositionWordVerticalScale(item.index, words.length)),
+        modifierPreset: "custom",
+        variantMap: {},
+        leftKernMMMap: {},
+      });
+      generated.push(box);
+      tallestMM = Math.max(tallestMM, box.lineHeightMM + box.paddingMM * 2 + 4);
+      xCursor += item.widthMM + Math.max(5, source.fontSizeMM * 0.22);
+    });
+
+    yCursor += tallestMM + rowGapMM;
+  });
+
+  state.boxes.splice(sourceIndex, 1, ...generated);
+  activeBoxId = generated[0]?.id ?? null;
+  selectionState.modifierPreset = "custom";
+  refreshSelectionMonitor();
+  refreshPanes();
+}
+
+function compositionWordScale(index, total) {
+  const center = (total - 1) * 0.5;
+  const distance = total <= 1 ? 0 : Math.abs(index - center) / Math.max(center, 1);
+  return clamp(1.16 - distance * 0.18 + Math.sin(index * 1.7) * 0.05, 0.88, 1.2);
+}
+
+function compositionWordSlant(index, total) {
+  const center = (total - 1) * 0.5;
+  return ((index - center) / Math.max(total, 2)) * 0.18;
+}
+
+function compositionWordVerticalScale(index, total) {
+  const wave = Math.cos((index / Math.max(total - 1, 1)) * Math.PI * 1.25);
+  return clamp(1 + wave * 0.08, 0.88, 1.12);
+}
+
+function compositionWordYOffset(rowIndex, itemIndex, rowLength, fontSizeMM) {
+  const center = (rowLength - 1) * 0.5;
+  const wave = Math.sin((itemIndex - center) * 0.85 + rowIndex * 0.6);
+  return wave * Math.min(fontSizeMM * 0.18, 4.5);
+}
+
+function measureWordBoxWidthMM(doc, sourceBox, text, fontSizeMM, lineHeightMM) {
+  const probe = {
+    ...sourceBox,
+    text,
+    fontSizeMM,
+    lineHeightMM,
+    widthMM: P.canvasWMM,
+    modifierPreset: "custom",
+    variantMap: {},
+    leftKernMMMap: {},
+  };
+  const layout = layoutBox(doc, probe);
+  const contentWidthMM = Math.max(...layout.lines.map((line) => line.widthMM), 0);
+  return Math.max(18, contentWidthMM + sourceBox.paddingMM * 2 + Math.max(fontSizeMM * 0.12, 2));
+}
+
 function getBoxHeightMM(box, layout = null) {
   return Math.max(12, layout?.heightMM ?? box.heightMM ?? 12);
 }
@@ -1600,9 +1758,9 @@ function createTextBox(overrides = {}) {
     penId: overrides.penId || "p4",
     nibMode: overrides.nibMode || "fixed",
     nibWidthMM: overrides.nibWidthMM ?? (overrides.penWidthScale ? 2.4 * overrides.penWidthScale : 2.4),
-    stampSpacingFactor: overrides.stampSpacingFactor ?? 0.32,
+    stampSpacingFactor: overrides.stampSpacingFactor ?? 0.2,
     stampSizeBoost: overrides.stampSizeBoost ?? 1,
-    inkOpacity: overrides.inkOpacity ?? 0.2,
+    inkOpacity: overrides.inkOpacity ?? 0.8,
     inkSoftness: overrides.inkSoftness ?? 0.34,
     inkOverlapGain: overrides.inkOverlapGain ?? 1.2,
     inkTexture: overrides.inkTexture ?? 0.16,
@@ -2945,11 +3103,10 @@ function buildDrawBrushStampCache(stroke) {
   return stroke.brushCache;
 }
 
-function drawDrawStampGeometry(targetCtx, stamp) {
+function drawDrawStampGeometryPath(targetCtx, stamp) {
   if (stamp.kind === "circle") {
     targetCtx.beginPath();
     targetCtx.arc(stamp.x, stamp.y, stamp.r, 0, Math.PI * 2);
-    targetCtx.fill();
     return;
   }
   const points = stamp.points || [];
@@ -2958,7 +3115,98 @@ function drawDrawStampGeometry(targetCtx, stamp) {
   targetCtx.moveTo(points[0].x, points[0].y);
   for (let i = 1; i < points.length; i += 1) targetCtx.lineTo(points[i].x, points[i].y);
   targetCtx.closePath();
-  targetCtx.fill();
+}
+
+function getDrawStampBounds(stamp) {
+  if (stamp.kind === "circle") {
+    return {
+      x0: stamp.x - stamp.r,
+      y0: stamp.y - stamp.r,
+      x1: stamp.x + stamp.r,
+      y1: stamp.y + stamp.r,
+      cx: stamp.x,
+      cy: stamp.y,
+      radius: stamp.r,
+    };
+  }
+  const points = stamp.points || [];
+  if (!points.length) {
+    return { x0: 0, y0: 0, x1: 0, y1: 0, cx: 0, cy: 0, radius: 0 };
+  }
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const point of points) {
+    x0 = Math.min(x0, point.x);
+    y0 = Math.min(y0, point.y);
+    x1 = Math.max(x1, point.x);
+    y1 = Math.max(y1, point.y);
+  }
+  const cx = (x0 + x1) * 0.5;
+  const cy = (y0 + y1) * 0.5;
+  return {
+    x0,
+    y0,
+    x1,
+    y1,
+    cx,
+    cy,
+    radius: Math.max((x1 - x0) * 0.5, (y1 - y0) * 0.5),
+  };
+}
+
+function hashInkNoise(x, y, seed = 0) {
+  return fract(Math.sin(x * 127.1 + y * 311.7 + seed * 17.13) * 43758.5453123);
+}
+
+function fract(value) {
+  return value - Math.floor(value);
+}
+
+function drawInkStamp(targetCtx, stamp, options = {}) {
+  const opacity = clamp(options.opacity ?? 0.8, 0.02, 1);
+  const softness = clamp(options.softness ?? 0.34, 0.02, 0.95);
+  const overlapGain = clamp(options.overlapGain ?? 1.2, 0.2, 3);
+  const texture = clamp(options.texture ?? 0.16, 0, 1);
+  const bounds = getDrawStampBounds(stamp);
+  const radius = Math.max(bounds.radius, 0.12);
+  const inner = Math.max(0.04, 1 - softness);
+
+  targetCtx.save();
+  drawDrawStampGeometryPath(targetCtx, stamp);
+  targetCtx.clip();
+
+  const gradient = targetCtx.createRadialGradient(
+    bounds.cx,
+    bounds.cy,
+    radius * 0.08,
+    bounds.cx,
+    bounds.cy,
+    radius,
+  );
+  gradient.addColorStop(0, `rgba(17,17,17,${clamp(opacity * overlapGain, 0, 1)})`);
+  gradient.addColorStop(inner, `rgba(17,17,17,${opacity})`);
+  gradient.addColorStop(1, "rgba(17,17,17,0)");
+  targetCtx.fillStyle = gradient;
+  targetCtx.fillRect(bounds.x0 - radius, bounds.y0 - radius, bounds.x1 - bounds.x0 + radius * 2, bounds.y1 - bounds.y0 + radius * 2);
+
+  if (texture > 0.001) {
+    const fleckCount = texture >= 0.4 ? 4 : texture >= 0.2 ? 3 : 2;
+    for (let i = 0; i < fleckCount; i += 1) {
+      const nx = hashInkNoise(bounds.cx + i * 13.1, bounds.cy + i * 7.3, i + radius);
+      const ny = hashInkNoise(bounds.cy + i * 9.7, bounds.cx + i * 5.9, i + 11);
+      const fx = bounds.x0 + nx * Math.max(bounds.x1 - bounds.x0, 0.001);
+      const fy = bounds.y0 + ny * Math.max(bounds.y1 - bounds.y0, 0.001);
+      const fr = Math.max(0.06, radius * (0.08 + texture * 0.08));
+      targetCtx.fillStyle = `rgba(17,17,17,${opacity * 0.1})`;
+      targetCtx.beginPath();
+      targetCtx.arc(fx, fy, fr, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+  }
+
+  targetCtx.restore();
 }
 
 function withMmScale(targetCtx, fn) {
@@ -2974,8 +3222,14 @@ function drawDrawStrokeToLayer(layer, stroke) {
   const stamps = buildDrawBrushStampCache(stroke);
   if (!layerCtx || !stamps.length) return;
   withMmScale(layerCtx, (scaledCtx) => {
-    scaledCtx.fillStyle = "rgba(17, 17, 17, 0.92)";
-    for (const stamp of stamps) drawDrawStampGeometry(scaledCtx, stamp);
+    for (const stamp of stamps) {
+      drawInkStamp(scaledCtx, stamp, {
+        opacity: 0.8,
+        softness: 0.34,
+        overlapGain: 1.2,
+        texture: 0.16,
+      });
+    }
   });
 }
 
@@ -2985,24 +3239,34 @@ function drawIncrementalDrawStrokeSegment(layer, stroke, fromPoint, toPoint) {
   const step = getDrawBrushStampStepMM(brush);
   if (!layerCtx) return;
   withMmScale(layerCtx, (scaledCtx) => {
-    scaledCtx.fillStyle = "rgba(17, 17, 17, 0.92)";
     if (!fromPoint) {
       const firstStamp =
         brush.type === "flat"
           ? { kind: "polygon", points: buildFlatNibStampPolygon(toPoint, brush.flatWidthMM, brush.flatAngleDeg) }
           : { kind: "circle", x: toPoint.x, y: toPoint.y, r: getDrawBrushStampRadiusMM(brush) };
-      drawDrawStampGeometry(scaledCtx, firstStamp);
+      drawInkStamp(scaledCtx, firstStamp, {
+        opacity: 0.8,
+        softness: 0.34,
+        overlapGain: 1.2,
+        texture: 0.16,
+      });
       return;
     }
     const length = drawPointDistance(fromPoint, toPoint);
     const steps = Math.max(1, Math.ceil(length / step));
     for (let i = 1; i <= steps; i += 1) {
       const point = lerpPoint(fromPoint, toPoint, i / steps);
-      drawDrawStampGeometry(
+      drawInkStamp(
         scaledCtx,
         brush.type === "flat"
           ? { kind: "polygon", points: buildFlatNibStampPolygon(point, brush.flatWidthMM, brush.flatAngleDeg) }
           : { kind: "circle", x: point.x, y: point.y, r: getDrawBrushStampRadiusMM(brush) },
+        {
+          opacity: 0.8,
+          softness: 0.34,
+          overlapGain: 1.2,
+          texture: 0.16,
+        },
       );
     }
   });
