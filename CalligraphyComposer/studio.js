@@ -118,7 +118,7 @@
       document.querySelectorAll('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === appState.mode && (appState.mode === 'text' || button.dataset.tool === drawUI.tool))));
       showSection(section);
     }
-    $('stageHint').textContent = appState.mode === 'text' ? 'Drag a layer to arrange · double-click letters for alternates' : drawUI.tool === 'lasso' ? 'Draw a loop around strokes to select them' : drawUI.tool === 'transform' ? 'Lasso strokes first, then drag their handles' : 'Draw on paper · two-finger scroll to pan';
+    $('stageHint').textContent = appState.mode === 'text' ? 'Drag a layer to arrange · double-click letters for alternates' : drawUI.tool === 'edit' ? 'Drag square anchors or circular Bézier handles' : drawUI.tool === 'lasso' ? 'Draw a loop around strokes to select them' : drawUI.tool === 'transform' ? 'Lasso strokes first, then drag their handles' : 'Draw on paper · two-finger scroll to pan';
     $('zoomLabel').textContent = `${Math.round(viewport.scale * 100)}%`;
     $('paperSummary').textContent = `${P.paperPreset} · ${P.canvasWMM} × ${P.canvasHMM} mm`;
     $('guidesToggle').textContent = P.showGuides ? 'Guides on' : 'Guides off';
@@ -154,6 +154,7 @@
       ['Add text layer', 'N', () => {chooseTool('text'); $('addBoxBtn').click();}],
       ['Compose lettering', 'T', () => chooseTool('text')],
       ['Draw with a nib', 'B', () => chooseTool('draw','draw')],
+      ['Edit Bézier anchors', 'E', () => chooseTool('draw','edit')],
       ['Lasso strokes', 'L', () => chooseTool('draw','lasso')],
       ['Transform strokes', 'V', () => chooseTool('draw','transform')],
       ['Fit paper to view', '0', () => $('fitBtn').click()],

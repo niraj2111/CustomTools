@@ -194,6 +194,7 @@ const drawState = {
   currentStroke: null,
   lassoPoints: [],
   transformState: null,
+  editDrag: null,
   nextStrokeId: 1,
   hoverPointer: null,
   activeTouchPointers: new Map(),
@@ -480,6 +481,7 @@ function buildPane() {
       label: "Tool",
       options: {
         Draw: "draw",
+        Edit: "edit",
         Lasso: "lasso",
         Transform: "transform",
       },
@@ -529,7 +531,7 @@ function buildPane() {
     "change",
     applyCurrentBrushToExistingDrawStrokes,
   );
-  drawFolder.addInput(drawUI, "exportTolerance", { label: "Export fit", min: 0.03, max: 1, step: 0.01 });
+  drawFolder.addInput(drawUI, "exportTolerance", { label: "Curve accuracy", min: 0.03, max: 1, step: 0.01 });
 
   streamFolder = createPane("streamPane");
   streamFolder.addInput(streamUI, "target", {
@@ -829,6 +831,7 @@ function clearDrawTransientState() {
   drawState.currentStroke = null;
   drawState.lassoPoints = [];
   drawState.transformState = null;
+  drawState.editDrag = null;
   clearDrawLayer(drawState.activeLayer);
   hidePenMarker();
 }
@@ -855,7 +858,7 @@ function syncModeVisibility() {
   modifierPaneCard?.classList.toggle("hidden", isDrawMode);
   const drawPaneCard = document.getElementById("drawPane")?.closest(".panel-card");
   drawPaneCard?.classList.toggle("hidden", false);
-  canvas.style.cursor = isDrawMode ? "crosshair" : "default";
+  canvas.style.cursor = isDrawMode && drawUI.tool === "draw" ? "crosshair" : "default";
   updateDrawStatus();
   updateStreamStatus();
 }
@@ -2827,6 +2830,7 @@ function invalidateDrawStrokeCaches(stroke) {
   stroke.pathDirty = true;
   stroke.brushDirty = true;
   stroke.bezierDirty = true;
+  stroke.bezierEdited = false;
 }
 
 function rebuildDrawStrokePointsFromRaw(rawPoints, brush) {
@@ -3003,14 +3007,406 @@ function catmullRomToBezierDraw(points) {
   return segments;
 }
 
+// Error-bounded anchor placement adapted from bezier-trace.html. The drawing
+// engine stores millimetres, so the resampling interval follows the export
+// tolerance instead of using the reference sketch's fixed pixel spacing.
+function fitDrawBezierAnchors(points, tolerance) {
+  const spacing = Math.max(0.12, tolerance * (2 / 1.5));
+  const source = resampleDrawFitPoints(points, spacing);
+  if (source.length < 2) return [];
+  if (source.length < 4) return drawFitLineSegments(source);
+
+  const light = smoothDrawFitRange(source, 1.2);
+  const corners = detectDrawFitCorners(light, 55);
+  const smoothSigma = Math.max(0, Number(drawUI.smoothing) || 0) / spacing;
+  const fitted = new Array(source.length);
+  const bounds = [0, ...corners, source.length - 1];
+  for (let i = 0; i < bounds.length - 1; i += 1) {
+    smoothDrawFitRange(source, smoothSigma, bounds[i], bounds[i + 1], fitted);
+  }
+
+  const toleranceSquared = tolerance * tolerance;
+  const fixedAnchors = new Set(bounds);
+  const cubics = [];
+  for (let i = 0; i < bounds.length - 1; i += 1) {
+    const start = bounds[i];
+    const end = bounds[i + 1];
+    if (isStraightDrawFit(fitted, start, end, tolerance, spacing)) {
+      cubics.push(drawFitLine(fitted, start, end));
+      continue;
+    }
+    fitDrawCubic(
+      fitted,
+      start,
+      end,
+      drawFitEndTangent(fitted, start, end),
+      drawFitEndTangent(fitted, end, start),
+      toleranceSquared,
+      cubics,
+      0,
+    );
+  }
+  mergeDrawFitCubics(fitted, cubics, fixedAnchors, toleranceSquared);
+  relaxDrawFitAnchors(fitted, cubics, fixedAnchors, toleranceSquared);
+  return drawFitCubicsToSegments(cubics);
+}
+
+function resampleDrawFitPoints(points, spacing) {
+  if (points.length < 2) return points.map((point) => ({ ...point }));
+  const out = [{ ...points[0] }];
+  let accumulated = 0;
+  let previous = points[0];
+  for (let i = 1; i < points.length; i += 1) {
+    const current = points[i];
+    let distance = drawPointDistance(previous, current);
+    while (distance > 0 && accumulated + distance >= spacing) {
+      const point = lerpPoint(previous, current, (spacing - accumulated) / distance);
+      out.push(point);
+      previous = point;
+      distance = drawPointDistance(previous, current);
+      accumulated = 0;
+    }
+    accumulated += distance;
+    previous = current;
+  }
+  const last = points[points.length - 1];
+  if (drawPointDistance(out[out.length - 1], last) > spacing * 0.35) out.push({ ...last });
+  else if (out.length > 1) out[out.length - 1] = { ...last };
+  return out;
+}
+
+function smoothDrawFitRange(source, sigma, start = 0, end = source.length - 1, target = null) {
+  const out = target || new Array(source.length);
+  const radius = Math.ceil(sigma * 3);
+  if (sigma < 0.25 || radius < 1) {
+    for (let i = start; i <= end; i += 1) out[i] = { ...source[i] };
+    return out;
+  }
+  const weights = [];
+  for (let i = 0; i <= radius; i += 1) weights.push(Math.exp((-i * i) / (2 * sigma * sigma)));
+  for (let i = start; i <= end; i += 1) {
+    const localRadius = Math.min(radius, i - start, end - i);
+    let x = 0;
+    let y = 0;
+    let weight = 0;
+    for (let offset = -localRadius; offset <= localRadius; offset += 1) {
+      const nextWeight = weights[Math.abs(offset)];
+      x += source[i + offset].x * nextWeight;
+      y += source[i + offset].y * nextWeight;
+      weight += nextWeight;
+    }
+    out[i] = { x: x / weight, y: y / weight };
+  }
+  return out;
+}
+
+function detectDrawFitCorners(points, degrees) {
+  const lookaround = 5;
+  const threshold = (degrees * Math.PI) / 180;
+  const turn = (index, distance) => {
+    const before = points[Math.max(0, index - distance)];
+    const after = points[Math.min(points.length - 1, index + distance)];
+    const incoming = subtractDrawPoints(points[index], before);
+    const outgoing = subtractDrawPoints(after, points[index]);
+    const lengths = Math.hypot(incoming.x, incoming.y) * Math.hypot(outgoing.x, outgoing.y);
+    if (lengths < 1e-12) return 0;
+    return Math.acos(clamp((incoming.x * outgoing.x + incoming.y * outgoing.y) / lengths, -1, 1));
+  };
+  const angles = points.map((_, index) => turn(index, lookaround));
+  const corners = [];
+  for (let i = 3; i <= points.length - 4; i += 1) {
+    if (angles[i] < threshold) continue;
+    let localMaximum = true;
+    for (let offset = -lookaround; offset <= lookaround && localMaximum; offset += 1) {
+      if (!offset) continue;
+      const other = i + offset;
+      if (other < 0 || other >= points.length) continue;
+      if (offset < 0 ? angles[other] >= angles[i] : angles[other] > angles[i]) localMaximum = false;
+    }
+    if (!localMaximum) continue;
+    const wideTurn = turn(i, lookaround * 2);
+    if (wideTurn > 1e-6 && angles[i] < wideTurn * 0.55) continue;
+    corners.push(i);
+  }
+  return corners;
+}
+
+function drawFitEndTangent(points, index, toward) {
+  const direction = toward > index ? 1 : -1;
+  const count = Math.min(4, Math.abs(toward - index));
+  let tangent = { x: 0, y: 0 };
+  for (let i = 1; i <= count; i += 1) {
+    tangent = addDrawPoints(tangent, normalizeDrawPoint(subtractDrawPoints(points[index + direction * i], points[index])));
+  }
+  tangent = normalizeDrawPoint(tangent);
+  return tangent.x || tangent.y ? tangent : normalizeDrawPoint(subtractDrawPoints(points[toward], points[index]));
+}
+
+function drawFitCenterTangent(points, index, start, end) {
+  const width = 3;
+  let tangent = normalizeDrawPoint(
+    subtractDrawPoints(points[Math.min(end, index + width)], points[Math.max(start, index - width)]),
+  );
+  if (!tangent.x && !tangent.y) tangent = normalizeDrawPoint(subtractDrawPoints(points[end], points[start]));
+  return tangent;
+}
+
+function drawFitChordParameters(points, start, end) {
+  const values = [0];
+  for (let i = start + 1; i <= end; i += 1) values.push(values[values.length - 1] + drawPointDistance(points[i], points[i - 1]));
+  const length = values[values.length - 1];
+  return {
+    values: length < 1e-9 ? values.map((_, index) => index / Math.max(1, values.length - 1)) : values.map((value) => value / length),
+    length,
+  };
+}
+
+function generateDrawFitBezier(points, start, end, parameters, tangent1, tangent2, arcLength) {
+  const point0 = points[start];
+  const point3 = points[end];
+  let c00 = 0;
+  let c01 = 0;
+  let c11 = 0;
+  let x0 = 0;
+  let x1 = 0;
+  const tangent1Squared = tangent1.x * tangent1.x + tangent1.y * tangent1.y;
+  const tangentProduct = tangent1.x * tangent2.x + tangent1.y * tangent2.y;
+  const tangent2Squared = tangent2.x * tangent2.x + tangent2.y * tangent2.y;
+  for (let i = 0; i < parameters.length; i += 1) {
+    const t = parameters[i];
+    const mt = 1 - t;
+    const b0 = mt * mt * mt;
+    const b1 = 3 * mt * mt * t;
+    const b2 = 3 * mt * t * t;
+    const b3 = t * t * t;
+    c00 += b1 * b1 * tangent1Squared;
+    c01 += b1 * b2 * tangentProduct;
+    c11 += b2 * b2 * tangent2Squared;
+    const point = points[start + i];
+    const residual = {
+      x: point.x - (point0.x * (b0 + b1) + point3.x * (b2 + b3)),
+      y: point.y - (point0.y * (b0 + b1) + point3.y * (b2 + b3)),
+    };
+    x0 += b1 * (tangent1.x * residual.x + tangent1.y * residual.y);
+    x1 += b2 * (tangent2.x * residual.x + tangent2.y * residual.y);
+  }
+  const determinant = c00 * c11 - c01 * c01;
+  let alpha1 = Number.NaN;
+  let alpha2 = Number.NaN;
+  if (Math.abs(determinant) > 1e-12) {
+    alpha1 = (x0 * c11 - x1 * c01) / determinant;
+    alpha2 = (c00 * x1 - c01 * x0) / determinant;
+  }
+  const chord = drawPointDistance(point0, point3);
+  if (!(alpha1 > 1e-3) || !(alpha2 > 1e-3)) alpha1 = alpha2 = (chord > 1e-6 ? chord : arcLength) / 3;
+  alpha1 = Math.min(alpha1, arcLength);
+  alpha2 = Math.min(alpha2, arcLength);
+  return [
+    { ...point0 },
+    addDrawPoints(point0, scaleDrawPoint(tangent1, alpha1)),
+    addDrawPoints(point3, scaleDrawPoint(tangent2, alpha2)),
+    { ...point3 },
+  ];
+}
+
+function evaluateDrawFitBezier(bezier, t) {
+  const mt = 1 - t;
+  const weights = [mt * mt * mt, 3 * mt * mt * t, 3 * mt * t * t, t * t * t];
+  return {
+    x: weights.reduce((sum, weight, index) => sum + bezier[index].x * weight, 0),
+    y: weights.reduce((sum, weight, index) => sum + bezier[index].y * weight, 0),
+  };
+}
+
+function measureDrawFitError(points, start, end, bezier, parameters) {
+  let error = 0;
+  let index = Math.floor((start + end) / 2);
+  for (let i = start + 1; i < end; i += 1) {
+    const curvePoint = evaluateDrawFitBezier(bezier, parameters[i - start]);
+    const distanceSquared = (curvePoint.x - points[i].x) ** 2 + (curvePoint.y - points[i].y) ** 2;
+    if (distanceSquared > error) {
+      error = distanceSquared;
+      index = i;
+    }
+  }
+  return { error, index };
+}
+
+function reparameterizeDrawFit(points, start, bezier, parameters) {
+  return parameters.map((parameter, offset) => {
+    const mt = 1 - parameter;
+    const point = points[start + offset];
+    const curve = evaluateDrawFitBezier(bezier, parameter);
+    const first = {
+      x: 3 * mt * mt * (bezier[1].x - bezier[0].x) + 6 * mt * parameter * (bezier[2].x - bezier[1].x) + 3 * parameter * parameter * (bezier[3].x - bezier[2].x),
+      y: 3 * mt * mt * (bezier[1].y - bezier[0].y) + 6 * mt * parameter * (bezier[2].y - bezier[1].y) + 3 * parameter * parameter * (bezier[3].y - bezier[2].y),
+    };
+    const second = {
+      x: 6 * (mt * (bezier[2].x - 2 * bezier[1].x + bezier[0].x) + parameter * (bezier[3].x - 2 * bezier[2].x + bezier[1].x)),
+      y: 6 * (mt * (bezier[2].y - 2 * bezier[1].y + bezier[0].y) + parameter * (bezier[3].y - 2 * bezier[2].y + bezier[1].y)),
+    };
+    const residual = subtractDrawPoints(curve, point);
+    const denominator = first.x * first.x + first.y * first.y + residual.x * second.x + residual.y * second.y;
+    if (Math.abs(denominator) < 1e-12) return parameter;
+    return clamp(parameter - (residual.x * first.x + residual.y * first.y) / denominator, 0, 1);
+  });
+}
+
+function fitSingleDrawCubic(points, start, end, tangent1, tangent2, toleranceSquared, iterations, gate = 64) {
+  const chord = drawFitChordParameters(points, start, end);
+  let parameters = chord.values;
+  let bezier = generateDrawFitBezier(points, start, end, parameters, tangent1, tangent2, chord.length);
+  let measured = measureDrawFitError(points, start, end, bezier, parameters);
+  let best = { bezier, ...measured };
+  if (best.error > toleranceSquared * gate) return best;
+  let stalled = 0;
+  for (let i = 0; i < iterations && best.error >= toleranceSquared; i += 1) {
+    parameters = reparameterizeDrawFit(points, start, bezier, parameters);
+    bezier = generateDrawFitBezier(points, start, end, parameters, tangent1, tangent2, chord.length);
+    measured = measureDrawFitError(points, start, end, bezier, parameters);
+    if (measured.error < best.error * 0.995) {
+      best = { bezier, ...measured };
+      stalled = 0;
+    } else if (++stalled >= 3) break;
+  }
+  return best;
+}
+
+function fitDrawCubic(points, start, end, tangent1, tangent2, toleranceSquared, output, depth) {
+  if (end - start < 2) {
+    const handle = drawPointDistance(points[start], points[end]) / 3;
+    output.push({
+      bezier: [
+        { ...points[start] },
+        addDrawPoints(points[start], scaleDrawPoint(tangent1, handle)),
+        addDrawPoints(points[end], scaleDrawPoint(tangent2, handle)),
+        { ...points[end] },
+      ],
+      start,
+      end,
+    });
+    return;
+  }
+  const result = fitSingleDrawCubic(points, start, end, tangent1, tangent2, toleranceSquared, 20);
+  if (result.error < toleranceSquared || depth > 40) {
+    output.push({ bezier: result.bezier, start, end });
+    return;
+  }
+  const split = clamp(result.index, start + 1, end - 1);
+  const tangent = drawFitCenterTangent(points, split, start, end);
+  fitDrawCubic(points, start, split, tangent1, scaleDrawPoint(tangent, -1), toleranceSquared, output, depth + 1);
+  fitDrawCubic(points, split, end, tangent, tangent2, toleranceSquared, output, depth + 1);
+}
+
+function isStraightDrawFit(points, start, end, tolerance, spacing) {
+  const chord = subtractDrawPoints(points[end], points[start]);
+  const length = Math.hypot(chord.x, chord.y);
+  if (length < spacing * 2) return end - start <= 3;
+  const normal = { x: chord.x / length, y: chord.y / length };
+  for (let i = start + 1; i < end; i += 1) {
+    const delta = subtractDrawPoints(points[i], points[start]);
+    const along = delta.x * normal.x + delta.y * normal.y;
+    const off = Math.abs(delta.x * normal.y - delta.y * normal.x);
+    if (off > tolerance * 0.8 || along < -tolerance || along > length + tolerance) return false;
+  }
+  return true;
+}
+
+function drawFitLine(points, start, end) {
+  return {
+    bezier: [{ ...points[start] }, lerpPoint(points[start], points[end], 1 / 3), lerpPoint(points[start], points[end], 2 / 3), { ...points[end] }],
+    start,
+    end,
+    line: true,
+  };
+}
+
+function drawFitLineSegments(points) {
+  if (points.length < 2) return points.length ? [{ type: "move", point: points[0] }] : [];
+  return drawFitCubicsToSegments([drawFitLine(points, 0, points.length - 1)]);
+}
+
+function mergeDrawFitCubics(points, cubics, fixedAnchors, toleranceSquared) {
+  let changed = true;
+  const failed = new Set();
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < cubics.length - 1; i += 1) {
+      const left = cubics[i];
+      const right = cubics[i + 1];
+      if (fixedAnchors.has(left.end) || left.line || right.line) continue;
+      const key = `${left.start}/${left.end}/${right.end}`;
+      if (failed.has(key)) continue;
+      let tangent1 = normalizeDrawPoint(subtractDrawPoints(left.bezier[1], left.bezier[0]));
+      let tangent2 = normalizeDrawPoint(subtractDrawPoints(right.bezier[2], right.bezier[3]));
+      if (!tangent1.x && !tangent1.y) tangent1 = drawFitEndTangent(points, left.start, right.end);
+      if (!tangent2.x && !tangent2.y) tangent2 = drawFitEndTangent(points, right.end, left.start);
+      const result = fitSingleDrawCubic(points, left.start, right.end, tangent1, tangent2, toleranceSquared, 30);
+      if (result.error < toleranceSquared) {
+        cubics.splice(i, 2, { bezier: result.bezier, start: left.start, end: right.end });
+        changed = true;
+      } else failed.add(key);
+    }
+  }
+}
+
+function relaxDrawFitAnchors(points, cubics, fixedAnchors, toleranceSquared) {
+  for (let i = 0; i < cubics.length - 1; i += 1) {
+    const left = cubics[i];
+    const right = cubics[i + 1];
+    if (fixedAnchors.has(left.end) || left.line || right.line) continue;
+    const low = left.start + 2;
+    const high = right.end - 2;
+    if (high <= low) continue;
+    const tangent1 = normalizeDrawPoint(subtractDrawPoints(left.bezier[1], left.bezier[0]));
+    const tangent2 = normalizeDrawPoint(subtractDrawPoints(right.bezier[2], right.bezier[3]));
+    if ((!tangent1.x && !tangent1.y) || (!tangent2.x && !tangent2.y)) continue;
+    const evaluate = (index, iterations, bound) => {
+      const center = drawFitCenterTangent(points, index, left.start, right.end);
+      const a = fitSingleDrawCubic(points, left.start, index, tangent1, scaleDrawPoint(center, -1), 1e-9, iterations, Infinity);
+      if (a.error >= bound) return { error: Infinity, index };
+      const b = fitSingleDrawCubic(points, index, right.end, center, tangent2, 1e-9, iterations, Infinity);
+      return { error: Math.max(a.error, b.error), index, a, b };
+    };
+    const current = evaluate(left.end, 10, Infinity);
+    let coarse = { error: Infinity, index: left.end };
+    const step = Math.max(1, Math.floor((high - low) / 10));
+    for (let index = low; index <= high; index += step) {
+      const result = evaluate(index, 3, coarse.error);
+      if (result.error < coarse.error) coarse = result;
+    }
+    let best = current;
+    for (let index = Math.max(low, coarse.index - step + 1); index <= Math.min(high, coarse.index + step - 1); index += step > 4 ? 2 : 1) {
+      const result = evaluate(index, 10, best.error);
+      if (result.error < best.error) best = result;
+    }
+    if (best !== current && best.error < toleranceSquared) {
+      cubics.splice(
+        i,
+        2,
+        { bezier: best.a.bezier, start: left.start, end: best.index },
+        { bezier: best.b.bezier, start: best.index, end: right.end },
+      );
+    }
+  }
+}
+
+function drawFitCubicsToSegments(cubics) {
+  if (!cubics.length) return [];
+  const segments = [{ type: "move", point: { ...cubics[0].bezier[0] } }];
+  for (const cubic of cubics) {
+    segments.push({ type: "cubic", cp1: { ...cubic.bezier[1] }, cp2: { ...cubic.bezier[2] }, point: { ...cubic.bezier[3] } });
+  }
+  return segments;
+}
+
 function buildDrawBezierPathCache(stroke) {
   const tolerance = clamp(Number(drawUI.exportTolerance) || 0.18, 0.03, 1);
   if (!stroke.bezierDirty && stroke.bezierCache && Math.abs(stroke.bezierCache.tolerance - tolerance) < 1e-6) {
     return stroke.bezierCache;
   }
-  const path = getDrawStrokePathPoints(stroke);
-  const simplified = cornerAwareSimplifyDraw(path, tolerance);
-  const segments = catmullRomToBezierDraw(simplified);
+  const path = stroke.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  const segments = fitDrawBezierAnchors(path, tolerance);
   stroke.bezierCache = { tolerance, segments };
   stroke.bezierDirty = false;
   return stroke.bezierCache;
@@ -3074,7 +3470,9 @@ function buildFlatNibStampPolygon(center, width, angleDeg) {
 function buildDrawBrushStampCache(stroke) {
   if (!stroke.brushDirty) return stroke.brushCache;
   const brush = stroke.brush;
-  const path = getDrawStrokePathPoints(stroke);
+  const path = stroke.bezierEdited
+    ? sampleDrawBezierSegments(buildDrawBezierPathCache(stroke).segments)
+    : getDrawStrokePathPoints(stroke);
   const step = getDrawBrushStampStepMM(brush);
   const stamps = [];
   const pushStamp = (point) => {
@@ -3101,6 +3499,22 @@ function buildDrawBrushStampCache(stroke) {
   stroke.brushCache = stamps;
   stroke.brushDirty = false;
   return stroke.brushCache;
+}
+
+function sampleDrawBezierSegments(segments, samplesPerCurve = 24) {
+  if (!segments?.length) return [];
+  const points = [{ ...segments[0].point }];
+  let start = segments[0].point;
+  for (let i = 1; i < segments.length; i += 1) {
+    const segment = segments[i];
+    if (segment.type !== "cubic") continue;
+    const bezier = [start, segment.cp1, segment.cp2, segment.point];
+    for (let sample = 1; sample <= samplesPerCurve; sample += 1) {
+      points.push(evaluateDrawFitBezier(bezier, sample / samplesPerCurve));
+    }
+    start = segment.point;
+  }
+  return points;
 }
 
 function drawDrawStampGeometryPath(targetCtx, stamp) {
@@ -3398,7 +3812,153 @@ function applyDrawTransformFromState(pointMm) {
   drawState.committedDirty = true;
 }
 
+function drawEditScreenSizeMM(pixels) {
+  return pixels / Math.max(0.001, PaperUtils.getPxPerMM(P) * viewport.scale);
+}
+
+function getDrawEditAnchors(stroke) {
+  const segments = buildDrawBezierPathCache(stroke).segments;
+  if (!segments?.length) return [];
+  const anchors = [{
+    point: segments[0].point,
+    segmentIndex: 0,
+    anchorIndex: 0,
+    outgoing: segments[1]?.type === "cubic" ? segments[1].cp1 : null,
+    incoming: null,
+  }];
+  for (let i = 1; i < segments.length; i += 1) {
+    if (segments[i].type !== "cubic") continue;
+    anchors.push({
+      point: segments[i].point,
+      segmentIndex: i,
+      anchorIndex: anchors.length,
+      incoming: segments[i].cp2,
+      outgoing: segments[i + 1]?.type === "cubic" ? segments[i + 1].cp1 : null,
+    });
+  }
+  return anchors;
+}
+
+function hitTestDrawEditPoint(pointMm) {
+  const radius = drawEditScreenSizeMM(9);
+  let closest = null;
+  for (let strokeIndex = drawState.strokes.length - 1; strokeIndex >= 0; strokeIndex -= 1) {
+    const stroke = drawState.strokes[strokeIndex];
+    for (const anchor of getDrawEditAnchors(stroke)) {
+      for (const handleType of ["incoming", "outgoing"]) {
+        const handle = anchor[handleType];
+        if (!handle) continue;
+        const distance = drawPointDistance(pointMm, handle);
+        if (distance <= radius && (!closest || distance < closest.distance)) {
+          closest = { type: "handle", handleType, stroke, anchor, distance };
+        }
+      }
+      const distance = drawPointDistance(pointMm, anchor.point);
+      if (distance <= radius && (!closest || distance <= closest.distance)) {
+        closest = { type: "anchor", stroke, anchor, distance };
+      }
+    }
+  }
+  return closest;
+}
+
+function beginDrawEdit(hit, pointMm) {
+  if (!hit) {
+    drawState.editDrag = null;
+    updateDrawStatus("Choose an anchor or handle");
+    return;
+  }
+  const segments = buildDrawBezierPathCache(hit.stroke).segments;
+  drawState.editDrag = {
+    ...hit,
+    start: pointMm,
+    originalPoint: { ...hit.anchor.point },
+    originalIncoming: hit.anchor.incoming ? { ...hit.anchor.incoming } : null,
+    originalOutgoing: hit.anchor.outgoing ? { ...hit.anchor.outgoing } : null,
+    segments,
+  };
+  drawState.selectedStrokeIds.clear();
+  drawState.selectedStrokeIds.add(hit.stroke.id);
+  updateDrawStatus(hit.type === "anchor" ? "Moving anchor" : "Adjusting curve handle");
+}
+
+function applyDrawEdit(pointMm) {
+  const edit = drawState.editDrag;
+  if (!edit) return;
+  const delta = subtractDrawPoints(pointMm, edit.start);
+  if (edit.type === "anchor") {
+    edit.anchor.point.x = clamp(edit.originalPoint.x + delta.x, 0, P.canvasWMM);
+    edit.anchor.point.y = clamp(edit.originalPoint.y + delta.y, 0, P.canvasHMM);
+    if (edit.originalIncoming) {
+      edit.anchor.incoming.x = edit.originalIncoming.x + delta.x;
+      edit.anchor.incoming.y = edit.originalIncoming.y + delta.y;
+    }
+    if (edit.originalOutgoing) {
+      edit.anchor.outgoing.x = edit.originalOutgoing.x + delta.x;
+      edit.anchor.outgoing.y = edit.originalOutgoing.y + delta.y;
+    }
+  } else {
+    const handle = edit.anchor[edit.handleType];
+    const original = edit.handleType === "incoming" ? edit.originalIncoming : edit.originalOutgoing;
+    handle.x = clamp(original.x + delta.x, 0, P.canvasWMM);
+    handle.y = clamp(original.y + delta.y, 0, P.canvasHMM);
+  }
+  edit.stroke.bezierEdited = true;
+  edit.stroke.bezierDirty = false;
+  edit.stroke.brushDirty = true;
+  drawState.committedDirty = true;
+  requestRender();
+}
+
+function drawBezierEditOverlay() {
+  const anchorRadius = drawEditScreenSizeMM(4.5);
+  const handleRadius = drawEditScreenSizeMM(3.8);
+  const lineWidth = drawEditScreenSizeMM(1);
+  for (const stroke of drawState.strokes) {
+    const cache = buildDrawBezierPathCache(stroke);
+    const segments = cache.segments;
+    if (!segments?.length) continue;
+    ctx.save();
+    ctx.strokeStyle = "rgba(49, 91, 70, 0.9)";
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    for (const segment of segments) {
+      if (segment.type === "move") ctx.moveTo(segment.point.x, segment.point.y);
+      else if (segment.type === "cubic") ctx.bezierCurveTo(segment.cp1.x, segment.cp1.y, segment.cp2.x, segment.cp2.y, segment.point.x, segment.point.y);
+    }
+    ctx.stroke();
+    for (const anchor of getDrawEditAnchors(stroke)) {
+      ctx.strokeStyle = "rgba(49, 91, 70, 0.55)";
+      ctx.lineWidth = lineWidth;
+      for (const handle of [anchor.incoming, anchor.outgoing]) {
+        if (!handle) continue;
+        ctx.beginPath();
+        ctx.moveTo(anchor.point.x, anchor.point.y);
+        ctx.lineTo(handle.x, handle.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(handle.x, handle.y, handleRadius, 0, Math.PI * 2);
+        ctx.fillStyle = "#f8f7f2";
+        ctx.fill();
+        ctx.strokeStyle = "#315b46";
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.rect(anchor.point.x - anchorRadius, anchor.point.y - anchorRadius, anchorRadius * 2, anchorRadius * 2);
+      ctx.fillStyle = drawState.selectedStrokeIds.has(stroke.id) ? "#315b46" : "#f8f7f2";
+      ctx.fill();
+      ctx.strokeStyle = "#315b46";
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 function drawDrawOverlay() {
+  if (appState.mode === "draw" && drawUI.tool === "edit") {
+    drawBezierEditOverlay();
+    return;
+  }
   const bounds = computeDrawSelectionBounds();
   if (bounds) {
     for (const stroke of drawState.strokes) {
@@ -3569,6 +4129,7 @@ function clearAllDrawStrokes() {
   drawState.selectedStrokeIds.clear();
   drawState.lassoPoints = [];
   drawState.transformState = null;
+  drawState.editDrag = null;
   clearDrawLayer(drawState.activeLayer);
   clearDrawLayer(drawState.committedLayer);
   drawState.committedDirty = false;
@@ -3583,6 +4144,8 @@ function onDrawPointerDown(event) {
   if (isPenPointerEvent(event)) handleDrawPenPreview(event);
   if (drawUI.tool === "draw") {
     beginDrawStroke(point);
+  } else if (drawUI.tool === "edit") {
+    beginDrawEdit(hitTestDrawEditPoint(point), point);
   } else if (drawUI.tool === "lasso") {
     drawState.lassoPoints = [point];
     updateDrawStatus("Tracing selection");
@@ -3615,6 +4178,10 @@ function onDrawPointerMove(event) {
   }
   const point = pointerToMM(event);
   if (!point) return;
+  if (drawUI.tool === "edit" && drawState.editDrag) {
+    applyDrawEdit(point);
+    return;
+  }
   if (drawUI.tool === "lasso" && drawState.lassoPoints.length > 0) {
     const last = drawState.lassoPoints[drawState.lassoPoints.length - 1];
     if (!last || drawPointDistance(last, point) >= 1) {
@@ -3633,6 +4200,12 @@ function onDrawPointerMove(event) {
 function onDrawPointerUp(event) {
   if (drawUI.tool === "draw") {
     finalizeCurrentDrawStroke();
+    requestRender();
+    streamIfDrawAutoEnabled();
+  } else if (drawUI.tool === "edit" && drawState.editDrag) {
+    drawState.editDrag = null;
+    drawState.committedDirty = true;
+    updateDrawStatus("Curve updated");
     requestRender();
     streamIfDrawAutoEnabled();
   } else if (drawUI.tool === "lasso") {

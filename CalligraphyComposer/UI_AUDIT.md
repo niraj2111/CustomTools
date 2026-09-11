@@ -21,6 +21,7 @@ The original workspace placed six expanded settings groups and two action panels
 | Cmd/Ctrl K | Search quick actions |
 | T | Compose text |
 | B | Draw |
+| E | Edit Bézier anchors and control points |
 | L | Lasso strokes |
 | V | Transform selected strokes |
 | N | Add text layer |
