@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Feather · Custom Tools</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M7 28Q3 7 26 3Q30 23 7 28ZM7 28L24 5' fill='none' stroke='%23649b8c' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{display:grid;grid-template-columns:320px 1fr;background:#10151c;color:#eef3f7;font-family:system-ui,sans-serif}aside{padding:16px;background:#151c24;border-right:1px solid #273341;overflow:auto}h1{font-size:19px;margin:0 0 16px;font-weight:550}.row{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}button{background:#263442;border:1px solid #3c4b5a;color:#eef3f7;border-radius:6px;padding:9px 12px;cursor:pointer}button:hover{background:#354957}.hint,#status{font-size:12px;line-height:1.6;color:#aabac8}main{min-width:0;min-height:0;display:grid;grid-template-rows:1fr auto}#wrap{min-height:0;display:grid;place-items:center;overflow:auto;padding:18px}canvas{box-shadow:0 12px 50px #0005;touch-action:none}#status{padding:8px 18px;border-top:1px solid #273341}.tp-dfwv{width:100%}@media(max-width:700px){body{grid-template-columns:1fr;grid-template-rows:52vh auto}main{grid-row:1}aside{border-top:1px solid #273341}#wrap{padding:10px}}
+</style>
+</head>
+<body>
+<aside><h1>Feather</h1><div id="pane"></div>
+<div class="row"><button id="arrange">Rearrange grid</button><button id="reseed">New selected</button><button id="reseedAll">New all</button></div>
+<div class="row"><button id="svg">Export SVG</button><button id="png">Save PNG</button></div>
+<p class="hint">Click a feather to edit its own shape, size, seed, or rotation. Choose two barb colors and a preset to distribute them through each feather. New selected changes one seed; New all regenerates every seed. Guides are preview only.</p>
+</aside>
+<main><div id="wrap"></div><div id="status" aria-live="polite"></div></main>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+<script src="../shared/paper.js"></script><script src="../shared/export.js"></script>
+<script src="geometry.js"></script><script src="sketch.js"></script>
+</body></html>
