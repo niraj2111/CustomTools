@@ -1,13 +1,16 @@
 const MM_PER_INCH = 25.4;
+const BELLY_BUFFER_MM = 5;
 
 let pane;
 let cnv;
+let layoutBindings = [];
+let vaseInstances = [];
 
 const P = {
   // Canvas & Layout
-  canvasWMM: 210,
+  canvasWMM: 148,
   canvasHMM: 210,
-  canvasSizePreset: "Square",
+  canvasSizePreset: "A5",
   dpi: 96,
   previewScale: 1.0,
   fitToViewport: true,
@@ -15,6 +18,26 @@ const P = {
   lineColor: "#0b0c10",
   strokeWeightMM: 0.35,
   marginMM: 20,
+
+  // Layout Presets
+  layoutPreset: "Single",
+  gridColumns: 2,
+  gridRows: 2,
+  gridGapXMM: 8,
+  gridGapYMM: 8,
+  linearCount: 3,
+  linearGapMM: 8,
+  radialCount: 6,
+  radialRadiusMM: 48,
+  radialCellWidthMM: 28,
+  radialCellHeightMM: 42,
+  pageSpacedCount: 7,
+  pageCellWidthMM: 28,
+  pageCellHeightMM: 42,
+  pageGapMM: 8,
+
+  // Selected vase
+  activeInstance: 1,
 
   // Primary Form (0-1)
   neckWidth: 0.25,
@@ -53,7 +76,68 @@ const P = {
   svgFilename: "Vase-Bundle",
 };
 
+const RANDOM_CONTROL_RANGES = {
+  neckWidth: [0.1, 1],
+  rimFlare: [0.1, 1],
+  baseWidth: [0.1, 1],
+  a4: [0.1, 1],
+  bellyWidth: [0, 1],
+  a2: [0, 1],
+  a3: [0, 1],
+  bulbHeightRatio: [0.1, 0.9],
+};
+
+const VASE_GEOMETRY_KEYS = [
+  "neckWidth", "rimFlare", "baseWidth", "a4",
+  "bellyWidth", "a2", "a3", "bulbHeightRatio",
+  "lock_neckWidth", "lock_rimFlare", "lock_baseWidth", "lock_a4",
+  "lock_bellyWidth", "lock_a2", "lock_a3", "lock_bulbHeightRatio",
+  "neckDepth", "baseDepth", "vaseLines",
+  "showBranch", "branchHeightRatio", "branchSeed", "branchAngle",
+];
+
+function captureVaseGeometry(source = P) {
+  return Object.fromEntries(VASE_GEOMETRY_KEYS.map(key => [key, source[key]]));
+}
+
+function makeVaseInstance() {
+  return { geometry: captureVaseGeometry() };
+}
+
+function getLayoutCount() {
+  if (P.layoutPreset === "Grid") return Math.round(P.gridColumns) * Math.round(P.gridRows);
+  if (P.layoutPreset === "Row" || P.layoutPreset === "Column") return Math.round(P.linearCount);
+  if (P.layoutPreset === "Radial") return Math.round(P.radialCount);
+  if (P.layoutPreset === "Page Spaced") return Math.round(P.pageSpacedCount);
+  return 1;
+}
+
+function ensureVaseInstances() {
+  const count = Math.max(1, getLayoutCount());
+  while (vaseInstances.length < count) vaseInstances.push(makeVaseInstance());
+  P.activeInstance = Math.max(1, Math.min(count, Math.round(P.activeInstance)));
+  return count;
+}
+
+function loadActiveVaseGeometry() {
+  ensureVaseInstances();
+  Object.assign(P, vaseInstances[P.activeInstance - 1].geometry);
+}
+
+function saveActiveVaseGeometry() {
+  ensureVaseInstances();
+  vaseInstances[P.activeInstance - 1].geometry = captureVaseGeometry();
+}
+
+function updateLayoutControlVisibility() {
+  layoutBindings.forEach(({ blade, presets }) => {
+    blade.hidden = !presets.includes(P.layoutPreset);
+  });
+}
+
 function setup() {
+  ensureVaseInstances();
+  loadActiveVaseGeometry();
   const size = getCanvasPixelSize();
   cnv = createCanvas(size.width, size.height);
   cnv.parent("wrap");
@@ -70,36 +154,148 @@ function draw() {
   background(P.bg);
   push();
   scale(getPxPerMM());
-  stroke(P.lineColor);
-  strokeWeight(P.strokeWeightMM);
-  noFill();
-
-  const usableW = P.canvasWMM - (P.marginMM * 2);
-  const usableH = P.canvasHMM - (P.marginMM * 2);
-  const centerX = P.canvasWMM / 2;
-  const centerY = P.canvasHMM / 2;
-
-  const plantHLimit = P.showBranch ? usableH * P.branchHeightRatio : 0;
-  const vaseHLimit = usableH - plantHLimit;
-  const artTop = centerY - (usableH / 2);
-
-  if (P.showBranch) {
+  const { width: baseW, height: baseH } = getUsableArea();
+  const items = getLayoutItems();
+  items.forEach(drawLayoutCell);
+  items.forEach(item => {
+    const state = vaseInstances[item.index].geometry;
     push();
-    randomSeed(P.branchSeed);
-    translate(centerX, artTop + plantHLimit);
-    strokeWeight(P.strokeWeightMM * 0.7);
-    branch(plantHLimit);
+    translate(item.x, item.y);
+    scale(item.scale);
+    drawArtwork(0, -baseH / 2, baseW, baseH, state);
     pop();
-  }
-
-  drawVase(centerX, artTop + plantHLimit, vaseHLimit, usableW);
+  });
   pop();
 }
 
-function drawVase(x, y, h, w) {
-  const bulbY = h * P.bulbHeightRatio;
+function drawLayoutCell(item) {
+  const selected = item.index === P.activeInstance - 1;
+  push();
+  noFill();
+  stroke(selected ? "#2563eb" : "#b7bcc4");
+  strokeWeight(selected ? 0.55 : 0.25);
+  rect(item.cell.x, item.cell.y, item.cell.width, item.cell.height);
+  noStroke();
+  fill(selected ? "#2563eb" : "#7c838e");
+  textSize(3);
+  textAlign(LEFT, TOP);
+  text(String(item.index + 1), item.cell.x + 1.5, item.cell.y + 1.2);
+  pop();
+}
+
+function getUsableArea() {
+  return {
+    width: Math.max(1, P.canvasWMM - (P.marginMM * 2)),
+    height: Math.max(1, P.canvasHMM - (P.marginMM * 2)),
+  };
+}
+
+function getLayoutItems() {
+  const count = ensureVaseInstances();
+  const { width: usableW, height: usableH } = getUsableArea();
+  const left = P.marginMM;
+  const top = P.marginMM;
+  const centerX = P.canvasWMM / 2;
+  const centerY = P.canvasHMM / 2;
+  const fitScale = (width, height) => Math.max(0.01, Math.min(width / usableW, height / usableH));
+  const items = [];
+  const addCell = (x, y, width, height) => items.push({
+    x,
+    y,
+    scale: fitScale(width, height),
+    cell: { x: x - width / 2, y: y - height / 2, width, height },
+  });
+
+  if (P.layoutPreset === "Grid") {
+    const columns = Math.max(1, Math.round(P.gridColumns));
+    const rows = Math.max(1, Math.round(P.gridRows));
+    const cellW = Math.max(1, (usableW - P.gridGapXMM * (columns - 1)) / columns);
+    const cellH = Math.max(1, (usableH - P.gridGapYMM * (rows - 1)) / rows);
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        addCell(
+          left + column * (cellW + P.gridGapXMM) + cellW / 2,
+          top + row * (cellH + P.gridGapYMM) + cellH / 2,
+          cellW,
+          cellH,
+        );
+      }
+    }
+  } else if (P.layoutPreset === "Row" || P.layoutPreset === "Column") {
+    const itemCount = Math.max(1, Math.round(P.linearCount));
+    const horizontal = P.layoutPreset === "Row";
+    const cellW = horizontal ? Math.max(1, (usableW - P.linearGapMM * (itemCount - 1)) / itemCount) : usableW;
+    const cellH = horizontal ? usableH : Math.max(1, (usableH - P.linearGapMM * (itemCount - 1)) / itemCount);
+    for (let index = 0; index < itemCount; index++) {
+      addCell(
+        horizontal ? left + index * (cellW + P.linearGapMM) + cellW / 2 : centerX,
+        horizontal ? centerY : top + index * (cellH + P.linearGapMM) + cellH / 2,
+        cellW,
+        cellH,
+      );
+    }
+  } else if (P.layoutPreset === "Radial") {
+    const radius = Math.min(P.radialRadiusMM, Math.max(0, Math.min(usableW, usableH) / 2));
+    for (let index = 0; index < count; index++) {
+      const angle = -90 + (index * 360 / count);
+      const radians = angle * Math.PI / 180;
+      addCell(
+        centerX + Math.cos(radians) * radius,
+        centerY + Math.sin(radians) * radius,
+        P.radialCellWidthMM,
+        P.radialCellHeightMM,
+      );
+    }
+  } else if (P.layoutPreset === "Page Spaced") {
+    const cellW = Math.max(1, P.pageCellWidthMM);
+    const cellH = Math.max(1, P.pageCellHeightMM);
+    const columns = Math.max(1, Math.min(count, Math.floor((usableW + P.pageGapMM) / (cellW + P.pageGapMM))));
+    const rows = Math.ceil(count / columns);
+    const blockW = columns * cellW + (columns - 1) * P.pageGapMM;
+    const blockH = rows * cellH + (rows - 1) * P.pageGapMM;
+    const startX = centerX - blockW / 2;
+    const startY = centerY - blockH / 2;
+    for (let index = 0; index < count; index++) {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      addCell(
+        startX + column * (cellW + P.pageGapMM) + cellW / 2,
+        startY + row * (cellH + P.pageGapMM) + cellH / 2,
+        cellW,
+        cellH,
+      );
+    }
+  } else {
+    addCell(centerX, centerY, usableW, usableH);
+  }
+
+  return items.slice(0, count).map((item, index) => ({ ...item, index }));
+}
+
+function drawArtwork(centerX, artTop, usableW, usableH, state) {
+  const plantH = state.showBranch ? usableH * state.branchHeightRatio : 0;
+  const vaseH = usableH - plantH;
+
+  if (state.showBranch) {
+    push();
+    randomSeed(state.branchSeed);
+    translate(centerX, artTop + plantH);
+    stroke(P.lineColor);
+    strokeWeight(P.strokeWeightMM * 0.7);
+    branch(plantH, state);
+    pop();
+  }
+
+  stroke(P.lineColor);
+  strokeWeight(P.strokeWeightMM);
+  noFill();
+  drawVase(centerX, artTop + plantH, vaseH, usableW, state);
+}
+
+function drawVase(x, y, h, w, state) {
+  const { neckDepth, baseDepth, bellyY } = getVaseVerticalGeometry(h, state);
   const sy = 0; const ey = h;
-  const pts = [{ py: sy }, { py: sy + P.neckDepth }, { py: sy + P.neckDepth }, { py: ey - P.baseDepth }, { py: ey - P.baseDepth }, { py: ey }];
+  const pts = [{ py: sy }, { py: sy + neckDepth }, { py: sy + neckDepth }, { py: ey - baseDepth }, { py: ey - baseDepth }, { py: ey }];
 
   const maxW = (w * 0.9) / 1.5;
   const baseGap = maxW; 
@@ -107,25 +303,25 @@ function drawVase(x, y, h, w) {
   push();
   translate(x, y);
 
-  for (let j = 0; j <= P.vaseLines; j++) {
-    let factor = map(j, 0, P.vaseLines, -1, 1);
+  for (let j = 0; j <= state.vaseLines; j++) {
+    let factor = map(j, 0, state.vaseLines, -1, 1);
     let g = baseGap * factor;
     const cx = (val) => constrain(val, -maxW, maxW);
 
     beginShape();
-    vertex(cx(g * P.neckWidth), pts[0].py);
-    vertex(cx(g * P.neckWidth), pts[1].py);
-    bezierVertex(cx(g * P.rimFlare), pts[1].py, cx(g * P.a2), pts[2].py + bulbY, cx(g * P.bellyWidth), pts[2].py + bulbY);
-    bezierVertex(cx(g * P.a3), pts[2].py + bulbY, cx(g * P.a4), pts[4].py, cx(g * P.baseWidth), pts[4].py);
-    vertex(cx(g * P.baseWidth), pts[4].py);
-    vertex(cx(g * P.baseWidth), pts[5].py);
+    vertex(cx(g * state.neckWidth), pts[0].py);
+    vertex(cx(g * state.neckWidth), pts[1].py);
+    bezierVertex(cx(g * state.rimFlare), pts[1].py, cx(g * state.a2), bellyY, cx(g * state.bellyWidth), bellyY);
+    bezierVertex(cx(g * state.a3), bellyY, cx(g * state.a4), pts[4].py, cx(g * state.baseWidth), pts[4].py);
+    vertex(cx(g * state.baseWidth), pts[4].py);
+    vertex(cx(g * state.baseWidth), pts[5].py);
     endShape();
 
-    if (P.showControls && (j === 0 || j === P.vaseLines)) {
-      drawDot(cx(g * P.rimFlare), pts[1].py);
-      drawDot(cx(g * P.a2), pts[2].py + bulbY);
-      drawDot(cx(g * P.a3), pts[2].py + bulbY);
-      drawDot(cx(g * P.a4), pts[4].py);
+    if (P.showControls && (j === 0 || j === state.vaseLines)) {
+      drawDot(cx(g * state.rimFlare), pts[1].py);
+      drawDot(cx(g * state.a2), bellyY);
+      drawDot(cx(g * state.a3), bellyY);
+      drawDot(cx(g * state.a4), pts[4].py);
     }
   }
   pop();
@@ -135,12 +331,74 @@ function drawDot(x, y) {
   push(); noStroke(); fill(255, 0, 0, 150); ellipse(x, y, 1.2, 1.2); pop();
 }
 
-function branch(len) {
+function getVaseHeight(state = P) {
+  const usableH = P.canvasHMM - (P.marginMM * 2);
+  const plantH = state.showBranch ? usableH * state.branchHeightRatio : 0;
+  return usableH - plantH;
+}
+
+function enforceVaseConstraints(state = P) {
+  // Bulge width and handle controls are defined on the complete 0-1 range.
+  // Keep imported presets within the same limits as the UI.
+  state.bellyWidth = Math.max(0, Math.min(1, state.bellyWidth));
+  state.a2 = Math.max(0, Math.min(1, state.a2));
+  state.a3 = Math.max(0, Math.min(1, state.a3));
+
+  // Either belly handle may sit inside the belly anchor. Only prevent both
+  // handles from pointing inward at once, which creates a spike. Move the
+  // nearer handle to the belly width so the correction is as small as possible.
+  if (state.a2 < state.bellyWidth && state.a3 < state.bellyWidth) {
+    if (state.a2 >= state.a3) state.a2 = state.bellyWidth;
+    else state.a3 = state.bellyWidth;
+  }
+
+  // Preserve room for the belly buffer even when the neck/base controls or
+  // plant height reduce the available vase height.
+  const availableDepth = Math.max(0, getVaseHeight(state) - (BELLY_BUFFER_MM * 2));
+  const combinedDepth = state.neckDepth + state.baseDepth;
+  if (combinedDepth > availableDepth && combinedDepth > 0) {
+    const scale = availableDepth / combinedDepth;
+    state.neckDepth *= scale;
+    state.baseDepth *= scale;
+  }
+}
+
+function getVaseVerticalGeometry(height, state = P) {
+  const neckEnd = state.neckDepth;
+  const baseStart = height - state.baseDepth;
+  const firstAllowedY = neckEnd + BELLY_BUFFER_MM;
+  const lastAllowedY = baseStart - BELLY_BUFFER_MM;
+  const position = Math.max(0, Math.min(1, state.bulbHeightRatio));
+  return {
+    neckDepth: state.neckDepth,
+    baseDepth: state.baseDepth,
+    bellyY: firstAllowedY + ((lastAllowedY - firstAllowedY) * position),
+  };
+}
+
+function randomControlState(random = Math.random, state = P) {
+  let candidate = { ...state };
+
+  // Rejection sampling keeps the valid random results evenly distributed.
+  // Clamping an invalid draw would create an artificial pile-up where a
+  // handle exactly equals the belly width.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    candidate = { ...state };
+    Object.entries(RANDOM_CONTROL_RANGES).forEach(([key, [min, max]]) => {
+      if (!state["lock_" + key]) candidate[key] = min + (random() * (max - min));
+    });
+    if (!(candidate.a2 < candidate.bellyWidth && candidate.a3 < candidate.bellyWidth)) break;
+  }
+
+  return candidate;
+}
+
+function branch(len, state) {
   line(0, 0, 0, -len * 0.4);
   translate(0, -len * 0.4);
   if (len > 15) {
-    push(); rotate(P.branchAngle * random(0.6, 1.4)); branch(len * 0.65); pop();
-    push(); rotate(-P.branchAngle * random(0.6, 1.4)); branch(len * 0.55); pop();
+    push(); rotate(state.branchAngle * random(0.6, 1.4)); branch(len * 0.65, state); pop();
+    push(); rotate(-state.branchAngle * random(0.6, 1.4)); branch(len * 0.55, state); pop();
   } else {
     noStroke(); fill(P.lineColor);
     ellipse(0, 0, 1.5, 1.5);
@@ -149,10 +407,39 @@ function branch(len) {
 
 function buildPane() {
   pane = new Tweakpane.Pane({ container: document.getElementById("pane"), title: "Vase Project" });
+  layoutBindings = [];
   
   const presets = pane.addFolder({ title: "Presets Management" });
   presets.addButton({ title: "💾 Save Bundle (SVG+JSON)" }).on("click", exportBundle);
   presets.addButton({ title: "📂 Load JSON Preset" }).on("click", () => document.getElementById("presetInput").click());
+
+  const layout = pane.addFolder({ title: "Layout Presets", expanded: true });
+  layout.addInput(P, "layoutPreset", {
+    options: { Single: "Single", Grid: "Grid", Row: "Row", Column: "Column", Radial: "Radial", "Page Spaced": "Page Spaced" },
+    label: "Preset",
+  });
+  const addLayoutInput = (key, options, relevantPresets) => {
+    const blade = layout.addInput(P, key, options);
+    layoutBindings.push({ blade, presets: relevantPresets });
+    return blade;
+  };
+  addLayoutInput("gridColumns", { min: 1, max: 6, step: 1, label: "Columns" }, ["Grid"]);
+  addLayoutInput("gridRows", { min: 1, max: 6, step: 1, label: "Rows" }, ["Grid"]);
+  addLayoutInput("gridGapXMM", { min: 0, max: 40, step: 1, label: "Column Gap (mm)" }, ["Grid"]);
+  addLayoutInput("gridGapYMM", { min: 0, max: 40, step: 1, label: "Row Gap (mm)" }, ["Grid"]);
+  addLayoutInput("linearCount", { min: 1, max: 10, step: 1, label: "Vases" }, ["Row", "Column"]);
+  addLayoutInput("linearGapMM", { min: 0, max: 40, step: 1, label: "Gap (mm)" }, ["Row", "Column"]);
+  addLayoutInput("radialCount", { min: 2, max: 16, step: 1, label: "Vases" }, ["Radial"]);
+  addLayoutInput("radialRadiusMM", { min: 0, max: 100, step: 1, label: "Radius (mm)" }, ["Radial"]);
+  addLayoutInput("radialCellWidthMM", { min: 5, max: 100, step: 1, label: "Cell Width (mm)" }, ["Radial"]);
+  addLayoutInput("radialCellHeightMM", { min: 5, max: 140, step: 1, label: "Cell Height (mm)" }, ["Radial"]);
+  addLayoutInput("pageSpacedCount", { min: 1, max: 20, step: 1, label: "Vases" }, ["Page Spaced"]);
+  addLayoutInput("pageCellWidthMM", { min: 5, max: 100, step: 1, label: "Cell Width (mm)" }, ["Page Spaced"]);
+  addLayoutInput("pageCellHeightMM", { min: 5, max: 140, step: 1, label: "Cell Height (mm)" }, ["Page Spaced"]);
+  addLayoutInput("pageGapMM", { min: 0, max: 40, step: 1, label: "Spacing (mm)" }, ["Page Spaced"]);
+
+  layout.addInput(P, "activeInstance", { min: 1, max: 36, step: 1, label: "Selected Cell" });
+  updateLayoutControlVisibility();
 
   const form = pane.addFolder({ title: "Primary Form (0-1)" });
   form.addInput(P, "neckWidth", { min: 0.1, max: 1.0, label: "Neck Width" });
@@ -165,11 +452,11 @@ function buildPane() {
   form.addInput(P, "lock_a4", { label: "Lock Shoulder" });
 
   const bulb = pane.addFolder({ title: "Bulge Geometry (0-1)" });
-  bulb.addInput(P, "bellyWidth", { min: 0.1, max: 1.5, label: "Belly Width" });
+  bulb.addInput(P, "bellyWidth", { min: 0, max: 1, label: "Belly Width" });
   bulb.addInput(P, "lock_bellyWidth", { label: "Lock Belly" });
-  bulb.addInput(P, "a2", { min: 0.1, max: 2.0, label: "Bulb Top Handle" });
+  bulb.addInput(P, "a2", { min: 0, max: 1, label: "Bulb Top Handle" });
   bulb.addInput(P, "lock_a2", { label: "Lock Top" });
-  bulb.addInput(P, "a3", { min: 0.1, max: 2.0, label: "Bulb Btm Handle" });
+  bulb.addInput(P, "a3", { min: 0, max: 1, label: "Bulb Btm Handle" });
   bulb.addInput(P, "lock_a3", { label: "Lock Btm" });
   bulb.addInput(P, "bulbHeightRatio", { min: 0.1, max: 0.9, label: "Bulb Position %" });
   bulb.addInput(P, "lock_bulbHeightRatio", { label: "Lock Position" });
@@ -182,36 +469,60 @@ function buildPane() {
 
   const dim = pane.addFolder({ title: "Vase Lines & Heights" });
   dim.addInput(P, "vaseLines", { min: 5, max: 300, step: 1, label: "Density" });
-  dim.addInput(P, "neckDepth", { min: 2, max: 80, label: "Neck H" });
-  dim.addInput(P, "baseDepth", { min: 2, max: 80, label: "Base H" });
+  dim.addInput(P, "neckDepth", { min: 2, max: 80, label: "Neck H (mm)" });
+  dim.addInput(P, "baseDepth", { min: 2, max: 80, label: "Base H (mm)" });
 
-  const layout = pane.addFolder({ title: "Canvas Settings" });
-  layout.addInput(P, "canvasWMM", { label: "Width (mm)" });
-  layout.addInput(P, "canvasHMM", { label: "Height (mm)" });
-  layout.addInput(P, "canvasSizePreset", { options: { Square: "Square", A5: "A5", A4: "A4", A3: "A3" }, label: "Preset Paper" }).on("change", (ev) => {
+  const canvas = pane.addFolder({ title: "Canvas Settings" });
+  canvas.addInput(P, "canvasWMM", { label: "Width (mm)" });
+  canvas.addInput(P, "canvasHMM", { label: "Height (mm)" });
+  canvas.addInput(P, "canvasSizePreset", { options: { Square: "Square", A5: "A5", A4: "A4", A3: "A3" }, label: "Preset Paper" }).on("change", (ev) => {
     if (ev.value === "A5") { P.canvasWMM = 148; P.canvasHMM = 210; }
     else if (ev.value === "A4") { P.canvasWMM = 210; P.canvasHMM = 297; }
     else if (ev.value === "A3") { P.canvasWMM = 297; P.canvasHMM = 420; }
     else if (ev.value === "Square") { P.canvasWMM = 210; P.canvasHMM = 210; }
     pane.refresh();
   });
-  layout.addInput(P, "marginMM", { min: 0, max: 80, step: 1, label: "Margin (mm)" });
-  layout.addInput(P, "previewScale", { min: 0.1, max: 5, step: 0.1, label: "Zoom" });
-  layout.addInput(P, "fitToViewport", { label: "Fit View" });
+  canvas.addInput(P, "marginMM", { min: 0, max: 80, step: 1, label: "Margin (mm)" });
+  canvas.addInput(P, "previewScale", { min: 0.1, max: 5, step: 0.1, label: "Zoom" });
+  canvas.addInput(P, "fitToViewport", { label: "Fit View" });
 
   const style = pane.addFolder({ title: "Styling" });
   style.addInput(P, "lineColor", { label: "Ink Color" });
-  style.addInput(P, "strokeWeightMM", { min: 0.05, max: 1.0, step: 0.05, label: "Lineweight" });
+  style.addInput(P, "strokeWeightMM", { min: 0.05, max: 1.0, step: 0.05, label: "Lineweight (mm)" });
   style.addInput(P, "showControls", { label: "Guides (G)" });
 
-  pane.on("change", () => { syncCanvasSize(); redraw(); });
+  pane.on("change", event => {
+    const key = event.presetKey;
+    if (key === "activeInstance") {
+      ensureVaseInstances();
+      loadActiveVaseGeometry();
+    } else if (VASE_GEOMETRY_KEYS.includes(key)) {
+      enforceVaseConstraints(P);
+      saveActiveVaseGeometry();
+    }
+    if (["layoutPreset", "gridColumns", "gridRows", "linearCount", "radialCount", "pageSpacedCount"].includes(key)) {
+      ensureVaseInstances();
+      loadActiveVaseGeometry();
+      updateLayoutControlVisibility();
+    }
+    if (["canvasWMM", "canvasHMM", "marginMM", "canvasSizePreset"].includes(key)) {
+      vaseInstances.forEach(instance => enforceVaseConstraints(instance.geometry));
+      loadActiveVaseGeometry();
+    }
+    pane.refresh();
+    syncCanvasSize();
+    redraw();
+  });
 }
 
 function hookUI() {
   document.getElementById("randomBtn").addEventListener("click", () => {
-    const keys = ["neckWidth", "rimFlare", "baseWidth", "a4", "bellyWidth", "a2", "a3", "bulbHeightRatio"];
-    keys.forEach(k => { if (!P["lock_" + k]) P[k] = Math.random() * 0.8 + 0.1; });
+    // Each unlocked control gets an independent uniform draw across its full
+    // range. No averaging is used, so values do not form a bell curve.
+    Object.assign(P, randomControlState());
     P.branchSeed = Math.floor(Math.random() * 9999);
+    enforceVaseConstraints(P);
+    saveActiveVaseGeometry();
     pane.refresh(); redraw();
   });
   document.getElementById("svgBtn").addEventListener("click", exportBundle);
@@ -228,6 +539,22 @@ function hookUI() {
       try {
         const data = JSON.parse(ev.target.result);
         Object.keys(data).forEach(k => { if (P.hasOwnProperty(k)) P[k] = data[k]; });
+        if (Array.isArray(data.layoutInstances)) {
+          const fallback = captureVaseGeometry();
+          vaseInstances = data.layoutInstances.slice(0, 36).map(instance => {
+            const geometry = instance && typeof instance.geometry === "object"
+              ? { ...fallback, ...instance.geometry }
+              : { ...fallback };
+            enforceVaseConstraints(geometry);
+            return { geometry };
+          });
+        } else {
+          vaseInstances = [];
+        }
+        ensureVaseInstances();
+        loadActiveVaseGeometry();
+        updateLayoutControlVisibility();
+        enforceVaseConstraints(P);
         pane.refresh(); syncCanvasSize(); redraw();
       } catch (err) { console.error("Error loading preset:", err); }
     };
@@ -243,6 +570,26 @@ function hookUI() {
   });
 }
 
+function mousePressed() {
+  if (!cnv || mouseX < 0 || mouseY < 0 || mouseX > width || mouseY > height) return;
+  const xMM = mouseX / getPxPerMM();
+  const yMM = mouseY / getPxPerMM();
+  const matches = getLayoutItems().filter(({ cell }) => (
+    xMM >= cell.x && xMM <= cell.x + cell.width &&
+    yMM >= cell.y && yMM <= cell.y + cell.height
+  ));
+  if (!matches.length) return;
+  matches.sort((a, b) => {
+    const aDistance = Math.hypot(xMM - a.x, yMM - a.y);
+    const bDistance = Math.hypot(xMM - b.x, yMM - b.y);
+    return aDistance - bDistance;
+  });
+  P.activeInstance = matches[0].index + 1;
+  loadActiveVaseGeometry();
+  pane.refresh();
+  redraw();
+}
+
 function exportBundle() {
   const ts = Math.floor(Date.now() / 1000);
   const name = `Vase_${ts}`;
@@ -255,49 +602,57 @@ function exportBundle() {
   setTimeout(() => {
     const preset = {};
     Object.keys(P).forEach(k => { if (!k.startsWith("lock_")) preset[k] = P[k]; });
+    preset.layoutInstances = vaseInstances.slice(0, getLayoutCount()).map(instance => ({ ...instance }));
     downloadText(JSON.stringify(preset, null, 2), `${name}.json`, "application/json");
   }, 300);
 }
 
 function buildSVGContent() {
   const svg = [];
-  const centerX = P.canvasWMM / 2;
-  const centerY = P.canvasHMM / 2;
-  const uW = P.canvasWMM - (P.marginMM * 2);
-  const uH = P.canvasHMM - (P.marginMM * 2);
-  const pH = P.showBranch ? uH * P.branchHeightRatio : 0;
-  const vH = uH - pH;
-  const artTop = centerY - (uH / 2);
+  const { width: baseW, height: baseH } = getUsableArea();
 
   svg.push('<?xml version="1.0" encoding="UTF-8"?>');
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(P.canvasWMM)}mm" height="${fmt(P.canvasHMM)}mm" viewBox="0 0 ${fmt(P.canvasWMM)} ${fmt(P.canvasHMM)}">`);
   svg.push(`<rect width="100%" height="100%" fill="${P.bg}"/>`);
-  
-  // Vase Group
-  svg.push(`<g id="Vase" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM)}" stroke-linecap="round" stroke-linejoin="round">`);
-  const mH = P.neckDepth;
-  const bH = P.baseDepth;
-  const bulbsY = vH * P.bulbHeightRatio;
-  const pts = [{ py: 0 }, { py: mH }, { py: mH }, { py: vH - bH }, { py: vH - bH }, { py: vH }];
-  const mw = (uW * 0.9) / 1.5;
-  const cx = (val) => constrain(val, -mw, mw);
 
-  for (let j = 0; j <= P.vaseLines; j++) {
-    let fact = map(j, 0, P.vaseLines, -1, 1);
-    let g = mw * fact;
-    const vY = artTop + pH;
-    let d = `M ${fmt(centerX + cx(g * P.neckWidth))} ${fmt(vY + pts[0].py)} L ${fmt(centerX + cx(g * P.neckWidth))} ${fmt(vY + pts[1].py)}`;
-    d += ` C ${fmt(centerX + cx(g * P.rimFlare))} ${fmt(vY + pts[1].py)}, ${fmt(centerX + cx(g * P.a2))} ${fmt(vY + pts[2].py + bulbsY)}, ${fmt(centerX + cx(g * P.bellyWidth))} ${fmt(vY + pts[2].py + bulbsY)}`;
-    d += ` C ${fmt(centerX + cx(g * P.a3))} ${fmt(vY + pts[2].py + bulbsY)}, ${fmt(centerX + cx(g * P.a4))} ${fmt(vY + pts[4].py)}, ${fmt(centerX + cx(g * P.baseWidth))} ${fmt(vY + pts[4].py)}`;
-    d += ` L ${fmt(centerX + cx(g * P.baseWidth))} ${fmt(vY + pts[4].py)} L ${fmt(centerX + cx(g * P.baseWidth))} ${fmt(vY + pts[5].py)}`;
+  getLayoutItems().forEach(item => {
+    const state = vaseInstances[item.index].geometry;
+    svg.push(`<g id="Vase-Instance-${item.index + 1}" transform="translate(${fmt(item.x)} ${fmt(item.y)}) scale(${fmt(item.scale)})">`);
+    svg.push(buildArtworkSVG(0, -baseH / 2, baseW, baseH, state));
+    svg.push(`</g>`);
+  });
+
+  svg.push("</svg>");
+  return svg.join("\n");
+}
+
+function buildArtworkSVG(centerX, artTop, usableW, usableH, state) {
+  const svg = [];
+  const plantH = state.showBranch ? usableH * state.branchHeightRatio : 0;
+  const vaseH = usableH - plantH;
+  const vaseY = artTop + plantH;
+  const { neckDepth: mH, baseDepth: bH, bellyY } = getVaseVerticalGeometry(vaseH, state);
+  const pts = [{ py: 0 }, { py: mH }, { py: mH }, { py: vaseH - bH }, { py: vaseH - bH }, { py: vaseH }];
+  const mw = (usableW * 0.9) / 1.5;
+  const clamp = value => Math.max(-mw, Math.min(mw, value));
+
+  svg.push(`<g class="vase" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM)}" stroke-linecap="round" stroke-linejoin="round">`);
+
+  for (let j = 0; j <= state.vaseLines; j++) {
+    const factor = -1 + (2 * j / state.vaseLines);
+    const gap = mw * factor;
+    const x = multiplier => centerX + clamp(gap * multiplier);
+    let d = `M ${fmt(x(state.neckWidth))} ${fmt(vaseY + pts[0].py)} L ${fmt(x(state.neckWidth))} ${fmt(vaseY + pts[1].py)}`;
+    d += ` C ${fmt(x(state.rimFlare))} ${fmt(vaseY + pts[1].py)}, ${fmt(x(state.a2))} ${fmt(vaseY + bellyY)}, ${fmt(x(state.bellyWidth))} ${fmt(vaseY + bellyY)}`;
+    d += ` C ${fmt(x(state.a3))} ${fmt(vaseY + bellyY)}, ${fmt(x(state.a4))} ${fmt(vaseY + pts[4].py)}, ${fmt(x(state.baseWidth))} ${fmt(vaseY + pts[4].py)}`;
+    d += ` L ${fmt(x(state.baseWidth))} ${fmt(vaseY + pts[4].py)} L ${fmt(x(state.baseWidth))} ${fmt(vaseY + pts[5].py)}`;
     svg.push(`<path d="${d}"/>`);
   }
   svg.push(`</g>`);
 
-  // Branches Group
-  if (P.showBranch) {
-    svg.push(`<g id="Branches" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM * 0.7)}" stroke-linecap="round">`);
-    const rng = mulberry32(P.branchSeed);
+  if (state.showBranch) {
+    svg.push(`<g class="branches" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM * 0.7)}" stroke-linecap="round">`);
+    const rng = mulberry32(state.branchSeed);
     let out = "";
     const recurse = (sx, sy, angle, blen) => {
       const step = blen * 0.4;
@@ -305,17 +660,17 @@ function buildSVGContent() {
       const ey = sy - Math.cos(angle) * step;
       out += `<line x1="${fmt(sx)}" y1="${fmt(sy)}" x2="${fmt(ex)}" y2="${fmt(ey)}"/>\n`;
       if (blen > 15) {
-        recurse(ex, ey, angle + P.branchAngle * (rng() * 0.8 + 0.6), blen * 0.65);
-        recurse(ex, ey, angle - P.branchAngle * (rng() * 0.8 + 0.6), blen * 0.55);
+        recurse(ex, ey, angle + state.branchAngle * (rng() * 0.8 + 0.6), blen * 0.65);
+        recurse(ex, ey, angle - state.branchAngle * (rng() * 0.8 + 0.6), blen * 0.55);
       } else {
         out += `<circle cx="${fmt(ex)}" cy="${fmt(ey)}" r="0.75" fill="${P.lineColor}" stroke="none"/>\n`;
       }
     };
-    recurse(centerX, artTop + pH, 0, pH);
+    recurse(centerX, artTop + plantH, 0, plantH);
     svg.push(out);
     svg.push(`</g>`);
   }
-  svg.push("</svg>");
+
   return svg.join("\n");
 }
 
