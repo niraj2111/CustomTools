@@ -1,5 +1,18 @@
 const MM_PER_INCH = 25.4;
 const BELLY_BUFFER_MM = 5;
+const ARTWORK_WIDTH_TO_HEIGHT = 108 / 170;
+
+const PAPER_SIZES_MM = {
+  Custom: null,
+  A0: [841, 1189], A1: [594, 841], A2: [420, 594], A3: [297, 420],
+  A4: [210, 297], A5: [148, 210], A6: [105, 148], A7: [74, 105],
+  A8: [52, 74], A9: [37, 52], A10: [26, 37],
+  B0: [1000, 1414], B1: [707, 1000], B2: [500, 707], B3: [353, 500],
+  B4: [250, 353], B5: [176, 250], B6: [125, 176], B7: [88, 125],
+  B8: [62, 88], B9: [44, 62], B10: [31, 44],
+  Letter: [215.9, 279.4], Legal: [215.9, 355.6], Tabloid: [279.4, 431.8],
+  Executive: [184.15, 266.7], Statement: [139.7, 215.9], Square: [210, 210],
+};
 
 let pane;
 let cnv;
@@ -11,6 +24,7 @@ const P = {
   canvasWMM: 148,
   canvasHMM: 210,
   canvasSizePreset: "A5",
+  paperOrientation: "Portrait",
   dpi: 96,
   previewScale: 1.0,
   fitToViewport: true,
@@ -135,7 +149,23 @@ function updateLayoutControlVisibility() {
   });
 }
 
+function applyPaperPreset() {
+  const size = PAPER_SIZES_MM[P.canvasSizePreset];
+  if (!size) return;
+  const [shortSide, longSide] = size;
+  if (P.canvasSizePreset === "Square" || P.paperOrientation === "Portrait") {
+    P.canvasWMM = shortSide;
+    P.canvasHMM = longSide;
+  } else {
+    P.canvasWMM = longSide;
+    P.canvasHMM = shortSide;
+  }
+  const maxMargin = Math.max(0, (Math.min(P.canvasWMM, P.canvasHMM) - 2) / 2);
+  P.marginMM = Math.min(P.marginMM, maxMargin);
+}
+
 function setup() {
+  applyPaperPreset();
   ensureVaseInstances();
   loadActiveVaseGeometry();
   const size = getCanvasPixelSize();
@@ -154,7 +184,7 @@ function draw() {
   background(P.bg);
   push();
   scale(getPxPerMM());
-  const { width: baseW, height: baseH } = getUsableArea();
+  const { width: baseW, height: baseH } = getArtworkArea();
   const items = getLayoutItems();
   items.forEach(drawLayoutCell);
   items.forEach(item => {
@@ -190,6 +220,11 @@ function getUsableArea() {
   };
 }
 
+function getArtworkArea() {
+  const { height } = getUsableArea();
+  return { width: height * ARTWORK_WIDTH_TO_HEIGHT, height };
+}
+
 function getLayoutItems() {
   const count = ensureVaseInstances();
   const { width: usableW, height: usableH } = getUsableArea();
@@ -197,7 +232,9 @@ function getLayoutItems() {
   const top = P.marginMM;
   const centerX = P.canvasWMM / 2;
   const centerY = P.canvasHMM / 2;
-  const fitScale = (width, height) => Math.max(0.01, Math.min(width / usableW, height / usableH));
+  // Preserve vase proportions across portrait and landscape pages. Instances
+  // are sized only from cell height; cell width never widens or flattens them.
+  const fitScale = (_width, height) => Math.max(0.01, height / usableH);
   const items = [];
   const addCell = (x, y, width, height) => items.push({
     x,
@@ -473,14 +510,15 @@ function buildPane() {
   dim.addInput(P, "baseDepth", { min: 2, max: 80, label: "Base H (mm)" });
 
   const canvas = pane.addFolder({ title: "Canvas Settings" });
-  canvas.addInput(P, "canvasWMM", { label: "Width (mm)" });
-  canvas.addInput(P, "canvasHMM", { label: "Height (mm)" });
-  canvas.addInput(P, "canvasSizePreset", { options: { Square: "Square", A5: "A5", A4: "A4", A3: "A3" }, label: "Preset Paper" }).on("change", (ev) => {
-    if (ev.value === "A5") { P.canvasWMM = 148; P.canvasHMM = 210; }
-    else if (ev.value === "A4") { P.canvasWMM = 210; P.canvasHMM = 297; }
-    else if (ev.value === "A3") { P.canvasWMM = 297; P.canvasHMM = 420; }
-    else if (ev.value === "Square") { P.canvasWMM = 210; P.canvasHMM = 210; }
-    pane.refresh();
+  canvas.addInput(P, "canvasWMM", { min: 10, max: 2000, step: 1, label: "Width (mm)" });
+  canvas.addInput(P, "canvasHMM", { min: 10, max: 2000, step: 1, label: "Height (mm)" });
+  canvas.addInput(P, "canvasSizePreset", {
+    options: Object.fromEntries(Object.keys(PAPER_SIZES_MM).map(name => [name, name])),
+    label: "Paper Type",
+  });
+  canvas.addInput(P, "paperOrientation", {
+    options: { Portrait: "Portrait", Landscape: "Landscape" },
+    label: "Orientation",
   });
   canvas.addInput(P, "marginMM", { min: 0, max: 80, step: 1, label: "Margin (mm)" });
   canvas.addInput(P, "previewScale", { min: 0.1, max: 5, step: 0.1, label: "Zoom" });
@@ -493,6 +531,7 @@ function buildPane() {
 
   pane.on("change", event => {
     const key = event.presetKey;
+    if (key === "canvasSizePreset" || key === "paperOrientation") applyPaperPreset();
     if (key === "activeInstance") {
       ensureVaseInstances();
       loadActiveVaseGeometry();
@@ -505,7 +544,7 @@ function buildPane() {
       loadActiveVaseGeometry();
       updateLayoutControlVisibility();
     }
-    if (["canvasWMM", "canvasHMM", "marginMM", "canvasSizePreset"].includes(key)) {
+    if (["canvasWMM", "canvasHMM", "marginMM", "canvasSizePreset", "paperOrientation"].includes(key)) {
       vaseInstances.forEach(instance => enforceVaseConstraints(instance.geometry));
       loadActiveVaseGeometry();
     }
@@ -609,16 +648,22 @@ function exportBundle() {
 
 function buildSVGContent() {
   const svg = [];
-  const { width: baseW, height: baseH } = getUsableArea();
+  const { width: baseW, height: baseH } = getArtworkArea();
 
   svg.push('<?xml version="1.0" encoding="UTF-8"?>');
-  svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(P.canvasWMM)}mm" height="${fmt(P.canvasHMM)}mm" viewBox="0 0 ${fmt(P.canvasWMM)} ${fmt(P.canvasHMM)}">`);
+  svg.push(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${fmt(P.canvasWMM)}mm" height="${fmt(P.canvasHMM)}mm" viewBox="0 0 ${fmt(P.canvasWMM)} ${fmt(P.canvasHMM)}">`);
   svg.push(`<rect width="100%" height="100%" fill="${P.bg}"/>`);
 
   getLayoutItems().forEach(item => {
     const state = vaseInstances[item.index].geometry;
-    svg.push(`<g id="Vase-Instance-${item.index + 1}" transform="translate(${fmt(item.x)} ${fmt(item.y)}) scale(${fmt(item.scale)})">`);
-    svg.push(buildArtworkSVG(0, -baseH / 2, baseW, baseH, state));
+    const number = item.index + 1;
+    const transform = `translate(${fmt(item.x)} ${fmt(item.y)}) scale(${fmt(item.scale)})`;
+    const artwork = buildArtworkSVG(0, -baseH / 2, baseW, baseH, state);
+    svg.push(`<g id="Vase-${number}" inkscape:groupmode="layer" inkscape:label="Vase ${number}" transform="${transform}" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM)}" stroke-linecap="round" stroke-linejoin="round">`);
+    svg.push(artwork.vase);
+    svg.push(`</g>`);
+    svg.push(`<g id="Branches-${number}" inkscape:groupmode="layer" inkscape:label="Branches ${number}" transform="${transform}" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM * 0.7)}" stroke-linecap="round">`);
+    svg.push(artwork.branches);
     svg.push(`</g>`);
   });
 
@@ -627,7 +672,8 @@ function buildSVGContent() {
 }
 
 function buildArtworkSVG(centerX, artTop, usableW, usableH, state) {
-  const svg = [];
+  const vase = [];
+  const branches = [];
   const plantH = state.showBranch ? usableH * state.branchHeightRatio : 0;
   const vaseH = usableH - plantH;
   const vaseY = artTop + plantH;
@@ -635,8 +681,6 @@ function buildArtworkSVG(centerX, artTop, usableW, usableH, state) {
   const pts = [{ py: 0 }, { py: mH }, { py: mH }, { py: vaseH - bH }, { py: vaseH - bH }, { py: vaseH }];
   const mw = (usableW * 0.9) / 1.5;
   const clamp = value => Math.max(-mw, Math.min(mw, value));
-
-  svg.push(`<g class="vase" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM)}" stroke-linecap="round" stroke-linejoin="round">`);
 
   for (let j = 0; j <= state.vaseLines; j++) {
     const factor = -1 + (2 * j / state.vaseLines);
@@ -646,32 +690,27 @@ function buildArtworkSVG(centerX, artTop, usableW, usableH, state) {
     d += ` C ${fmt(x(state.rimFlare))} ${fmt(vaseY + pts[1].py)}, ${fmt(x(state.a2))} ${fmt(vaseY + bellyY)}, ${fmt(x(state.bellyWidth))} ${fmt(vaseY + bellyY)}`;
     d += ` C ${fmt(x(state.a3))} ${fmt(vaseY + bellyY)}, ${fmt(x(state.a4))} ${fmt(vaseY + pts[4].py)}, ${fmt(x(state.baseWidth))} ${fmt(vaseY + pts[4].py)}`;
     d += ` L ${fmt(x(state.baseWidth))} ${fmt(vaseY + pts[4].py)} L ${fmt(x(state.baseWidth))} ${fmt(vaseY + pts[5].py)}`;
-    svg.push(`<path d="${d}"/>`);
+    vase.push(`<path d="${d}"/>`);
   }
-  svg.push(`</g>`);
 
   if (state.showBranch) {
-    svg.push(`<g class="branches" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM * 0.7)}" stroke-linecap="round">`);
     const rng = mulberry32(state.branchSeed);
-    let out = "";
     const recurse = (sx, sy, angle, blen) => {
       const step = blen * 0.4;
       const ex = sx + Math.sin(angle) * step;
       const ey = sy - Math.cos(angle) * step;
-      out += `<line x1="${fmt(sx)}" y1="${fmt(sy)}" x2="${fmt(ex)}" y2="${fmt(ey)}"/>\n`;
+      branches.push(`<line x1="${fmt(sx)}" y1="${fmt(sy)}" x2="${fmt(ex)}" y2="${fmt(ey)}"/>`);
       if (blen > 15) {
         recurse(ex, ey, angle + state.branchAngle * (rng() * 0.8 + 0.6), blen * 0.65);
         recurse(ex, ey, angle - state.branchAngle * (rng() * 0.8 + 0.6), blen * 0.55);
       } else {
-        out += `<circle cx="${fmt(ex)}" cy="${fmt(ey)}" r="0.75" fill="${P.lineColor}" stroke="none"/>\n`;
+        branches.push(`<circle cx="${fmt(ex)}" cy="${fmt(ey)}" r="0.75" fill="${P.lineColor}" stroke="none"/>`);
       }
     };
     recurse(centerX, artTop + plantH, 0, plantH);
-    svg.push(out);
-    svg.push(`</g>`);
   }
 
-  return svg.join("\n");
+  return { vase: vase.join("\n"), branches: branches.join("\n") };
 }
 
 function getPxPerMM() { return P.dpi / MM_PER_INCH; }
