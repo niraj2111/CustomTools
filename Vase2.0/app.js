@@ -1,4 +1,4 @@
-import { VERSION, PALETTE, CONTROLS, CONTROL_GROUPS, normalize, fromSeed, resolve, svg } from './geometry.mjs?v=2.2.0';
+import { VERSION, PAPER, PALETTE, CONTROLS, CONTROL_GROUPS, normalize, fromSeed, resolve, svg } from './geometry.mjs?v=2.3.0';
 
 const $ = selector => document.querySelector(selector);
 const app = $('#app');
@@ -51,7 +51,7 @@ function controlGroupsMarkup() {
   return CONTROL_GROUPS.map(group => `<section class="control-group ${group.id === 'branch' ? 'branch-group' : ''}"><div class="control-group-heading"><h2>${group.name}</h2>${group.id === 'branch' ? `<label class="growth" for="growth"><span>Show branch</span><input type="checkbox" id="growth" role="switch" ${state.growth?'checked':''}></label>` : ''}</div>${CONTROLS.filter(control => control.group === group.id).map(controlMarkup).join('')}</section>`).join('');
 }
 function studio() {
-  app.innerHTML = `<div class="studio-header"><a class="back-link" href="#collection"><span aria-hidden="true">←</span> Back to examples</a><span class="eyebrow">VASE EDITOR</span></div><section class="studio"><div class="studio-stage"><div class="stage-top"><span><i class="live-dot"></i>LIVE PREVIEW</span><span>210 × 210 MM</span></div><div class="art-sheet"><div id="vase-art" style="width:100%;height:100%"></div><span class="sheet-mark">VASE 2.0</span><span class="sheet-number" id="sheet-number"></span></div><div class="portrait-caption"><h2 id="portrait-title"></h2><p id="portrait-description"></p></div><div class="stage-actions"><button data-action="surprise">↻ &nbsp; Random vase</button><span class="divider"></span><button data-action="reset">Reset</button></div></div><aside class="studio-controls" aria-label="Vase controls"><h1>Shape controls</h1><p class="control-intro">Each slider controls one parameter from the original sketch. Lock any values you want to keep when generating a random vase.</p><div class="controls">${controlGroupsMarkup()}</div><div class="ink-section"><div class="ink-heading"><label>Vase color</label><span id="ink-name"></span></div><div class="swatches" role="group" aria-label="Vase color">${PALETTE.map(c=>`<button class="swatch" data-color="${c.id}" aria-label="${c.name}" title="${c.name}" style="--swatch:${c.hex}" aria-pressed="${state.color===c.id}"></button>`).join('')}</div></div><button class="button dark save-button" data-action="save">Save vase <span aria-hidden="true">↗</span></button><p class="save-hint">Saves all controls, seed, color, and SVG.</p><div class="download-row"><button data-action="svg">Download SVG</button><button data-action="import">Import JSON</button></div><input type="file" id="import-file" accept="application/json,.json" hidden></aside></section>`;
+  app.innerHTML = `<div class="studio-header"><a class="back-link" href="#collection"><span aria-hidden="true">←</span> Back to examples</a><span class="eyebrow">VASE EDITOR</span></div><section class="studio"><div class="studio-stage"><div class="stage-top"><span><i class="live-dot"></i>LIVE PREVIEW</span><span>${PAPER.widthMM} × ${PAPER.heightMM} MM</span></div><div class="art-sheet"><div id="vase-art" style="width:100%;height:100%"></div><span class="sheet-mark">VASE 2.0</span><span class="sheet-number" id="sheet-number"></span></div><div class="portrait-caption"><h2 id="portrait-title"></h2><p id="portrait-description"></p></div><div class="stage-actions"><button data-action="surprise">↻ &nbsp; Random vase</button><span class="divider"></span><button data-action="reset">Reset</button></div></div><aside class="studio-controls" aria-label="Vase controls"><h1>Shape controls</h1><p class="control-intro">Each slider controls one parameter from the original sketch. Lock any values you want to keep when generating a random vase.</p><div class="controls">${controlGroupsMarkup()}</div><div class="ink-section"><div class="ink-heading"><label>Vase color</label><span id="ink-name"></span></div><div class="swatches" role="group" aria-label="Vase color">${PALETTE.map(c=>`<button class="swatch" data-color="${c.id}" aria-label="${c.name}" title="${c.name}" style="--swatch:${c.hex}" aria-pressed="${state.color===c.id}"></button>`).join('')}</div></div><button class="button dark save-button" data-action="save">Save vase <span aria-hidden="true">↗</span></button><p class="save-hint">Saves all controls, seed, color, and SVG.</p><div class="download-row"><button data-action="svg">Download SVG</button><button data-action="import">Import JSON</button></div><input type="file" id="import-file" accept="application/json,.json" hidden></aside></section>`;
   $('#vase-art').style.cssText = 'width:100%;height:100%;padding:8px 25px 20px;display:flex';
   renderArt();
 }
@@ -95,15 +95,15 @@ function route() {
   if (!['#collection','#about'].includes(route)) window.scrollTo(0,0);
 }
 function makeRecord(name) {
-  return { schemaVersion:1, generatorVersion:VERSION, id:`WB-${crypto.randomUUID().slice(0,8).toUpperCase()}`, name, createdAt:new Date().toISOString(), status:'saved', state:{...state}, resolved:resolve(state), paper:{widthMM:210,heightMM:210}, palette:PALETTE.find(c=>c.id===state.color), svg:svg(state,{title:name}) };
+  return { schemaVersion:1, generatorVersion:VERSION, id:`WB-${crypto.randomUUID().slice(0,8).toUpperCase()}`, name, createdAt:new Date().toISOString(), status:'saved', state:{...state}, resolved:resolve(state), paper:{...PAPER}, palette:PALETTE.find(c=>c.id===state.color), svg:svg(state,{title:name}) };
 }
 function download(content, filename, type) { const url=URL.createObjectURL(new Blob([content],{type})); const link=document.createElement('a'); link.href=url; link.download=filename; link.hidden=true; document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000); }
-function downloadSVG(record) { download(record.svg||svg(record.state,{title:record.name}),`${record.id}.svg`,'image/svg+xml'); toast('Drawing downloaded · 210 × 210 mm'); }
+function downloadSVG(record) { download(record.svg||svg(record.state,{title:record.name}),`${record.id}.svg`,'image/svg+xml'); toast(`Drawing downloaded · ${PAPER.widthMM} × ${PAPER.heightMM} mm`); }
 function downloadRecord(record) { download(JSON.stringify(record,null,2),`${record.id}.json`,'application/json'); toast('Vase record downloaded'); }
 const actions = {
   create:()=>enterStudio(fresh()),
   shuffle:()=>{galleryOffset++; const y=window.scrollY; home(); window.scrollTo(0,y);},
-  surprise:()=>{const next=fromSeed(seed()); for(const c of CONTROLS) if(!locks.has(c.key))state[c.key]=next[c.key]; state.seed=next.seed; savedName='';renderArt();},
+  surprise:()=>{const next=fromSeed(seed()); for(const c of CONTROLS) if(!locks.has(c.key))state[c.key]=next[c.key]; state.seed=next.seed; state=normalize(state); savedName='';renderArt();},
   reset:()=>{state={...initial};savedName='';renderArt();toast('Back to where you began');},
   save:async()=>{await storageReady;$('#vase-name').value=savedName; $('#save-location').textContent=server?'This vase will be stored in the local database.':'This vase will be stored in this browser. Download the JSON record for a portable copy.';$('#save-dialog').showModal();$('#vase-name').focus();},
   svg:()=>downloadSVG(makeRecord(savedName||'A form of your own')),
@@ -119,7 +119,7 @@ document.addEventListener('click',event=>{
   if(button.dataset.exportSvg) downloadSVG(records.find(r=>r.id===button.dataset.exportSvg));
   if(button.dataset.exportJson) downloadRecord(records.find(r=>r.id===button.dataset.exportJson));
 });
-document.addEventListener('input',event=>{if(event.target.dataset.control){state[event.target.dataset.control]=Number(event.target.value)/100;savedName='';renderArt();}});
+document.addEventListener('input',event=>{if(event.target.dataset.control){state=normalize({...state,[event.target.dataset.control]:Number(event.target.value)/100});savedName='';renderArt();}});
 document.addEventListener('change',async event=>{
   const target=event.target;
   if(target.id==='growth'){state.growth=target.checked;renderArt();}
@@ -129,7 +129,7 @@ document.addEventListener('change',async event=>{
     catch(error){record.status=previous;target.value=previous;toast(error.message);}finally{target.disabled=false;}
   }
   if(target.id==='import-file'&&target.files[0]){
-    try { const file=target.files[0];if(file.size>1000000)throw new Error('Choose a vase record smaller than 1 MB.');const record=JSON.parse(await file.text());if(record.schemaVersion!==1||record.generatorVersion!==VERSION||!record.state||CONTROLS.some(c=>!Number.isFinite(record.state[c.key])||record.state[c.key]<0||record.state[c.key]>1)||!Number.isInteger(record.state.seed)||!PALETTE.some(c=>c.id===record.state.color)||typeof record.state.growth!=='boolean')throw new Error('Choose a compatible Vase 2.2 JSON record.');enterStudio(record.state);savedName=typeof record.name==='string'?record.name.slice(0,60):'';renderArt();toast('Vase imported'); }
+    try { const file=target.files[0];if(file.size>1000000)throw new Error('Choose a vase record smaller than 1 MB.');const record=JSON.parse(await file.text());if(record.schemaVersion!==1||!['2.2.0',VERSION].includes(record.generatorVersion)||!record.state||CONTROLS.some(c=>!Number.isFinite(record.state[c.key])||record.state[c.key]<0||record.state[c.key]>1)||!Number.isInteger(record.state.seed)||!PALETTE.some(c=>c.id===record.state.color)||typeof record.state.growth!=='boolean')throw new Error('Choose a compatible Vase 2.0 JSON record.');enterStudio(record.state);savedName=typeof record.name==='string'?record.name.slice(0,60):'';renderArt();toast('Vase imported'); }
     catch(error){toast(error instanceof SyntaxError?'This file is not a valid vase record.':error.message);}
   }
 });

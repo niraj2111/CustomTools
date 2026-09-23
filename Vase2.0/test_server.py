@@ -7,7 +7,7 @@ from server import validate_record
 
 class RecordTests(unittest.TestCase):
     def setUp(self):
-        self.record = {'schemaVersion':1,'generatorVersion':'2.2.0','name':'Vase 01','state':{'presence':.5,'openness':.5,'expression':.5,'approach':.5,'release':.5,'stance':.5,'grounding':.5,'center':.5,'reserve':.5,'foundation':.5,'complexity':.5,'reach':.5,'curiosity':.5,'variation':.5,'seed':42,'growth':False,'color':'cobalt'},'svg':'<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="210mm"><g fill="none"><path d="M10 10L20 20"/><line x1="10" y1="10" x2="20" y2="20"/><circle cx="20" cy="20" r="0.75"/></g></svg>'}
+        self.record = {'schemaVersion':1,'generatorVersion':'2.3.0','name':'Vase 01','state':{'presence':.5,'openness':.5,'expression':.5,'approach':.5,'release':.5,'stance':.5,'grounding':.5,'center':.5,'reserve':.5,'foundation':.5,'complexity':.5,'reach':.5,'curiosity':.5,'variation':.5,'seed':42,'growth':False,'color':'cobalt'},'svg':'<svg xmlns="http://www.w3.org/2000/svg" width="148mm" height="210mm"><g fill="none"><path d="M10 10L20 20"/><line x1="10" y1="10" x2="20" y2="20"/><circle cx="20" cy="20" r="0.75"/></g></svg>'}
 
     def test_record_state_preserved_with_server_identity(self):
         result=validate_record(self.record)

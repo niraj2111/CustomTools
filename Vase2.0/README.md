@@ -28,9 +28,9 @@ Opening the static files through another HTTP server also works, with browser st
 
 ## Geometry and reproduction
 
-`geometry.mjs` is the single renderer for gallery, editor, and export. It uses the original sketch's usable area, maximum-width formula, vertical line interpolation, straight neck and base segments, two Bézier curves, branch recursion, seeded branching, and terminal dots. Each public control maps directly to one original sketch parameter through a conservative range. Shape and branch are deterministic from state. Line count ranges from 30 to 140 intervals.
+`geometry.mjs` is the single renderer for gallery, editor, and export. It uses the original sketch's maximum-width formula, vertical line interpolation, straight neck and base segments, two Bézier curves, branch recursion, seeded branching, and terminal dots. The updated 108:170 artwork proportion and five-millimetre belly clearance are applied without changing that construction. Either belly handle may point inward, but both cannot do so together. Each public control maps directly to one original sketch parameter through a conservative range. Shape and branch are deterministic from state. Line count ranges from 30 to 140 intervals.
 
-Records include schema and generator versions, all control values, seed, resolved original-sketch parameters, chosen color, exact SVG, 210 mm square paper dimensions, name, timestamps, unique ID, and plot status. The vase is exported in its chosen color. The branch is exported in black with the original filled terminal dots. Color is a pen choice, not an automatic pen-change instruction.
+Records include schema and generator versions, all control values, seed, resolved original-sketch parameters, chosen color, exact SVG, A5 paper dimensions (148 × 210 mm), name, timestamps, unique ID, and plot status. The vase is exported in its chosen color. The branch is exported in black with the original filled terminal dots. Color is a pen choice, not an automatic pen-change instruction.
 
 ## Sharing and backend access
 

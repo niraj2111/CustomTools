@@ -53,3 +53,5 @@ dialog input{border-color:#aaa}
 .control-group .range-labels{font-size:10px}
 @media(min-width:801px){.studio{align-items:start}.studio-stage{position:sticky;top:0;min-height:100vh}.studio-controls{padding-top:30px}.control-intro{font-size:12px;max-width:290px}.controls{margin-top:28px}}
 @media(max-width:600px){.control-group-heading h2{font-size:12px}.control-group .control-title label{font-size:14px}.control-group .range-labels{font-size:11px}}
+.art-sheet{width:min(100%,420px);aspect-ratio:148/210}
+@media(max-width:600px){.art-sheet{max-width:300px;aspect-ratio:148/210}}

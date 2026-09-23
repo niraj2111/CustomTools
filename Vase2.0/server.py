@@ -16,7 +16,7 @@ COLORS = ('cobalt', 'vermilion', 'forest', 'violet', 'ochre', 'black')
 STATUSES = ('saved', 'queued', 'plotted', 'delivered')
 
 def validate_record(record):
-    if not isinstance(record, dict) or record.get('schemaVersion') != 1 or record.get('generatorVersion') != '2.2.0':
+    if not isinstance(record, dict) or record.get('schemaVersion') != 1 or record.get('generatorVersion') != '2.3.0':
         raise ValueError('Unsupported vase record version.')
     state = record.get('state')
     if not isinstance(state, dict):
@@ -83,7 +83,7 @@ class StudioHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == '/api/health':
-            return self.reply({'service': 'ways-of-being', 'version': '2.2.0'})
+            return self.reply({'service': 'ways-of-being', 'version': '2.3.0'})
         if path == '/api/vases':
             with sqlite3.connect(self.server.database) as connection:
                 rows = connection.execute('SELECT record FROM vases ORDER BY created_at DESC').fetchall()
