@@ -2,130 +2,91 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Masked Cloth Tool</title>
+    <title>Cloth Studio</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
-    />
+    <link rel="stylesheet" href="./vendor/dialkit/styles.css" />
     <style>
-      :root {
-        --panel: 360px;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
-      body {
-        height: 100%;
-      }
-
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
       body {
         margin: 0;
         display: grid;
-        grid-template-columns: var(--panel) 1fr;
-        height: 100vh;
-        background: #0f1218;
-        color: #edf1f7;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+        min-height: 100vh;
+        background: #0b0c0e;
+        color: #f1f2f4;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-
       aside {
-        background: #161a23;
-        border-right: 1px solid #252b37;
-        padding: 12px;
-        overflow: auto;
-      }
-
-      main {
-        display: grid;
         min-width: 0;
-      }
-
-      #wrap {
-        width: 100%;
-        height: 100%;
-        display: grid;
-        place-items: center;
+        height: 100vh;
         overflow: auto;
-        touch-action: none;
+        padding: 22px 16px 28px;
+        background: #171a1f;
+        border-right: 1px solid #30343c;
       }
-
-      canvas {
-        display: block;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.18);
-      }
-
-      .row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 10px;
-      }
-
-      .btn {
-        display: inline-block;
-        background: #232938;
-        border: 1px solid #31384a;
-        color: #edf1f7;
-        padding: 8px 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        font-size: 14px;
-      }
-
-      .btn:active {
-        transform: translateY(1px);
-      }
-
-      .hint {
+      .eyebrow { color: #a3b8ff; font-size: 11px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+      h1 { margin: 7px 0 6px; font-size: 25px; letter-spacing: -.04em; line-height: 1.1; }
+      .intro { margin: 0; color: #b4bac5; font-size: 13px; line-height: 1.5; }
+      .status {
+        margin: 18px 0 14px;
+        padding: 11px 12px;
+        border: 1px solid #374052;
+        border-radius: 12px;
+        background: #202630;
         font-size: 12px;
         line-height: 1.45;
-        color: #bec7d7;
-        margin-top: 10px;
       }
-
-      code {
-        color: #ffffff;
+      .status strong { display: block; margin-bottom: 2px; color: #f4f7ff; font-size: 13px; }
+      .status span { color: #b5bed0; }
+      #controls { min-width: 0; }
+      #controls .dialkit-root { width: 100%; max-width: none; }
+      .help {
+        margin: 16px 0 0;
+        padding: 12px;
+        border: 1px solid #30343c;
+        border-radius: 12px;
+        color: #b4bac5;
+        font-size: 12px;
+        line-height: 1.55;
       }
-
-      ul {
-        padding-left: 18px;
-        margin: 8px 0 0;
+      .help strong { color: #e8ebf1; }
+      .help p { margin: 0 0 7px; }
+      .help p:last-child { margin-bottom: 0; }
+      kbd { padding: 1px 5px; border: 1px solid #515966; border-radius: 4px; color: #f1f2f4; font: inherit; }
+      main { display: grid; min-width: 0; min-height: 0; }
+      #wrap { position: relative; width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; touch-action: none; }
+      canvas { display: block; max-width: 100%; }
+      #brushPreview { position: absolute; z-index: 2; display: none; border: 1px solid #a3b8ff; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); }
+      #brushPreview.tearing { border-color: #ff8c8c; }
+      @media (max-width: 760px) {
+        body { display: flex; flex-direction: column; }
+        main { order: 0; height: min(55vh, 520px); min-height: 320px; }
+        aside { order: 1; height: auto; overflow: visible; border-right: 0; border-top: 1px solid #30343c; }
       }
     </style>
   </head>
   <body>
-    <aside>
-      <div id="pane"></div>
-
-      <div class="row">
-        <button id="randomBtn" class="btn">Random Seed</button>
-        <button id="regenBtn" class="btn">Rebuild Cloth</button>
-        <button id="pngBtn" class="btn">Export PNG</button>
-        <button id="svgBtn" class="btn">Export SVG</button>
+    <aside aria-label="Cloth controls">
+      <div class="eyebrow">Interactive canvas</div>
+      <h1>Cloth Studio</h1>
+      <p class="intro">Shape a masked fabric, pull it into place, or cut new openings.</p>
+      <div class="status" role="status" aria-live="polite">
+        <strong id="statusTitle">Preparing cloth…</strong>
+        <span id="statusDetail">Controls that change the cloth or masks rebuild it automatically.</span>
       </div>
-
-      <div class="hint">
-        Notes:
-        <ul>
-          <li>Drag to pull the cloth. Hold <code>C</code> or switch to tear mode to cut it.</li>
-          <li>The mesh mask decides where points exist; the tear mask pre-cuts the cloth on rebuild.</li>
-          <li>Voronoi masks reuse cached seed layouts and offscreen buffers for faster iteration.</li>
-          <li>Use <code>R</code> to rebuild and <code>S</code> to export SVG.</li>
-        </ul>
+      <div id="controls"></div>
+      <div class="help">
+        <p><strong>On the canvas</strong> Drag a point to pull the cloth. Choose Tear to cut; a click makes a small cut. Hold <kbd>C</kbd> for a temporary tear brush.</p>
+        <p><strong>Rebuilding</strong> Shape, mask, and anchor changes create a fresh cloth, so manual drags and cuts are cleared. Motion and appearance controls update the current cloth.</p>
+        <p><strong>Shortcuts</strong> <kbd>R</kbd> rebuilds; <kbd>S</kbd> exports SVG. The mask shape controls are shared by both mask layers.</p>
       </div>
     </aside>
-
-    <main>
-      <div id="wrap"></div>
-    </main>
-
+    <main><div id="wrap"><div id="brushPreview" aria-hidden="true"></div></div></main>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.js"></script>
+    <script src="./vendor/dialkit/browser.global.js"></script>
     <script src="../shared/export.js"></script>
+    <script src="./controls.js"></script>
     <script src="./sketch.js"></script>
   </body>
 </html>

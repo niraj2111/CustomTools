@@ -1,11 +1,10 @@
-/* Masked Cloth (Two Masks) — p5 + Tweakpane + SVG export (no p5.svg) */
-
-let pane;
+/* Masked Cloth (Two Masks) — p5 + DialKit + SVG export (no p5.svg) */
 
 let maskSystem; // owns both masks and samplers
 let cloth;
 let rebuildTimer = null;
 let pendingRebuild = null;
+let pointerOverCanvas = false;
 
 const REBUILD_FLAGS = {
   meshMask: false,
@@ -75,7 +74,7 @@ const ui = {
 
   tearInvert: false,
   tearThreshold: 60,
-  applyTearOnBuild: true,
+  applyTearOnBuild: false,
   tearAffects: "constraints", // "constraints" | "points+constraints"
 
   // Mask types
@@ -104,9 +103,17 @@ function setup() {
   pixelDensity(ui.pixelDensity);
   const c = createCanvas(w, h);
   c.parent("wrap");
+  c.elt.addEventListener("pointerenter", () => {
+    pointerOverCanvas = true;
+    updateBrushPreview();
+  });
+  c.elt.addEventListener("pointerleave", () => {
+    pointerOverCanvas = false;
+    document.getElementById("brushPreview").style.display = "none";
+  });
 
-  buildPane();
-  hookButtons();
+  buildDialKit();
+  updateCanvasCursor();
 
   maskSystem = new DualMaskSystem();
   rebuildAll({ meshMask: true, tearMask: true, cloth: true });
@@ -142,122 +149,6 @@ function windowResized() {
   queueRebuild({ meshMask: true, tearMask: true, cloth: true }, true);
 }
 
-/* ---------------- UI (Tweakpane) ---------------- */
-
-function buildPane() {
-  pane = new Tweakpane.Pane({ container: document.getElementById("pane") });
-
-  const fGrid = pane.addFolder({ title: "Grid" });
-  fGrid.addInput(ui, "cols", { min: 20, max: 220, step: 1 }).on("change", debounceClothRebuild);
-  fGrid.addInput(ui, "rows", { min: 20, max: 260, step: 1 }).on("change", debounceClothRebuild);
-  fGrid.addInput(ui, "spacing", { min: 4, max: 20, step: 1 }).on("change", debounceClothRebuild);
-  fGrid.addInput(ui, "topOffset", { min: 0, max: 200, step: 1 }).on("change", debounceClothRebuild);
-  fGrid.addInput(ui, "centerX", { min: 0, max: 1, step: 0.01 }).on("change", debounceClothRebuild);
-  fGrid.addInput(ui, "centerY", { min: 0, max: 1, step: 0.01 }).on("change", debounceClothRebuild);
-
-  const fAnchor = pane.addFolder({ title: "Anchoring" });
-  fAnchor.addInput(ui, "anchorMode", { options: { none: "none", edge: "edge", all: "all" } }).on("change", debounceClothRebuild);
-  fAnchor.addInput(ui, "edgeProbeMul", { min: 0.5, max: 2.5, step: 0.05 }).on("change", debounceClothRebuild);
-
-  const fPhys = pane.addFolder({ title: "Physics" });
-  fPhys.addInput(ui, "gravity", { min: -2.0, max: 2.0, step: 0.01 }).on("change", wakeSimulation);
-  fPhys.addInput(ui, "damping", { min: 0.0, max: 0.999, step: 0.001 }).on("change", wakeSimulation);
-  fPhys.addInput(ui, "stiffness", { min: 0.01, max: 1.0, step: 0.01 }).on("change", wakeSimulation);
-  fPhys.addInput(ui, "iterations", { min: 1, max: 10, step: 1 }).on("change", wakeSimulation);
-
-  const fCon = pane.addFolder({ title: "Constraint behavior" });
-  fCon.addInput(ui, "shrinkFactor", { min: 0.2, max: 1.2, step: 0.01 }).on("change", wakeSimulation);
-  fCon.addInput(ui, "tensionEnable").on("change", wakeSimulation);
-  fCon.addInput(ui, "tensionFactor", { min: 1.0, max: 10.0, step: 0.05 }).on("change", wakeSimulation);
-  fCon.addInput(ui, "tensionStrength", { min: 0.0, max: 1.0, step: 0.01 }).on("change", wakeSimulation);
-  fCon.addInput(ui, "addDiagonals").on("change", debounceClothRebuild);
-
-  const fInt = pane.addFolder({ title: "Interaction" });
-  fInt.addInput(ui, "mode", { options: { drag: "drag", tear: "tear" } }).on("change", wakeSimulation);
-  fInt.addInput(ui, "pickRadius", { min: 4, max: 80, step: 1 }).on("change", wakeSimulation);
-  fInt.addInput(ui, "tearRadius", { min: 1, max: 30, step: 1 }).on("change", wakeSimulation);
-
-  const fRen = pane.addFolder({ title: "Render" });
-  fRen.addInput(ui, "bgAlpha", { min: 0, max: 255, step: 1 }).on("change", wakeSimulation);
-  fRen.addInput(ui, "lineWeight", { min: 0.5, max: 4, step: 0.5 }).on("change", wakeSimulation);
-  fRen.addInput(ui, "showPoints").on("change", wakeSimulation);
-  fRen.addInput(ui, "showLocked").on("change", wakeSimulation);
-
-  const fExp = pane.addFolder({ title: "Export" });
-  fExp.addInput(ui, "svgStrokeWidth", { min: 0.25, max: 5, step: 0.25 }).on("change", wakeSimulation);
-  fExp.addInput(ui, "exportPoints").on("change", wakeSimulation);
-
-  const fRnd = pane.addFolder({ title: "Randomness" });
-  fRnd.addInput(ui, "seed", { min: 1, max: 999999, step: 1 }).on("change", debounceSeededRebuild);
-  fRnd.addInput(ui, "initJitter", { min: 0, max: 20, step: 0.5 }).on("change", debounceClothRebuild);
-  fRnd.addInput(ui, "jitterScale", { min: 0.001, max: 0.2, step: 0.001 }).on("change", debounceClothRebuild);
-
-  // ---- Masks ----
-  const fMasks = pane.addFolder({ title: "Masks (Two Layers)" });
-
-  const fMeshMask = fMasks.addFolder({ title: "Mesh Mask (where cloth exists)" });
-  fMeshMask.addInput(ui, "meshMaskType", { options: { rectCircle: "rectCircle", voronoiBlobs: "voronoiBlobs" } })
-    .on("change", debounceMeshMaskRebuild);
-  fMeshMask.addInput(ui, "meshThreshold", { min: 1, max: 254, step: 1 }).on("change", debounceClothRebuild);
-  fMeshMask.addInput(ui, "meshInvert").on("change", debounceClothRebuild);
-  fMeshMask.addInput(ui, "showMeshMaskOverlay").on("change", wakeSimulation);
-
-  const fTearMask = fMasks.addFolder({ title: "Tear Mask (pre-cut)" });
-  fTearMask.addInput(ui, "tearMaskType", { options: { rectCircle: "rectCircle", voronoiBlobs: "voronoiBlobs" } })
-    .on("change", debounceTearMaskRebuild);
-  fTearMask.addInput(ui, "tearThreshold", { min: 1, max: 254, step: 1 }).on("change", debounceClothRebuild);
-  fTearMask.addInput(ui, "tearInvert").on("change", debounceClothRebuild);
-  fTearMask.addInput(ui, "showTearMaskOverlay").on("change", wakeSimulation);
-  fTearMask.addInput(ui, "applyTearOnBuild").on("change", debounceClothRebuild);
-  fTearMask.addInput(ui, "tearAffects", { options: { constraints: "constraints", "points+constraints": "points+constraints" } })
-    .on("change", debounceClothRebuild);
-
-  const fRectCirc = fMasks.addFolder({ title: "Rect+Circle Params" });
-  fRectCirc.addInput(ui, "rectX", { min: 0, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fRectCirc.addInput(ui, "rectY", { min: 0, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fRectCirc.addInput(ui, "rectW", { min: 0.05, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fRectCirc.addInput(ui, "rectH", { min: 0.05, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fRectCirc.addInput(ui, "rectCircleShowCircle").on("change", debounceAllMasksRebuild);
-  fRectCirc.addInput(ui, "circX", { min: 0, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fRectCirc.addInput(ui, "circY", { min: 0, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fRectCirc.addInput(ui, "circR", { min: 0.02, max: 0.6, step: 0.01 }).on("change", debounceAllMasksRebuild);
-
-  const fVor = fMasks.addFolder({ title: "Voronoi Blobs Params" });
-  fVor.addInput(ui, "maskResScale", { min: 0.25, max: 1.0, step: 0.05 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorSeeds", { min: 3, max: 140, step: 1 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorPadding", { min: 0, max: 200, step: 1 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorMinSep", { min: 4, max: 200, step: 1 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorRelaxIters", { min: 0, max: 6, step: 1 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorRadiusJitter", { min: 0, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorFill", { min: 0.1, max: 1.0, step: 0.01 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorWobbleFreq", { min: 0.001, max: 0.06, step: 0.001 }).on("change", debounceAllMasksRebuild);
-  fVor.addInput(ui, "vorWobbleAmp", { min: 0, max: 1, step: 0.01 }).on("change", debounceAllMasksRebuild);
-}
-
-function debounceClothRebuild() {
-  queueRebuild({ cloth: true });
-}
-
-function debounceMeshMaskRebuild() {
-  queueRebuild({ meshMask: true, cloth: true });
-}
-
-function debounceTearMaskRebuild() {
-  queueRebuild({ tearMask: true, cloth: true });
-}
-
-function debounceAllMasksRebuild() {
-  queueRebuild({ meshMask: true, tearMask: true, cloth: true });
-}
-
-function debounceSeededRebuild() {
-  queueRebuild({
-    meshMask: ui.meshMaskType === "voronoiBlobs",
-    tearMask: ui.tearMaskType === "voronoiBlobs",
-    cloth: true,
-  });
-}
-
 function queueRebuild(flags = REBUILD_FLAGS, immediate = false) {
   pendingRebuild = {
     meshMask: (pendingRebuild?.meshMask || false) || !!flags.meshMask,
@@ -265,6 +156,10 @@ function queueRebuild(flags = REBUILD_FLAGS, immediate = false) {
     cloth: (pendingRebuild?.cloth || false) || !!flags.cloth,
   };
 
+  setStatus(
+    pendingRebuild.cloth ? "Updating cloth…" : "Updating mask…",
+    pendingRebuild.cloth ? "This change starts a fresh cloth." : "The current drape and manual cuts will stay in place.",
+  );
   wakeSimulation();
   if (immediate) {
     if (rebuildTimer) clearTimeout(rebuildTimer);
@@ -281,32 +176,6 @@ function flushRebuild() {
   rebuildTimer = null;
   rebuildAll(pendingRebuild || { cloth: true });
   pendingRebuild = null;
-}
-
-/* ---------------- Buttons ---------------- */
-
-function hookButtons() {
-  const rb = document.getElementById("randomBtn");
-  if (rb) {
-    rb.addEventListener("click", () => {
-      ui.seed = Math.floor(1 + Math.random() * 999999);
-      pane.refresh();
-      queueRebuild({
-        meshMask: ui.meshMaskType === "voronoiBlobs",
-        tearMask: ui.tearMaskType === "voronoiBlobs",
-        cloth: true,
-      }, true);
-    });
-  }
-
-  const regenBtn = document.getElementById("regenBtn");
-  if (regenBtn) regenBtn.addEventListener("click", () => queueRebuild({ meshMask: true, tearMask: true, cloth: true }, true));
-
-  const pngBtn = document.getElementById("pngBtn");
-  if (pngBtn) pngBtn.addEventListener("click", () => saveCanvas("masked-cloth", "png"));
-
-  const svgBtn = document.getElementById("svgBtn");
-  if (svgBtn) svgBtn.addEventListener("click", () => exportSVG());
 }
 
 /* ---------------- Build / Rebuild ---------------- */
@@ -326,7 +195,25 @@ function rebuildAll(flags = REBUILD_FLAGS) {
     cloth = createCloth();
   }
 
+  showClothStatus();
+  if (flags.tearMask && !flags.cloth && !ui.showTearMaskOverlay) {
+    document.getElementById("statusDetail").textContent =
+      "Tear mask updated. Turn on Preview or Apply On Rebuild to see it.";
+  }
   wakeSimulation();
+}
+
+function showClothStatus() {
+  if (!cloth) return;
+  setStatus(
+    `${cloth.points.filter((point) => !point.dead).length.toLocaleString()} points · ${cloth.constraints.length.toLocaleString()} threads`,
+    cloth.points.length ? "Drag to pull, or switch to Tear to cut." : "No cloth points are visible. Check the mesh mask, position, and invert setting.",
+  );
+}
+
+function setStatus(title, detail) {
+  document.getElementById("statusTitle").textContent = title;
+  document.getElementById("statusDetail").textContent = detail;
 }
 
 function createCloth() {
@@ -361,6 +248,37 @@ function createCloth() {
 /* ---------------- Interaction ---------------- */
 
 let picked = null;
+let cutStartThreadCount = null;
+
+function updateCanvasCursor() {
+  const canvas = document.querySelector("#wrap canvas");
+  if (canvas) canvas.style.cursor = ui.mode === "tear" ? "crosshair" : "grab";
+  updateBrushPreview();
+}
+
+function updateBrushPreview() {
+  const preview = document.getElementById("brushPreview");
+  const canvas = document.querySelector("#wrap canvas");
+  if (!preview || !canvas || !pointerOverCanvas || !inCanvas(mouseX, mouseY)) {
+    if (preview) preview.style.display = "none";
+    return;
+  }
+  const tearing = keyIsDown(67) || ui.mode === "tear";
+  const canvasBounds = canvas.getBoundingClientRect();
+  const wrapBounds = document.getElementById("wrap").getBoundingClientRect();
+  const scale = canvasBounds.width / width;
+  const diameter = (tearing ? ui.tearRadius : ui.pickRadius) * 2 * scale;
+  preview.style.display = "block";
+  preview.style.left = `${canvasBounds.left - wrapBounds.left + mouseX * scale}px`;
+  preview.style.top = `${canvasBounds.top - wrapBounds.top + mouseY * scale}px`;
+  preview.style.width = `${diameter}px`;
+  preview.style.height = `${diameter}px`;
+  preview.classList.toggle("tearing", tearing);
+}
+
+function mouseMoved() {
+  updateBrushPreview();
+}
 
 function mousePressed() {
   if (!cloth) return;
@@ -369,10 +287,15 @@ function mousePressed() {
   const mode = (keyIsDown(67) ? "tear" : ui.mode); // hold 'C' to tear
   if (mode === "drag") {
     picked = cloth.pickNearest(mouseX, mouseY, ui.pickRadius);
+    cutStartThreadCount = null;
     wakeSimulation();
   } else {
     picked = null;
+    cutStartThreadCount = cloth.constraints.length;
+    cloth.tear(mouseX, mouseY, ui.tearRadius);
+    wakeSimulation();
   }
+  updateBrushPreview();
 }
 
 function mouseDragged() {
@@ -387,18 +310,37 @@ function mouseDragged() {
       wakeSimulation();
     }
   } else {
+    // Cut only at actual pointer samples. Joining samples into a continuous
+    // segment erases the small irregular gaps created by natural hand motion.
     cloth.tear(mouseX, mouseY, ui.tearRadius);
     wakeSimulation();
   }
+  updateBrushPreview();
 }
 
 function mouseReleased() {
   picked = null;
+  if (cutStartThreadCount !== null && cloth?.constraints.length !== cutStartThreadCount) showClothStatus();
+  cutStartThreadCount = null;
+  updateBrushPreview();
 }
 
-function keyPressed() {
-  if (key === "r" || key === "R") queueRebuild({ meshMask: true, tearMask: true, cloth: true }, true);
-  if (key === "s" || key === "S") exportSVG();
+function keyPressed(event) {
+  const focused = document.activeElement;
+  if (event?.ctrlKey || event?.metaKey || event?.altKey || focused?.closest("#controls, input, textarea, select, [contenteditable]")) return;
+  if (key === "r" || key === "R") {
+    queueRebuild({ meshMask: true, tearMask: true, cloth: true }, true);
+    return false;
+  }
+  if (key === "s" || key === "S") {
+    exportSVG();
+    return false;
+  }
+  if (key === "c" || key === "C") updateBrushPreview();
+}
+
+function keyReleased() {
+  if (key === "c" || key === "C") updateBrushPreview();
 }
 
 function inCanvas(x, y) {
@@ -918,7 +860,7 @@ class Cloth {
       for (const c of this.constraints) c.solve();
     }
 
-    return maxSpeed2 > 0.0005;
+    return maxSpeed2 > 0.0005 || (Math.abs(g) > 0.0001 && this.points.some((p) => !p.locked && !p.dead));
   }
 
   drawScreen() {
@@ -951,7 +893,7 @@ class Cloth {
     let bestD2 = r * r;
 
     for (const p of this.points) {
-      if (p.dead) continue;
+      if (p.dead || p.locked) continue;
       const dx = p.pos.x - mx;
       const dy = p.pos.y - my;
       const d2 = dx * dx + dy * dy;
@@ -969,6 +911,7 @@ class Cloth {
       (c) => distToSegmentSquared(mx, my, c.p1.pos.x, c.p1.pos.y, c.p2.pos.x, c.p2.pos.y) > radius2,
     );
   }
+
 }
 
 class Point {
