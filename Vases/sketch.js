@@ -16,8 +16,10 @@ const PAPER_SIZES_MM = {
 
 let pane;
 let cnv;
-let layoutBindings = [];
 let vaseInstances = [];
+let dialRoot;
+let dialController;
+let dialSyncing = false;
 
 const P = {
   // Canvas & Layout
@@ -91,15 +93,24 @@ const P = {
 };
 
 const RANDOM_CONTROL_RANGES = {
-  neckWidth: [0.1, 1],
-  rimFlare: [0.1, 1],
-  baseWidth: [0.1, 1],
-  a4: [0.1, 1],
-  bellyWidth: [0, 1],
-  a2: [0, 1],
-  a3: [0, 1],
-  bulbHeightRatio: [0.1, 0.9],
+  // Vase 2.0's conservative resolved ranges, using this tool's strict
+  // 0-1 cap for the bulb handles instead of Vase 2.0's legacy 1.25 cap.
+  neckWidth: [0.14, 0.65],
+  rimFlare: [0.16, 0.85],
+  baseWidth: [0.18, 0.8],
+  a4: [0.2, 1],
+  bellyWidth: [0.35, 1],
+  a2: [0.3, 1],
+  a3: [0.3, 1],
+  bulbHeightRatio: [0.28, 0.7],
+  neckDepth: [3, 24],
+  baseDepth: [3, 24],
+  branchHeightRatio: [0.18, 0.45],
+  branchSeed: [0, 9999],
+  branchAngle: [0.18, 0.7],
 };
+
+const INTEGER_RANDOM_CONTROLS = new Set(["branchSeed"]);
 
 const VASE_GEOMETRY_KEYS = [
   "neckWidth", "rimFlare", "baseWidth", "a4",
@@ -144,9 +155,7 @@ function saveActiveVaseGeometry() {
 }
 
 function updateLayoutControlVisibility() {
-  layoutBindings.forEach(({ blade, presets }) => {
-    blade.hidden = !presets.includes(P.layoutPreset);
-  });
+  if (dialController) refreshDialFromP(true);
 }
 
 function applyPaperPreset() {
@@ -380,6 +389,7 @@ function enforceVaseConstraints(state = P) {
   state.bellyWidth = Math.max(0, Math.min(1, state.bellyWidth));
   state.a2 = Math.max(0, Math.min(1, state.a2));
   state.a3 = Math.max(0, Math.min(1, state.a3));
+  state.branchAngle = Math.max(0.18, Math.min(0.7, state.branchAngle));
 
   // Either belly handle may sit inside the belly anchor. Only prevent both
   // handles from pointing inward at once, which creates a spike. Move the
@@ -416,18 +426,40 @@ function getVaseVerticalGeometry(height, state = P) {
 function randomControlState(random = Math.random, state = P) {
   let candidate = { ...state };
 
-  // Rejection sampling keeps the valid random results evenly distributed.
-  // Clamping an invalid draw would create an artificial pile-up where a
-  // handle exactly equals the belly width.
-  for (let attempt = 0; attempt < 100; attempt++) {
+  // Vase 2.0 generates a complete vase from one seeded uniform sequence.
+  // Keep that behavior and its conservative resolved parameter ranges.
+  // The only rejected relationship is both handles being inside the belly.
+  for (let attempt = 0; attempt < 256; attempt++) {
     candidate = { ...state };
     Object.entries(RANDOM_CONTROL_RANGES).forEach(([key, [min, max]]) => {
-      if (!state["lock_" + key]) candidate[key] = min + (random() * (max - min));
+      if (state["lock_" + key]) return;
+      candidate[key] = INTEGER_RANDOM_CONTROLS.has(key)
+        ? min + Math.floor(random() * (max - min + 1))
+        : min + (random() * (max - min));
     });
     if (!(candidate.a2 < candidate.bellyWidth && candidate.a3 < candidate.bellyWidth)) break;
   }
 
+  // Degenerate locked states (for example bellyWidth=1) can make rejection
+  // sampling impossible. Correct only the forbidden conjunction, minimally.
+  if (candidate.a2 < candidate.bellyWidth && candidate.a3 < candidate.bellyWidth) {
+    const canMoveA2 = !state.lock_a2;
+    const canMoveA3 = !state.lock_a3;
+    if (canMoveA2 && (!canMoveA3 || candidate.a2 >= candidate.a3)) candidate.a2 = candidate.bellyWidth;
+    else if (canMoveA3) candidate.a3 = candidate.bellyWidth;
+    else if (!state.lock_bellyWidth) candidate.bellyWidth = Math.max(candidate.a2, candidate.a3);
+    else if (candidate.a2 >= candidate.a3) candidate.a2 = candidate.bellyWidth;
+    else candidate.a3 = candidate.bellyWidth;
+  }
+
   return candidate;
+}
+
+function newRandomSeed() {
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
+    return globalThis.crypto.getRandomValues(new Uint32Array(1))[0];
+  }
+  return Math.floor(Math.random() * 0x100000000);
 }
 
 function branch(len, state) {
@@ -442,124 +474,332 @@ function branch(len, state) {
   }
 }
 
-function buildPane() {
-  pane = new Tweakpane.Pane({ container: document.getElementById("pane"), title: "Vase Project" });
-  layoutBindings = [];
-  
-  const presets = pane.addFolder({ title: "Presets Management" });
-  presets.addButton({ title: "💾 Save Bundle (SVG+JSON)" }).on("click", exportBundle);
-  presets.addButton({ title: "📂 Load JSON Preset" }).on("click", () => document.getElementById("presetInput").click());
+const DIAL_PARAM_PATHS = {
+  "layoutPresets.layoutPreset": "layoutPreset",
+  "layoutPresets.columns": "gridColumns",
+  "layoutPresets.rows": "gridRows",
+  "layoutPresets.columnGap (mm)": "gridGapXMM",
+  "layoutPresets.rowGap (mm)": "gridGapYMM",
+  "layoutPresets.linearVases": "linearCount",
+  "layoutPresets.linearGap (mm)": "linearGapMM",
+  "layoutPresets.radialVases": "radialCount",
+  "layoutPresets.radius (mm)": "radialRadiusMM",
+  "layoutPresets.radialCellWidth (mm)": "radialCellWidthMM",
+  "layoutPresets.radialCellHeight (mm)": "radialCellHeightMM",
+  "layoutPresets.pageVases": "pageSpacedCount",
+  "layoutPresets.pageCellWidth (mm)": "pageCellWidthMM",
+  "layoutPresets.pageCellHeight (mm)": "pageCellHeightMM",
+  "layoutPresets.spacing (mm)": "pageGapMM",
+  "layoutPresets.selectedCell": "activeInstance",
+  "vaseBody.neckWidth": "neckWidth",
+  "vaseBody.rimFlareA1": "rimFlare",
+  "vaseBody.bellyWidth": "bellyWidth",
+  "vaseBody.bulbTopHandleA2": "a2",
+  "vaseBody.bulbBottomHandleA3": "a3",
+  "vaseBody.shoulderA4": "a4",
+  "vaseBody.baseWidth": "baseWidth",
+  "vaseBody.bulbPosition": "bulbHeightRatio",
+  "vaseBody.locks.lockNeck": "lock_neckWidth",
+  "vaseBody.locks.lockFlare": "lock_rimFlare",
+  "vaseBody.locks.lockBelly": "lock_bellyWidth",
+  "vaseBody.locks.lockTopHandle": "lock_a2",
+  "vaseBody.locks.lockBottomHandle": "lock_a3",
+  "vaseBody.locks.lockShoulder": "lock_a4",
+  "vaseBody.locks.lockBase": "lock_baseWidth",
+  "vaseBody.locks.lockBulbPosition": "lock_bulbHeightRatio",
+  "proportions.neckHeight (mm)": "neckDepth",
+  "proportions.baseHeight (mm)": "baseDepth",
+  "proportions.density": "vaseLines",
+  "branch.showBranch": "showBranch",
+  "branch.seed": "branchSeed",
+  "branch.height": "branchHeightRatio",
+  "branch.spreadAngle": "branchAngle",
+  "canvasSettings.width (mm)": "canvasWMM",
+  "canvasSettings.height (mm)": "canvasHMM",
+  "canvasSettings.paperType": "canvasSizePreset",
+  "canvasSettings.orientation": "paperOrientation",
+  "canvasSettings.margin (mm)": "marginMM",
+  "canvasSettings.zoom": "previewScale",
+  "canvasSettings.fitView": "fitToViewport",
+  "styling.inkColor": "lineColor",
+  "styling.lineweight (mm)": "strokeWeightMM",
+  "styling.guides": "showControls",
+};
 
-  const layout = pane.addFolder({ title: "Layout Presets", expanded: true });
-  layout.addInput(P, "layoutPreset", {
-    options: { Single: "Single", Grid: "Grid", Row: "Row", Column: "Column", Radial: "Radial", "Page Spaced": "Page Spaced" },
-    label: "Preset",
-  });
-  const addLayoutInput = (key, options, relevantPresets) => {
-    const blade = layout.addInput(P, key, options);
-    layoutBindings.push({ blade, presets: relevantPresets });
-    return blade;
+function buildLayoutDialConfig() {
+  const config = {
+    _collapsed: false,
+    layoutPreset: {
+      type: "select",
+      options: ["Single", "Grid", "Row", "Column", "Radial", "Page Spaced"],
+      default: P.layoutPreset,
+    },
   };
-  addLayoutInput("gridColumns", { min: 1, max: 6, step: 1, label: "Columns" }, ["Grid"]);
-  addLayoutInput("gridRows", { min: 1, max: 6, step: 1, label: "Rows" }, ["Grid"]);
-  addLayoutInput("gridGapXMM", { min: 0, max: 40, step: 1, label: "Column Gap (mm)" }, ["Grid"]);
-  addLayoutInput("gridGapYMM", { min: 0, max: 40, step: 1, label: "Row Gap (mm)" }, ["Grid"]);
-  addLayoutInput("linearCount", { min: 1, max: 10, step: 1, label: "Vases" }, ["Row", "Column"]);
-  addLayoutInput("linearGapMM", { min: 0, max: 40, step: 1, label: "Gap (mm)" }, ["Row", "Column"]);
-  addLayoutInput("radialCount", { min: 2, max: 16, step: 1, label: "Vases" }, ["Radial"]);
-  addLayoutInput("radialRadiusMM", { min: 0, max: 100, step: 1, label: "Radius (mm)" }, ["Radial"]);
-  addLayoutInput("radialCellWidthMM", { min: 5, max: 100, step: 1, label: "Cell Width (mm)" }, ["Radial"]);
-  addLayoutInput("radialCellHeightMM", { min: 5, max: 140, step: 1, label: "Cell Height (mm)" }, ["Radial"]);
-  addLayoutInput("pageSpacedCount", { min: 1, max: 20, step: 1, label: "Vases" }, ["Page Spaced"]);
-  addLayoutInput("pageCellWidthMM", { min: 5, max: 100, step: 1, label: "Cell Width (mm)" }, ["Page Spaced"]);
-  addLayoutInput("pageCellHeightMM", { min: 5, max: 140, step: 1, label: "Cell Height (mm)" }, ["Page Spaced"]);
-  addLayoutInput("pageGapMM", { min: 0, max: 40, step: 1, label: "Spacing (mm)" }, ["Page Spaced"]);
+  if (P.layoutPreset === "Grid") {
+    Object.assign(config, {
+      columns: [P.gridColumns, 1, 6, 1],
+      rows: [P.gridRows, 1, 6, 1],
+      "columnGap (mm)": [P.gridGapXMM, 0, 40, 1],
+      "rowGap (mm)": [P.gridGapYMM, 0, 40, 1],
+    });
+  } else if (P.layoutPreset === "Row" || P.layoutPreset === "Column") {
+    Object.assign(config, {
+      linearVases: [P.linearCount, 1, 10, 1],
+      "linearGap (mm)": [P.linearGapMM, 0, 40, 1],
+    });
+  } else if (P.layoutPreset === "Radial") {
+    Object.assign(config, {
+      radialVases: [P.radialCount, 2, 16, 1],
+      "radius (mm)": [P.radialRadiusMM, 0, 100, 1],
+      "radialCellWidth (mm)": [P.radialCellWidthMM, 5, 100, 1],
+      "radialCellHeight (mm)": [P.radialCellHeightMM, 5, 140, 1],
+    });
+  } else if (P.layoutPreset === "Page Spaced") {
+    Object.assign(config, {
+      pageVases: [P.pageSpacedCount, 1, 20, 1],
+      "pageCellWidth (mm)": [P.pageCellWidthMM, 5, 100, 1],
+      "pageCellHeight (mm)": [P.pageCellHeightMM, 5, 140, 1],
+      "spacing (mm)": [P.pageGapMM, 0, 40, 1],
+    });
+  }
+  config.selectedCell = [P.activeInstance, 1, Math.max(1, getLayoutCount()), 1];
+  return config;
+}
 
-  layout.addInput(P, "activeInstance", { min: 1, max: 36, step: 1, label: "Selected Cell" });
-  updateLayoutControlVisibility();
+function buildDialConfig() {
+  return {
+    presetsManagement: {
+      _collapsed: true,
+      saveBundle: { type: "action", label: "Save Bundle (SVG + JSON)" },
+      loadJsonPreset: { type: "action", label: "Load JSON Preset" },
+    },
+    layoutPresets: buildLayoutDialConfig(),
+    vaseBody: {
+      _collapsed: false,
+      neckWidth: [P.neckWidth, 0.1, 1, 0.01],
+      rimFlareA1: [P.rimFlare, 0.1, 1, 0.01],
+      bellyWidth: [P.bellyWidth, 0, 1, 0.01],
+      bulbTopHandleA2: [P.a2, 0, 1, 0.01],
+      bulbBottomHandleA3: [P.a3, 0, 1, 0.01],
+      shoulderA4: [P.a4, 0.1, 1, 0.01],
+      baseWidth: [P.baseWidth, 0.1, 1, 0.01],
+      bulbPosition: [P.bulbHeightRatio, 0.1, 0.9, 0.01],
+      locks: {
+        _collapsed: true,
+        lockNeck: P.lock_neckWidth,
+        lockFlare: P.lock_rimFlare,
+        lockBelly: P.lock_bellyWidth,
+        lockTopHandle: P.lock_a2,
+        lockBottomHandle: P.lock_a3,
+        lockShoulder: P.lock_a4,
+        lockBase: P.lock_baseWidth,
+        lockBulbPosition: P.lock_bulbHeightRatio,
+      },
+    },
+    proportions: {
+      _collapsed: false,
+      "neckHeight (mm)": [P.neckDepth, 2, 80, 0.1],
+      "baseHeight (mm)": [P.baseDepth, 2, 80, 0.1],
+      density: [P.vaseLines, 5, 300, 1],
+    },
+    branch: {
+      _collapsed: false,
+      showBranch: P.showBranch,
+      seed: [P.branchSeed, 0, 9999, 1],
+      height: [P.branchHeightRatio, 0.1, 0.7, 0.01],
+      spreadAngle: [P.branchAngle, 0.18, 0.7, 0.01],
+    },
+    canvasSettings: {
+      _collapsed: true,
+      "width (mm)": [P.canvasWMM, 10, 2000, 1],
+      "height (mm)": [P.canvasHMM, 10, 2000, 1],
+      paperType: {
+        type: "select",
+        options: Object.keys(PAPER_SIZES_MM),
+        default: P.canvasSizePreset,
+      },
+      orientation: {
+        type: "select",
+        options: ["Portrait", "Landscape"],
+        default: P.paperOrientation,
+      },
+      "margin (mm)": [P.marginMM, 0, 80, 1],
+      zoom: [P.previewScale, 0.1, 5, 0.1],
+      fitView: P.fitToViewport,
+    },
+    styling: {
+      _collapsed: true,
+      inkColor: { type: "color", default: P.lineColor },
+      "lineweight (mm)": [P.strokeWeightMM, 0.05, 1, 0.05],
+      guides: P.showControls,
+    },
+  };
+}
 
-  const form = pane.addFolder({ title: "Primary Form (0-1)" });
-  form.addInput(P, "neckWidth", { min: 0.1, max: 1.0, label: "Neck Width" });
-  form.addInput(P, "lock_neckWidth", { label: "Lock Neck" });
-  form.addInput(P, "rimFlare", { min: 0.1, max: 1.0, label: "Rim Flare (A1)" });
-  form.addInput(P, "lock_rimFlare", { label: "Lock Flare" });
-  form.addInput(P, "baseWidth", { min: 0.1, max: 1.0, label: "Base Width" });
-  form.addInput(P, "lock_baseWidth", { label: "Lock Base" });
-  form.addInput(P, "a4", { min: 0.1, max: 1.0, label: "Shoulder (A4)" });
-  form.addInput(P, "lock_a4", { label: "Lock Shoulder" });
+function buildDialValues() {
+  const layoutPresets = {
+    layoutPreset: P.layoutPreset,
+    selectedCell: P.activeInstance,
+  };
+  if (P.layoutPreset === "Grid") {
+    Object.assign(layoutPresets, {
+      columns: P.gridColumns,
+      rows: P.gridRows,
+      "columnGap (mm)": P.gridGapXMM,
+      "rowGap (mm)": P.gridGapYMM,
+    });
+  } else if (P.layoutPreset === "Row" || P.layoutPreset === "Column") {
+    Object.assign(layoutPresets, {
+      linearVases: P.linearCount,
+      "linearGap (mm)": P.linearGapMM,
+    });
+  } else if (P.layoutPreset === "Radial") {
+    Object.assign(layoutPresets, {
+      radialVases: P.radialCount,
+      "radius (mm)": P.radialRadiusMM,
+      "radialCellWidth (mm)": P.radialCellWidthMM,
+      "radialCellHeight (mm)": P.radialCellHeightMM,
+    });
+  } else if (P.layoutPreset === "Page Spaced") {
+    Object.assign(layoutPresets, {
+      pageVases: P.pageSpacedCount,
+      "pageCellWidth (mm)": P.pageCellWidthMM,
+      "pageCellHeight (mm)": P.pageCellHeightMM,
+      "spacing (mm)": P.pageGapMM,
+    });
+  }
+  return {
+    layoutPresets,
+    vaseBody: {
+      neckWidth: P.neckWidth,
+      rimFlareA1: P.rimFlare,
+      bellyWidth: P.bellyWidth,
+      bulbTopHandleA2: P.a2,
+      bulbBottomHandleA3: P.a3,
+      shoulderA4: P.a4,
+      baseWidth: P.baseWidth,
+      bulbPosition: P.bulbHeightRatio,
+      locks: {
+        lockNeck: P.lock_neckWidth,
+        lockFlare: P.lock_rimFlare,
+        lockBelly: P.lock_bellyWidth,
+        lockTopHandle: P.lock_a2,
+        lockBottomHandle: P.lock_a3,
+        lockShoulder: P.lock_a4,
+        lockBase: P.lock_baseWidth,
+        lockBulbPosition: P.lock_bulbHeightRatio,
+      },
+    },
+    proportions: {
+      "neckHeight (mm)": P.neckDepth,
+      "baseHeight (mm)": P.baseDepth,
+      density: P.vaseLines,
+    },
+    branch: {
+      showBranch: P.showBranch,
+      seed: P.branchSeed,
+      height: P.branchHeightRatio,
+      spreadAngle: P.branchAngle,
+    },
+    canvasSettings: {
+      "width (mm)": P.canvasWMM,
+      "height (mm)": P.canvasHMM,
+      paperType: P.canvasSizePreset,
+      orientation: P.paperOrientation,
+      "margin (mm)": P.marginMM,
+      zoom: P.previewScale,
+      fitView: P.fitToViewport,
+    },
+    styling: {
+      inkColor: P.lineColor,
+      "lineweight (mm)": P.strokeWeightMM,
+      guides: P.showControls,
+    },
+  };
+}
 
-  const bulb = pane.addFolder({ title: "Bulge Geometry (0-1)" });
-  bulb.addInput(P, "bellyWidth", { min: 0, max: 1, label: "Belly Width" });
-  bulb.addInput(P, "lock_bellyWidth", { label: "Lock Belly" });
-  bulb.addInput(P, "a2", { min: 0, max: 1, label: "Bulb Top Handle" });
-  bulb.addInput(P, "lock_a2", { label: "Lock Top" });
-  bulb.addInput(P, "a3", { min: 0, max: 1, label: "Bulb Btm Handle" });
-  bulb.addInput(P, "lock_a3", { label: "Lock Btm" });
-  bulb.addInput(P, "bulbHeightRatio", { min: 0.1, max: 0.9, label: "Bulb Position %" });
-  bulb.addInput(P, "lock_bulbHeightRatio", { label: "Lock Position" });
-
-  const plant = pane.addFolder({ title: "Plant Variety" });
-  plant.addInput(P, "showBranch", { label: "Show" });
-  plant.addInput(P, "branchSeed", { min: 0, max: 9999, step: 1, label: "Seed" });
-  plant.addInput(P, "branchHeightRatio", { min: 0.1, max: 0.7, label: "Height %" });
-  plant.addInput(P, "branchAngle", { min: 0.1, max: 1.5, label: "Spread Angle" });
-
-  const dim = pane.addFolder({ title: "Vase Lines & Heights" });
-  dim.addInput(P, "vaseLines", { min: 5, max: 300, step: 1, label: "Density" });
-  dim.addInput(P, "neckDepth", { min: 2, max: 80, label: "Neck H (mm)" });
-  dim.addInput(P, "baseDepth", { min: 2, max: 80, label: "Base H (mm)" });
-
-  const canvas = pane.addFolder({ title: "Canvas Settings" });
-  canvas.addInput(P, "canvasWMM", { min: 10, max: 2000, step: 1, label: "Width (mm)" });
-  canvas.addInput(P, "canvasHMM", { min: 10, max: 2000, step: 1, label: "Height (mm)" });
-  canvas.addInput(P, "canvasSizePreset", {
-    options: Object.fromEntries(Object.keys(PAPER_SIZES_MM).map(name => [name, name])),
-    label: "Paper Type",
-  });
-  canvas.addInput(P, "paperOrientation", {
-    options: { Portrait: "Portrait", Landscape: "Landscape" },
-    label: "Orientation",
-  });
-  canvas.addInput(P, "marginMM", { min: 0, max: 80, step: 1, label: "Margin (mm)" });
-  canvas.addInput(P, "previewScale", { min: 0.1, max: 5, step: 0.1, label: "Zoom" });
-  canvas.addInput(P, "fitToViewport", { label: "Fit View" });
-
-  const style = pane.addFolder({ title: "Styling" });
-  style.addInput(P, "lineColor", { label: "Ink Color" });
-  style.addInput(P, "strokeWeightMM", { min: 0.05, max: 1.0, step: 0.05, label: "Lineweight (mm)" });
-  style.addInput(P, "showControls", { label: "Guides (G)" });
-
-  pane.on("change", event => {
-    const key = event.presetKey;
-    if (key === "canvasSizePreset" || key === "paperOrientation") applyPaperPreset();
-    if (key === "activeInstance") {
-      ensureVaseInstances();
-      loadActiveVaseGeometry();
-    } else if (VASE_GEOMETRY_KEYS.includes(key)) {
-      enforceVaseConstraints(P);
-      saveActiveVaseGeometry();
+function flattenDialValues(source, prefix = "", result = {}) {
+  Object.entries(source || {}).forEach(([key, value]) => {
+    const path = prefix ? prefix + "." + key : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      flattenDialValues(value, path, result);
+    } else {
+      result[path] = value;
     }
-    if (["layoutPreset", "gridColumns", "gridRows", "linearCount", "radialCount", "pageSpacedCount"].includes(key)) {
-      ensureVaseInstances();
-      loadActiveVaseGeometry();
-      updateLayoutControlVisibility();
-    }
-    if (["canvasWMM", "canvasHMM", "marginMM", "canvasSizePreset", "paperOrientation"].includes(key)) {
-      vaseInstances.forEach(instance => enforceVaseConstraints(instance.geometry));
-      loadActiveVaseGeometry();
-    }
-    pane.refresh();
-    syncCanvasSize();
-    redraw();
   });
+  return result;
+}
+
+function refreshDialFromP(rebuild = false) {
+  if (!dialController) return;
+  dialSyncing = true;
+  if (rebuild) dialController.updateConfig(buildDialConfig());
+  dialController.setValues(buildDialValues());
+  dialSyncing = false;
+}
+
+function applyDialValues(values) {
+  if (dialSyncing) return;
+  const flat = flattenDialValues(values);
+  const changed = [];
+  Object.entries(DIAL_PARAM_PATHS).forEach(([path, param]) => {
+    if (!(path in flat) || Object.is(P[param], flat[path])) return;
+    P[param] = flat[path];
+    changed.push(param);
+  });
+  if (!changed.length) return;
+
+  if (changed.includes("canvasSizePreset") || changed.includes("paperOrientation")) applyPaperPreset();
+  if (changed.includes("activeInstance")) {
+    ensureVaseInstances();
+    loadActiveVaseGeometry();
+  } else if (changed.some(key => VASE_GEOMETRY_KEYS.includes(key))) {
+    enforceVaseConstraints(P);
+    saveActiveVaseGeometry();
+  }
+
+  const layoutKeys = ["layoutPreset", "gridColumns", "gridRows", "linearCount", "radialCount", "pageSpacedCount"];
+  const rebuildLayout = changed.some(key => layoutKeys.includes(key));
+  if (rebuildLayout) {
+    ensureVaseInstances();
+    loadActiveVaseGeometry();
+  }
+  if (changed.some(key => ["canvasWMM", "canvasHMM", "marginMM", "canvasSizePreset", "paperOrientation"].includes(key))) {
+    vaseInstances.forEach(instance => enforceVaseConstraints(instance.geometry));
+    loadActiveVaseGeometry();
+  }
+
+  refreshDialFromP(rebuildLayout);
+  syncCanvasSize();
+  redraw();
+}
+
+function buildPane() {
+  if (!globalThis.DialKit) throw new Error("DialKit failed to load");
+  dialRoot = DialKit.createDialRoot({
+    target: document.getElementById("pane"),
+    mode: "inline",
+    theme: "dark",
+    defaultOpen: true,
+    productionEnabled: true,
+  });
+  dialController = DialKit.createDialKit("Vase Project", buildDialConfig(), {
+    id: "vase-project",
+    defaultCollapsed: false,
+    onAction: action => {
+      if (action === "presetsManagement.saveBundle") exportBundle();
+      if (action === "presetsManagement.loadJsonPreset") document.getElementById("presetInput")?.click();
+    },
+  });
+  pane = { refresh: () => refreshDialFromP(false) };
+  dialController.subscribe(applyDialValues, false);
+  refreshDialFromP(false);
 }
 
 function hookUI() {
   document.getElementById("randomBtn").addEventListener("click", () => {
-    // Each unlocked control gets an independent uniform draw across its full
-    // range. No averaging is used, so values do not form a bell curve.
-    Object.assign(P, randomControlState());
-    P.branchSeed = Math.floor(Math.random() * 9999);
+    const random = mulberry32(newRandomSeed());
+    Object.assign(P, randomControlState(random));
     enforceVaseConstraints(P);
     saveActiveVaseGeometry();
     pane.refresh(); redraw();
@@ -603,9 +843,11 @@ function hookUI() {
 
   window.addEventListener("resize", () => { syncCanvasSize(); redraw(); });
   window.addEventListener("keydown", (e) => {
-    if (e.key.toLowerCase() === "r") document.getElementById("randomBtn").click();
-    if (e.key.toLowerCase() === "s") document.getElementById("svgBtn").click();
-    if (e.key.toLowerCase() === "g") { P.showControls = !P.showControls; pane.refresh(); redraw(); }
+    const key = e.key.toLowerCase();
+    if (e.repeat && ["r", "s", "g"].includes(key)) return;
+    if (key === "r") document.getElementById("randomBtn").click();
+    if (key === "s") document.getElementById("svgBtn").click();
+    if (key === "g") { P.showControls = !P.showControls; pane.refresh(); redraw(); }
   });
 }
 
