@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Create, save, and export a custom vase drawing.">
+  <title>Vase 2.0</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2.2.0">
+  <script type="module" src="app.js?v=2.2.0"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="Vase 2.0 home"><svg viewBox="0 0 28 34" aria-hidden="true"><path d="M9 3h10c-3 9 8 13 6 23-1 5-21 5-22 0C1 16 12 12 9 3Z"/><path d="M12 3c-2 10-5 15-4 23m7-23v26m2-26c2 10 5 15 4 23"/></svg><span>Vase 2.0</span></a>
+    <nav aria-label="Main navigation"><a href="#collection" class="nav-collection">Examples</a><a href="#about">How it works</a><a href="#saved">Saved vases <span id="saved-count">0</span></a></nav>
+    <button class="button dark header-create" data-action="create">Create your vase <span aria-hidden="true">↗</span></button>
+  </header>
+  <main id="app"></main>
+  <footer class="site-footer"><a href="#" class="footer-brand">Vase 2.0</a><span>Create, save, and export vase drawings.</span><span>SVG output for pen plotting.</span></footer>
+  <dialog id="save-dialog">
+    <form id="save-form">
+      <button class="dialog-close icon-button" type="button" aria-label="Close save dialog">×</button>
+      <span class="eyebrow">SAVE VASE</span><h2>Name this vase.</h2>
+      <p>The name helps you find it in the saved-vases view.</p>
+      <label for="vase-name">Vase name</label><input id="vase-name" name="name" maxlength="60" placeholder="Vase 01" required autocomplete="off">
+      <p class="save-note" id="save-location">The vase will be stored in the local database.</p>
+      <button class="button dark" type="submit">Save vase <span aria-hidden="true">↗</span></button>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
