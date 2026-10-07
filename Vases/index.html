@@ -53,6 +53,35 @@
             grid-template-columns: 1fr 1fr;
             gap: 10px;
         }
+        .saxi-panel {
+            display: grid;
+            gap: 9px;
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #202020;
+        }
+        .saxi-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-pill {
+            color: #a5a5a5;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        #saxiConnectionBadge {
+            color: #d97777;
+            font-size: 10px;
+            font-weight: 500;
+        }
+        #saxiConnectionBadge[data-connected="true"] {
+            color: #7fca8c;
+        }
         button {
             background: #333;
             border: 1px solid #444;
@@ -69,6 +98,54 @@
         }
         button:active {
             transform: translateY(1px);
+        }
+        .dialkit-slider-wrapper.vase-lock-control {
+            padding-right: 31px;
+            box-sizing: border-box;
+        }
+        .dialkit-slider-wrapper.vase-lock-control > .dialkit-slider {
+            width: calc(100% - 31px);
+        }
+        button.vase-inline-lock {
+            position: absolute;
+            top: 4px;
+            right: 0;
+            z-index: 1;
+            display: grid;
+            place-items: center;
+            width: 25px;
+            height: 25px;
+            padding: 0;
+            color: #8d8d8d;
+            background: #292929;
+            border: 1px solid #3a3a3a;
+            border-radius: 5px;
+        }
+        button.vase-inline-lock:hover {
+            color: #e6e6e6;
+            background: #363636;
+            border-color: #4a4a4a;
+        }
+        button.vase-inline-lock[aria-pressed="true"] {
+            color: #111;
+            background: #f0f0f0;
+            border-color: #f0f0f0;
+        }
+        button.vase-inline-lock:focus-visible {
+            outline: 2px solid #f0f0f0;
+            outline-offset: 1px;
+        }
+        button.vase-inline-lock:active {
+            transform: none;
+        }
+        button.vase-inline-lock svg {
+            width: 14px;
+            height: 14px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
         .hint {
             font-size: 12px;
@@ -91,6 +168,14 @@
             <button type="button" id="randomBtn">New Random Vase</button>
             <button type="button" id="svgBtn">Export SVG</button>
         </div>
+        <div class="saxi-panel" aria-label="SAXI plotter connection">
+            <div class="saxi-panel-header">
+                <span>Send to plotter</span>
+                <span id="saxiConnectionBadge" data-connected="false">socket: disconnected</span>
+            </div>
+            <div class="status-pill" id="saxiStatus" aria-live="polite">Stream module ready</div>
+            <button type="button" id="saxiStreamBtn">Stream Vase + Branches</button>
+        </div>
         <div class="hint">
             <strong>Controls:</strong><br>
             - Use the sliders to adjust the vase shape.<br>
@@ -105,6 +190,6 @@
     
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dialkit@2.0.2/dist/vanilla/browser.global.js"></script>
-    <script src="sketch.js?v=20260924-dialkit-vase2-ranges"></script>
+    <script src="sketch.js?v=20260928-inline-locks"></script>
 </body>
 </html>

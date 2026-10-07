@@ -128,15 +128,17 @@ const P = {
   sampleGridPx: 1,
   traceStepMM: 0.8,
   mode: "lineHatch",
-  squiggleOrientation: "horizontal",
+  squiggleAngleDeg: 0,
   squiggleFrequencyMM: 2,
   squiggleAmplitudeMM: 2.0,
   squigglePhaseDeg: 0,
   squiggleClampToSpacing: true,
+  squiggleStraightThresholdMM: 0.12,
   randomizeAnglesOnRebuild: false,
   useLengthCleanup: true,
   showImageBounds: false,
   palettePreset: "graphite",
+  strokeColorMode: "palette",
   svgIncludeBackground: true,
   svgFilename: "Image-Processor.svg",
   layers: [
@@ -189,6 +191,7 @@ function makeLayer(overrides = {}) {
     bMin: 0,
     bMax: 255,
     spacingMM: 4,
+    joinGapMM: 0.8,
     stroke: "#000000",
     weightMM: 0.3,
     angleDeg: 45,
@@ -308,6 +311,13 @@ function buildPane() {
     .on("change", (ev) => {
       applyPalettePreset(ev.value);
     });
+  paletteFolder.addInput(P, "strokeColorMode", {
+    options: {
+      palette: "palette",
+      sampleImage: "sampleImage",
+    },
+    label: "Color Mode",
+  }).on("change", rebuildScene);
   paletteFolder.addInput(P.layers[0], "stroke", { label: "Dark Tone" }).on("change", () => {
     handlePaletteToneChange(0);
   });
@@ -335,9 +345,11 @@ function buildPane() {
 
   modeVisibilityBlades.squiggle.push(
     modeFolder
-      .addInput(P, "squiggleOrientation", {
-        options: { horizontal: "horizontal", vertical: "vertical" },
-        label: "Direction",
+      .addInput(P, "squiggleAngleDeg", {
+        min: -180,
+        max: 180,
+        step: 1,
+        label: "Angle",
       })
       .on("change", rebuildScene)
   );
@@ -352,6 +364,9 @@ function buildPane() {
   );
   modeVisibilityBlades.squiggle.push(
     modeFolder.addInput(P, "squiggleClampToSpacing", { label: "Clamp Amp" }).on("change", rebuildScene)
+  );
+  modeVisibilityBlades.squiggle.push(
+    modeFolder.addInput(P, "squiggleStraightThresholdMM", { min: 0, max: 2, step: 0.01, label: "Straight Tol" }).on("change", rebuildScene)
   );
 
   modeVisibilityBlades.lineHatch.push(
@@ -373,6 +388,7 @@ function buildPane() {
     folder.addInput(layer, "bMin", { min: 0, max: 255, step: 1, label: "Tone Min" }).on("change", rebuildScene);
     folder.addInput(layer, "bMax", { min: 1, max: 256, step: 1, label: "Tone Max" }).on("change", rebuildScene);
     folder.addInput(layer, "spacingMM", { min: 0.5, max: 30, step: 0.1, label: "Spacing" }).on("change", rebuildScene);
+    folder.addInput(layer, "joinGapMM", { min: 0, max: 10, step: 0.1, label: "Join Gap" }).on("change", rebuildScene);
     const strokeBlade = folder.addInput(layer, "stroke", { label: "Stroke" }).on("change", () => {
       handlePaletteToneChange(index);
       rebuildScene();
@@ -560,7 +576,7 @@ function buildSceneLayers() {
     out.push({
       stroke: layer.stroke,
       weightMM: layer.weightMM,
-      paths,
+      segments: decorateSegmentsWithStroke(paths, layer, scene.imageMapping),
     });
   }
 
@@ -621,14 +637,14 @@ function drawSceneLayers() {
   strokeJoin(ROUND);
 
   for (const layer of scene.layers) {
-    stroke(layer.stroke);
     strokeWeight(layer.weightMM);
-    for (const path of layer.paths) {
-      if (!path || path.length < 2) {
+    for (const segment of layer.segments) {
+      if (!segment.points || segment.points.length < 2) {
         continue;
       }
+      stroke(segment.stroke);
       beginShape();
-      for (const point of path) {
+      for (const point of segment.points) {
         vertex(point.x, point.y);
       }
       endShape();
@@ -658,25 +674,42 @@ function exportSVG() {
   svg.push(`<g style="isolation:isolate">`);
 
   for (const layer of scene.layers) {
-    svg.push(
-      `<g fill="none" stroke="${ExportUtils.escapeXML(layer.stroke)}" stroke-width="${ExportUtils.fmt(
-        Math.max(0.0001, layer.weightMM)
-      )}" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:multiply">`
-    );
-
-    for (const path of layer.paths) {
-      if (!path || path.length < 2) {
+    for (const segment of layer.segments) {
+      if (!segment.points || segment.points.length < 2) {
         continue;
       }
-      svg.push(`<path d="${buildPathD(path)}"/>`);
+      svg.push(
+        `<path d="${buildPathD(segment.points)}" fill="none" stroke="${ExportUtils.escapeXML(
+          segment.stroke
+        )}" stroke-width="${ExportUtils.fmt(Math.max(0.0001, layer.weightMM))}" stroke-linecap="round" stroke-linejoin="round"${
+          P.multiplyMode ? ` style="mix-blend-mode:multiply"` : ""
+        }/>`
+      );
     }
-
-    svg.push("</g>");
   }
 
   svg.push("</g>");
   svg.push("</svg>");
   ExportUtils.downloadText(svg.join("\n"), P.svgFilename, "image/svg+xml");
+}
+
+function decorateSegmentsWithStroke(paths, layer, imageMapping) {
+  return paths
+    .filter((path) => path && path.length >= 2)
+    .map((path) => ({
+      points: path,
+      stroke: getSegmentStroke(path, layer, imageMapping),
+    }));
+}
+
+function getSegmentStroke(path, layer, imageMapping) {
+  if (P.strokeColorMode !== "sampleImage") {
+    return layer.stroke;
+  }
+
+  const midIndex = floor(path.length * 0.5);
+  const midPoint = path[constrain(midIndex, 0, path.length - 1)];
+  return sampleColorHexAtMM(midPoint.x, midPoint.y, imageMapping);
 }
 
 function buildPathD(points) {
@@ -691,29 +724,53 @@ function buildSquigglePaths(layer, imageMapping) {
   const bounds = imageMapping.dest;
   const paths = [];
   const phase = radians(P.squigglePhaseDeg);
+  const angle = radians(P.squiggleAngleDeg);
   const spacing = Math.max(0.5, layer.spacingMM);
   const freq = Math.max(0.1, P.squiggleFrequencyMM);
   const step = Math.max(0.2, P.traceStepMM);
   const ampBase = Math.max(0, P.squiggleAmplitudeMM);
   const maxAmp = P.squiggleClampToSpacing ? spacing * 0.49 : ampBase;
   const ampCap = P.squiggleClampToSpacing ? Math.min(ampBase, maxAmp) : ampBase;
-  const horizontal = P.squiggleOrientation === "horizontal";
-  const bandCount = Math.max(
-    1,
-    floor((horizontal ? bounds.h : bounds.w) / spacing) + 1
-  );
+  const straightAmpThreshold = Math.max(0, Number(P.squiggleStraightThresholdMM || 0));
+  const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+  const normal = { x: -dir.y, y: dir.x };
+  const center = { x: bounds.x + bounds.w * 0.5, y: bounds.y + bounds.h * 0.5 };
+  const corners = [
+    { x: bounds.x, y: bounds.y },
+    { x: bounds.x + bounds.w, y: bounds.y },
+    { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+    { x: bounds.x, y: bounds.y + bounds.h },
+  ];
+  let minOffset = Infinity;
+  let maxOffset = -Infinity;
+  let maxRun = 0;
+
+  for (const corner of corners) {
+    const relX = corner.x - center.x;
+    const relY = corner.y - center.y;
+    const offset = relX * normal.x + relY * normal.y;
+    const run = Math.abs(relX * dir.x + relY * dir.y);
+    minOffset = Math.min(minOffset, offset);
+    maxOffset = Math.max(maxOffset, offset);
+    maxRun = Math.max(maxRun, run);
+  }
+
+  const bandCount = Math.max(1, floor((maxOffset - minOffset) / spacing) + 3);
   for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
-    const baseOffset = bandIndex * spacing;
+    const offset = minOffset - spacing + bandIndex * spacing;
     const pieces = [];
     let current = [];
-    const distanceMax = horizontal ? bounds.w : bounds.h;
+    let currentIsStraight = false;
+    const runStart = -maxRun - spacing;
+    const runEnd = maxRun + spacing;
+    const distanceMax = runEnd - runStart;
     const samples = Math.max(2, ceil(distanceMax / step));
 
     for (let sampleIndex = 0; sampleIndex <= samples; sampleIndex += 1) {
       const t = sampleIndex / samples;
-      const run = distanceMax * t;
-      const xBase = horizontal ? bounds.x + run : bounds.x + baseOffset;
-      const yBase = horizontal ? bounds.y + baseOffset : bounds.y + run;
+      const run = lerp(runStart, runEnd, t);
+      const xBase = center.x + normal.x * offset + dir.x * run;
+      const yBase = center.y + normal.y * offset + dir.y * run;
       if (!pointInRect(xBase, yBase, bounds)) {
         continue;
       }
@@ -721,15 +778,41 @@ function buildSquigglePaths(layer, imageMapping) {
       const brightness = sampleBrightnessAtMM(xBase, yBase, imageMapping);
       const amount = getSquiggleToneAmount(layer, brightness);
       const inTone = amount > 0;
+      const effectiveAmp = ampCap * amount;
+      const isStraight = effectiveAmp <= straightAmpThreshold;
+      const wave = isStraight ? 0 : Math.sin((TWO_PI * run) / freq + phase) * effectiveAmp;
+      const point = {
+        x: xBase + normal.x * wave,
+        y: yBase + normal.y * wave,
+      };
 
       if (inTone) {
-        const wave = Math.sin((TWO_PI * run) / freq + phase) * ampCap * amount;
-        current.push(horizontal ? { x: xBase, y: yBase + wave } : { x: xBase + wave, y: yBase });
+        if (current.length === 0) {
+          current.push(point);
+          currentIsStraight = isStraight;
+        } else if (isStraight !== currentIsStraight) {
+          if (current.length >= 2) {
+            pieces.push(current);
+          }
+          current = [point];
+          currentIsStraight = isStraight;
+        } else if (isStraight && currentIsStraight) {
+          if (current.length === 1) {
+            current.push(point);
+          } else {
+            current[current.length - 1] = point;
+          }
+        } else {
+          current.push(point);
+          currentIsStraight = isStraight;
+        }
       } else if (current.length >= 2) {
         pieces.push(current);
         current = [];
+        currentIsStraight = false;
       } else {
         current = [];
+        currentIsStraight = false;
       }
     }
 
@@ -773,6 +856,7 @@ function buildLineHatchPaths(layer, imageMapping) {
   const paths = [];
   const spacing = Math.max(0.5, layer.spacingMM);
   const step = Math.max(0.2, P.traceStepMM);
+  const joinGap = Math.max(0, Number(layer.joinGapMM || 0));
   const angle = radians(layer.angleDeg);
   const dir = { x: Math.cos(angle), y: Math.sin(angle) };
   const normal = { x: -dir.y, y: dir.x };
@@ -801,6 +885,8 @@ function buildLineHatchPaths(layer, imageMapping) {
   for (let offset = minOffset - spacing; offset <= maxOffset + spacing; offset += spacing) {
     const pieces = [];
     let current = [];
+    let pendingGapMM = 0;
+    let previousInBoundsPoint = null;
     const start = -maxRun - spacing;
     const end = maxRun + spacing;
     const samples = Math.max(2, ceil((end - start) / step));
@@ -811,17 +897,36 @@ function buildLineHatchPaths(layer, imageMapping) {
       const x = center.x + normal.x * offset + dir.x * run;
       const y = center.y + normal.y * offset + dir.y * run;
       const inBounds = pointInRect(x, y, bounds);
+      const point = { x, y };
       const brightness = inBounds ? sampleBrightnessAtMM(x, y, imageMapping) : 255;
       const inTone = inBounds && brightness >= layer.bMin && brightness < layer.bMax;
 
       if (inTone) {
-        current.push({ x, y });
-      } else if (current.length >= 2) {
-        pieces.push(current);
+        current.push(point);
+        pendingGapMM = 0;
+      } else if (!inBounds) {
+        if (current.length >= 2) {
+          pieces.push(current);
+        }
         current = [];
+        pendingGapMM = 0;
+      } else if (current.length > 0) {
+        if (previousInBoundsPoint) {
+          pendingGapMM += dist(previousInBoundsPoint.x, previousInBoundsPoint.y, point.x, point.y);
+        }
+        if (pendingGapMM > joinGap) {
+          if (current.length >= 2) {
+            pieces.push(current);
+          }
+          current = [];
+          pendingGapMM = 0;
+        }
       } else {
         current = [];
+        pendingGapMM = 0;
       }
+
+      previousInBoundsPoint = inBounds ? point : null;
     }
 
     if (current.length >= 2) {
@@ -829,7 +934,10 @@ function buildLineHatchPaths(layer, imageMapping) {
     }
 
     for (const piece of pieces) {
-      const finalPieces = P.useLengthCleanup ? cleanPolylineLength(piece, layer.minLenMM, layer.maxLenMM) : [piece];
+      const collapsedPiece = collapseStraightPolyline(piece);
+      const finalPieces = P.useLengthCleanup
+        ? cleanPolylineLength(collapsedPiece, layer.minLenMM, layer.maxLenMM)
+        : [collapsedPiece];
       for (const finalPiece of finalPieces) {
         if (finalPiece.length >= 2) {
           paths.push(finalPiece);
@@ -848,6 +956,7 @@ function buildArcHatchPaths(layer, imageMapping) {
   const cy = lerp(bounds.y, bounds.y + bounds.h, constrain(layer.arcCyN, 0, 1));
   const spacing = Math.max(0.5, layer.spacingMM);
   const step = Math.max(0.2, P.traceStepMM);
+  const joinGap = Math.max(0, Number(layer.joinGapMM || 0));
   const a0 = radians(layer.angleStartDeg);
   const a1 = radians(layer.angleEndDeg);
   const radiusMax = max(
@@ -862,6 +971,8 @@ function buildArcHatchPaths(layer, imageMapping) {
     const steps = Math.max(8, ceil(arcLength / step));
     const pieces = [];
     let current = [];
+    let pendingGapMM = 0;
+    let previousInBoundsPoint = null;
 
     for (let sampleIndex = 0; sampleIndex <= steps; sampleIndex += 1) {
       const t = sampleIndex / steps;
@@ -869,17 +980,36 @@ function buildArcHatchPaths(layer, imageMapping) {
       const x = cx + radius * Math.cos(angle);
       const y = cy + radius * Math.sin(angle);
       const inBounds = pointInRect(x, y, bounds);
+      const point = { x, y };
       const brightness = inBounds ? sampleBrightnessAtMM(x, y, imageMapping) : 255;
       const inTone = inBounds && brightness >= layer.bMin && brightness < layer.bMax;
 
       if (inTone) {
-        current.push({ x, y });
-      } else if (current.length >= 2) {
-        pieces.push(current);
+        current.push(point);
+        pendingGapMM = 0;
+      } else if (!inBounds) {
+        if (current.length >= 2) {
+          pieces.push(current);
+        }
         current = [];
+        pendingGapMM = 0;
+      } else if (current.length > 0) {
+        if (previousInBoundsPoint) {
+          pendingGapMM += dist(previousInBoundsPoint.x, previousInBoundsPoint.y, point.x, point.y);
+        }
+        if (pendingGapMM > joinGap) {
+          if (current.length >= 2) {
+            pieces.push(current);
+          }
+          current = [];
+          pendingGapMM = 0;
+        }
       } else {
         current = [];
+        pendingGapMM = 0;
       }
+
+      previousInBoundsPoint = inBounds ? point : null;
     }
 
     if (current.length >= 2) {
@@ -940,6 +1070,14 @@ function cleanPolylineLength(polyline, minLenMM, maxLenMM) {
   }
 
   return out;
+}
+
+function collapseStraightPolyline(points) {
+  if (!points || points.length <= 2) {
+    return points;
+  }
+
+  return [points[0], points[points.length - 1]];
 }
 
 function polylineLength(points) {
@@ -1014,8 +1152,33 @@ function computeImageMapping() {
 }
 
 function sampleBrightnessAtMM(xMM, yMM, imageMapping) {
-  if (!img || !imgPixelsReady) {
+  const sample = sampleImagePixelAtMM(xMM, yMM, imageMapping);
+  if (!sample) {
     return 255;
+  }
+
+  const { r, g, b } = sample;
+  let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const safeGamma = Math.max(0.0001, Number(P.imageGamma || 1));
+  brightness = Math.pow(constrain(brightness, 0, 1), safeGamma);
+  if (P.invertBrightness) {
+    brightness = 1 - brightness;
+  }
+  return brightness * 255;
+}
+
+function sampleColorHexAtMM(xMM, yMM, imageMapping) {
+  const sample = sampleImagePixelAtMM(xMM, yMM, imageMapping);
+  if (!sample) {
+    return "#000000";
+  }
+
+  return rgbToHex(sample.r, sample.g, sample.b);
+}
+
+function sampleImagePixelAtMM(xMM, yMM, imageMapping) {
+  if (!img || !imgPixelsReady) {
+    return null;
   }
 
   const bounds = imageMapping.dest;
@@ -1028,16 +1191,19 @@ function sampleBrightnessAtMM(xMM, yMM, imageMapping) {
   py = constrain(floor(py / grid) * grid, 0, img.height - 1);
   const idx = 4 * (py * img.width + px);
 
-  const r = img.pixels[idx] ?? 255;
-  const g = img.pixels[idx + 1] ?? 255;
-  const b = img.pixels[idx + 2] ?? 255;
-  let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  const safeGamma = Math.max(0.0001, Number(P.imageGamma || 1));
-  brightness = Math.pow(constrain(brightness, 0, 1), safeGamma);
-  if (P.invertBrightness) {
-    brightness = 1 - brightness;
-  }
-  return brightness * 255;
+  return {
+    r: img.pixels[idx] ?? 255,
+    g: img.pixels[idx + 1] ?? 255,
+    b: img.pixels[idx + 2] ?? 255,
+  };
+}
+
+function rgbToHex(r, g, b) {
+  return `#${toHexChannel(r)}${toHexChannel(g)}${toHexChannel(b)}`;
+}
+
+function toHexChannel(value) {
+  return constrain(round(value), 0, 255).toString(16).padStart(2, "0");
 }
 
 function pointInRect(x, y, rect) {

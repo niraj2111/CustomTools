@@ -22,6 +22,7 @@ Opening the static files through another HTTP server also works, with browser st
 - Six vase colors. The interface and branch remain black and white.
 - Optional original seeded recursive branch.
 - Lock a control to preserve its value when generating a random vase; Reset restores the editor's starting state.
+- Random generation smoothly interpolates the vase geometry to its next constrained state.
 - Name and save immutable snapshots. Saved forms can be reopened and adjusted as new snapshots.
 - Archive workflow: saved → queued → plotted → delivered. Status changes are manual; nothing automatically operates a plotter.
 - Download the exact SVG or a portable JSON record; import a record to reopen it.

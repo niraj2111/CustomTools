@@ -15,7 +15,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/tweakpane@3.1.10/dist/tweakpane.min.css"
     />
-    <link rel="stylesheet" href="./studio.css?v=studio-1" />
+    <link rel="stylesheet" href="./studio.css?v=studio-3" />
   </head>
   <body>
     <div class="app-shell">
@@ -186,6 +186,14 @@
                 <div class="status-pill" id="drawStatus">Draw mode ready</div>
                 <div class="status-pill" id="brushBadge">brush: flat</div>
               </div>
+              <div class="anchor-control hidden" id="anchorControl">
+                <span class="anchor-control-label">Select an anchor</span>
+                <div class="anchor-kind-switch" role="group" aria-label="Selected anchor type">
+                  <button id="anchorSmoothBtn" type="button" aria-pressed="false">Smooth</button>
+                  <button id="anchorCornerBtn" type="button" aria-pressed="false">Corner</button>
+                </div>
+                <p>Round anchors keep both handles aligned. Square anchors let each handle move independently.</p>
+              </div>
               <div class="draw-actions">
                 <button id="undoDrawBtn" class="action-button" type="button">Undo</button>
                 <button id="clearDrawBtn" class="action-button" type="button">Clear</button>
@@ -235,7 +243,7 @@
       <div id="commandResults"></div><p class="command-foot">↑ ↓ to navigate · Enter to choose</p>
     </dialog>
     <div id="studioNotice" class="studio-notice" role="status"></div>
-    <script src="./sketch.js?v=studio-2"></script>
-    <script src="./studio.js?v=studio-2"></script>
+    <script src="./sketch.js?v=studio-3"></script>
+    <script src="./studio.js?v=studio-3"></script>
   </body>
 </html>

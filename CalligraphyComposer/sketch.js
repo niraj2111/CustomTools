@@ -195,6 +195,7 @@ const drawState = {
   lassoPoints: [],
   transformState: null,
   editDrag: null,
+  editSelection: null,
   nextStrokeId: 1,
   hoverPointer: null,
   activeTouchPointers: new Map(),
@@ -649,6 +650,18 @@ function bindUI() {
   document.getElementById("streamBtn")?.addEventListener("click", streamAppNow);
   document.getElementById("undoDrawBtn")?.addEventListener("click", undoLastDrawStroke);
   document.getElementById("clearDrawBtn")?.addEventListener("click", clearAllDrawStrokes);
+  document.getElementById("anchorSmoothBtn")?.addEventListener("click", () => {
+    const selected = getSelectedDrawEditAnchor();
+    if (selected && selected.anchor.kind !== "end") {
+      setDrawAnchorKind(selected.stroke, selected.anchor.anchorIndex, "smooth");
+    }
+  });
+  document.getElementById("anchorCornerBtn")?.addEventListener("click", () => {
+    const selected = getSelectedDrawEditAnchor();
+    if (selected && selected.anchor.kind !== "end") {
+      setDrawAnchorKind(selected.stroke, selected.anchor.anchorIndex, "corner");
+    }
+  });
   document.getElementById("alignLeftBtn").addEventListener("click", () => setAlignment("left"));
   document.getElementById("alignCenterBtn").addEventListener("click", () => setAlignment("center"));
   document.getElementById("alignRightBtn").addEventListener("click", () => setAlignment("right"));
@@ -832,6 +845,7 @@ function clearDrawTransientState() {
   drawState.lassoPoints = [];
   drawState.transformState = null;
   drawState.editDrag = null;
+  drawState.editSelection = null;
   clearDrawLayer(drawState.activeLayer);
   hidePenMarker();
 }
@@ -861,6 +875,7 @@ function syncModeVisibility() {
   canvas.style.cursor = isDrawMode && drawUI.tool === "draw" ? "crosshair" : "default";
   updateDrawStatus();
   updateStreamStatus();
+  syncDrawAnchorControls();
 }
 
 function updateDrawStatus(message = "") {
@@ -3048,7 +3063,7 @@ function fitDrawBezierAnchors(points, tolerance) {
   }
   mergeDrawFitCubics(fitted, cubics, fixedAnchors, toleranceSquared);
   relaxDrawFitAnchors(fitted, cubics, fixedAnchors, toleranceSquared);
-  return drawFitCubicsToSegments(cubics);
+  return drawFitCubicsToSegments(cubics, new Set(corners));
 }
 
 function resampleDrawFitPoints(points, spacing) {
@@ -3391,12 +3406,18 @@ function relaxDrawFitAnchors(points, cubics, fixedAnchors, toleranceSquared) {
   }
 }
 
-function drawFitCubicsToSegments(cubics) {
+function drawFitCubicsToSegments(cubics, cornerIndices = new Set()) {
   if (!cubics.length) return [];
   const segments = [{ type: "move", point: { ...cubics[0].bezier[0] } }];
   for (const cubic of cubics) {
     segments.push({ type: "cubic", cp1: { ...cubic.bezier[1] }, cp2: { ...cubic.bezier[2] }, point: { ...cubic.bezier[3] } });
   }
+  segments.anchorKinds = [
+    "end",
+    ...cubics.map((cubic, index) =>
+      index === cubics.length - 1 ? "end" : cornerIndices.has(cubic.end) ? "corner" : "smooth",
+    ),
+  ];
   return segments;
 }
 
@@ -3823,6 +3844,7 @@ function getDrawEditAnchors(stroke) {
     point: segments[0].point,
     segmentIndex: 0,
     anchorIndex: 0,
+    kind: segments.anchorKinds?.[0] || "end",
     outgoing: segments[1]?.type === "cubic" ? segments[1].cp1 : null,
     incoming: null,
   }];
@@ -3832,6 +3854,7 @@ function getDrawEditAnchors(stroke) {
       point: segments[i].point,
       segmentIndex: i,
       anchorIndex: anchors.length,
+      kind: segments.anchorKinds?.[anchors.length] || "smooth",
       incoming: segments[i].cp2,
       outgoing: segments[i + 1]?.type === "cubic" ? segments[i + 1].cp1 : null,
     });
@@ -3865,6 +3888,8 @@ function hitTestDrawEditPoint(pointMm) {
 function beginDrawEdit(hit, pointMm) {
   if (!hit) {
     drawState.editDrag = null;
+    drawState.editSelection = null;
+    syncDrawAnchorControls();
     updateDrawStatus("Choose an anchor or handle");
     return;
   }
@@ -3879,7 +3904,65 @@ function beginDrawEdit(hit, pointMm) {
   };
   drawState.selectedStrokeIds.clear();
   drawState.selectedStrokeIds.add(hit.stroke.id);
+  drawState.editSelection = { strokeId: hit.stroke.id, anchorIndex: hit.anchor.anchorIndex };
+  syncDrawAnchorControls();
   updateDrawStatus(hit.type === "anchor" ? "Moving anchor" : "Adjusting curve handle");
+}
+
+function getSelectedDrawEditAnchor() {
+  const selection = drawState.editSelection;
+  if (!selection) return null;
+  const stroke = drawState.strokes.find((item) => item.id === selection.strokeId);
+  if (!stroke) return null;
+  const anchor = getDrawEditAnchors(stroke)[selection.anchorIndex];
+  return anchor ? { stroke, anchor } : null;
+}
+
+function getDrawAnchorKind(stroke, anchorIndex) {
+  return buildDrawBezierPathCache(stroke).segments.anchorKinds?.[anchorIndex] || "smooth";
+}
+
+function setDrawAnchorKind(stroke, anchorIndex, kind) {
+  const segments = buildDrawBezierPathCache(stroke).segments;
+  if (!segments.anchorKinds) segments.anchorKinds = new Array(getDrawEditAnchors(stroke).length).fill("smooth");
+  segments.anchorKinds[anchorIndex] = kind;
+  const anchor = getDrawEditAnchors(stroke)[anchorIndex];
+  if (kind === "smooth" && anchor?.incoming && anchor?.outgoing) {
+    const outgoing = subtractDrawPoints(anchor.outgoing, anchor.point);
+    const direction = normalizeDrawPoint(outgoing);
+    const incomingLength = drawPointDistance(anchor.incoming, anchor.point);
+    if (direction.x || direction.y) {
+      anchor.incoming.x = anchor.point.x - direction.x * incomingLength;
+      anchor.incoming.y = anchor.point.y - direction.y * incomingLength;
+    }
+  }
+  stroke.bezierEdited = true;
+  stroke.bezierDirty = false;
+  stroke.brushDirty = true;
+  drawState.committedDirty = true;
+  syncDrawAnchorControls();
+  updateDrawStatus(`${kind === "smooth" ? "Smooth" : "Corner"} anchor`);
+  requestRender();
+  streamIfDrawAutoEnabled();
+}
+
+function syncDrawAnchorControls() {
+  const panel = document.getElementById("anchorControl");
+  const smoothButton = document.getElementById("anchorSmoothBtn");
+  const cornerButton = document.getElementById("anchorCornerBtn");
+  const selected = getSelectedDrawEditAnchor();
+  panel?.classList.toggle("hidden", appState.mode !== "draw" || drawUI.tool !== "edit");
+  const editable = Boolean(selected && selected.anchor.kind !== "end");
+  if (smoothButton) smoothButton.disabled = !editable;
+  if (cornerButton) cornerButton.disabled = !editable;
+  if (!selected) {
+    if (panel) panel.querySelector(".anchor-control-label").textContent = "Select an anchor";
+    return;
+  }
+  const kind = getDrawAnchorKind(selected.stroke, selected.anchor.anchorIndex);
+  if (panel) panel.querySelector(".anchor-control-label").textContent = kind === "end" ? "End anchor" : `${kind[0].toUpperCase()}${kind.slice(1)} anchor`;
+  smoothButton?.setAttribute("aria-pressed", String(kind === "smooth"));
+  cornerButton?.setAttribute("aria-pressed", String(kind === "corner"));
 }
 
 function applyDrawEdit(pointMm) {
@@ -3902,6 +3985,16 @@ function applyDrawEdit(pointMm) {
     const original = edit.handleType === "incoming" ? edit.originalIncoming : edit.originalOutgoing;
     handle.x = clamp(original.x + delta.x, 0, P.canvasWMM);
     handle.y = clamp(original.y + delta.y, 0, P.canvasHMM);
+    if (getDrawAnchorKind(edit.stroke, edit.anchor.anchorIndex) === "smooth") {
+      const oppositeType = edit.handleType === "incoming" ? "outgoing" : "incoming";
+      const opposite = edit.anchor[oppositeType];
+      if (opposite) {
+        const oppositeLength = drawPointDistance(opposite, edit.anchor.point);
+        const direction = normalizeDrawPoint(subtractDrawPoints(handle, edit.anchor.point));
+        opposite.x = edit.anchor.point.x - direction.x * oppositeLength;
+        opposite.y = edit.anchor.point.y - direction.y * oppositeLength;
+      }
+    }
   }
   edit.stroke.bezierEdited = true;
   edit.stroke.bezierDirty = false;
@@ -3943,9 +4036,11 @@ function drawBezierEditOverlay() {
         ctx.strokeStyle = "#315b46";
         ctx.stroke();
       }
+      const selected = drawState.editSelection?.strokeId === stroke.id && drawState.editSelection?.anchorIndex === anchor.anchorIndex;
       ctx.beginPath();
-      ctx.rect(anchor.point.x - anchorRadius, anchor.point.y - anchorRadius, anchorRadius * 2, anchorRadius * 2);
-      ctx.fillStyle = drawState.selectedStrokeIds.has(stroke.id) ? "#315b46" : "#f8f7f2";
+      if (anchor.kind === "smooth") ctx.arc(anchor.point.x, anchor.point.y, anchorRadius, 0, Math.PI * 2);
+      else ctx.rect(anchor.point.x - anchorRadius, anchor.point.y - anchorRadius, anchorRadius * 2, anchorRadius * 2);
+      ctx.fillStyle = selected ? "#d88b39" : drawState.selectedStrokeIds.has(stroke.id) ? "#315b46" : "#f8f7f2";
       ctx.fill();
       ctx.strokeStyle = "#315b46";
       ctx.stroke();
@@ -4118,7 +4213,9 @@ function undoLastDrawStroke() {
   if (!drawState.strokes.length) return;
   const removed = drawState.strokes.pop();
   drawState.selectedStrokeIds.delete(removed.id);
+  if (drawState.editSelection?.strokeId === removed.id) drawState.editSelection = null;
   drawState.committedDirty = true;
+  syncDrawAnchorControls();
   updateDrawStatus();
   requestRender();
   streamIfDrawAutoEnabled();
@@ -4130,9 +4227,11 @@ function clearAllDrawStrokes() {
   drawState.lassoPoints = [];
   drawState.transformState = null;
   drawState.editDrag = null;
+  drawState.editSelection = null;
   clearDrawLayer(drawState.activeLayer);
   clearDrawLayer(drawState.committedLayer);
   drawState.committedDirty = false;
+  syncDrawAnchorControls();
   updateDrawStatus("Cleared");
   requestRender();
   streamIfDrawAutoEnabled();

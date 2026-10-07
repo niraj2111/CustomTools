@@ -1,4 +1,4 @@
-import { VERSION, PAPER, PALETTE, CONTROLS, CONTROL_GROUPS, normalize, fromSeed, resolve, svg } from './geometry.mjs?v=2.3.0';
+import { VERSION, PAPER, PALETTE, CONTROLS, CONTROL_GROUPS, normalize, fromSeed, resolve, svg } from './geometry.mjs?v=2.3.1';
 
 const $ = selector => document.querySelector(selector);
 const app = $('#app');
@@ -10,6 +10,9 @@ const fresh = () => ({ ...fromSeed(seed()), growth: false, color: 'cobalt' });
 let state = normalize(readLocal('ways-draft', fresh()));
 let initial = { ...state }, locks = new Set(), records = [], server = false, initialized = false, savedName = '', toastTimer;
 let galleryOffset = 0;
+let randomAnimation = 0;
+const RANDOM_TRANSITION_MS = 720;
+const DISCRETE_CONTROLS = new Set(['complexity', 'variation']);
 const samples = [
   ['Vase 01', 'Narrow body · closed neck', 186, 'cobalt', {presence:.2,openness:.17,grounding:.4,softness:.9,growth:true}],
   ['Vase 02', 'Wide body · open neck', 841, 'vermilion', {presence:.96,openness:.95,grounding:.5,softness:.72,growth:false}],
@@ -60,7 +63,7 @@ function describe(s) {
   const neck = s.openness > .66 ? 'open neck' : s.openness < .34 ? 'closed neck' : 'medium neck';
   return `${width} · ${neck} · ${Math.round(30 + s.complexity * 110)} lines`;
 }
-function renderArt() {
+function renderArt({ persist = true } = {}) {
   const artwork = $('#vase-art'); if (!artwork) return;
   artwork.innerHTML = svg(state,{title:savedName||'Vase drawing'}); artwork.firstElementChild.style.cssText = 'width:100%;height:100%';
   $('#ink-name').textContent = PALETTE.find(c=>c.id===state.color).name;
@@ -74,7 +77,40 @@ function renderArt() {
   }
   $('#growth').checked = state.growth;
   $('#growth').setAttribute('aria-label','Show branch');
-  writeLocal('ways-draft',state);
+  if (persist) writeLocal('ways-draft',state);
+}
+function stopRandomTransition() {
+  if (randomAnimation) cancelAnimationFrame(randomAnimation);
+  randomAnimation = 0;
+}
+function animateToState(nextState) {
+  stopRandomTransition();
+  const start = { ...state };
+  const target = normalize(nextState);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    state = target;
+    renderArt();
+    return;
+  }
+  const startedAt = performance.now();
+  const frame = now => {
+    const progress = Math.min(1, (now - startedAt) / RANDOM_TRANSITION_MS);
+    const eased = progress < 0.5
+      ? 4 * progress ** 3
+      : 1 - ((-2 * progress + 2) ** 3) / 2;
+    const intermediate = { ...start };
+    for (const { key } of CONTROLS) {
+      intermediate[key] = DISCRETE_CONTROLS.has(key) && progress < 1
+        ? start[key]
+        : start[key] + (target[key] - start[key]) * eased;
+    }
+    intermediate.seed = progress < 1 ? start.seed : target.seed;
+    state = normalize(intermediate);
+    renderArt({ persist: progress === 1 });
+    if (progress < 1) randomAnimation = requestAnimationFrame(frame);
+    else randomAnimation = 0;
+  };
+  randomAnimation = requestAnimationFrame(frame);
 }
 async function archive() {
   app.innerHTML = '<section class="archive"><p class="eyebrow">LOADING SAVED VASES…</p></section>';
@@ -85,9 +121,10 @@ async function archive() {
   app.innerHTML = `<section class="archive"><div class="archive-heading"><div><span class="eyebrow">BACKEND VIEW</span><h1>Saved vases</h1><p>${server?'Stored in the local database. Reopen a vase, export its files, or update its plot status.':'Stored in this browser. Download the JSON record to keep a portable copy.'}</p></div><button class="button light" data-action="import">Import JSON <span>↗</span></button><input type="file" id="import-file" accept="application/json,.json" hidden></div>${records.length?`<div class="archive-grid">${records.map((record,i)=>`<article class="archive-item">${card(normalize(record.state),record.name,`${record.id} · ${new Date(record.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})}`,i+1,`data-open="${escape(record.id)}"`)}<div class="archive-tools"><label class="sr-only" for="status-${record.id}">Plot status for ${escape(record.name)}</label><select id="status-${record.id}" data-status="${escape(record.id)}">${['saved','queued','plotted','delivered'].map(status=>`<option value="${status}" ${record.status===status?'selected':''}>${status[0].toUpperCase()+status.slice(1)}</option>`).join('')}</select><div><button data-export-svg="${escape(record.id)}">SVG ↓</button><button data-export-json="${escape(record.id)}">JSON ↓</button></div></div></article>`).join('')}</div>`:`<div class="empty-state"><h2>No saved vases</h2><p>Create a vase and save it to add it here.</p><button class="button dark" data-action="create">Create a vase <span>↗</span></button></div>`}</section>`;
 }
 function updateCount() { $('#saved-count').textContent = records.length; }
-function enterStudio(nextState) { state = normalize(nextState); initial = {...state}; savedName=''; if (location.hash==='#studio') studio(); else location.hash='studio'; }
+function enterStudio(nextState) { stopRandomTransition(); state = normalize(nextState); initial = {...state}; savedName=''; if (location.hash==='#studio') studio(); else location.hash='studio'; }
 function route() {
   const route = location.hash;
+  if (route !== '#studio') stopRandomTransition();
   $('.header-create').hidden = route === '#studio';
   if (route==='#studio') studio();
   else if(route==='#saved') archive();
@@ -103,8 +140,8 @@ function downloadRecord(record) { download(JSON.stringify(record,null,2),`${reco
 const actions = {
   create:()=>enterStudio(fresh()),
   shuffle:()=>{galleryOffset++; const y=window.scrollY; home(); window.scrollTo(0,y);},
-  surprise:()=>{const next=fromSeed(seed()); for(const c of CONTROLS) if(!locks.has(c.key))state[c.key]=next[c.key]; state.seed=next.seed; state=normalize(state); savedName='';renderArt();},
-  reset:()=>{state={...initial};savedName='';renderArt();toast('Back to where you began');},
+  surprise:()=>{const next=fromSeed(seed()),target={...state,seed:next.seed};for(const c of CONTROLS)if(!locks.has(c.key))target[c.key]=next[c.key];savedName='';animateToState(target);},
+  reset:()=>{stopRandomTransition();state={...initial};savedName='';renderArt();toast('Back to where you began');},
   save:async()=>{await storageReady;$('#vase-name').value=savedName; $('#save-location').textContent=server?'This vase will be stored in the local database.':'This vase will be stored in this browser. Download the JSON record for a portable copy.';$('#save-dialog').showModal();$('#vase-name').focus();},
   svg:()=>downloadSVG(makeRecord(savedName||'A form of your own')),
   import:()=>$('#import-file')?.click(),
@@ -113,23 +150,23 @@ document.addEventListener('click',event=>{
   const button=event.target.closest('button'); if(!button)return;
   if(button.dataset.action) actions[button.dataset.action]?.();
   if(button.dataset.sample!==undefined) {const i=Number(button.dataset.sample);enterStudio(sampleState(samples[i],i));}
-  if(button.dataset.color) {state.color=button.dataset.color;renderArt();}
+  if(button.dataset.color) {stopRandomTransition();state.color=button.dataset.color;renderArt();}
   if(button.dataset.lock) {const key=button.dataset.lock;locks.has(key)?locks.delete(key):locks.add(key);button.setAttribute('aria-pressed',String(locks.has(key)));button.innerHTML=`${lockIcon(locks.has(key))}<span>${locks.has(key)?'Held':'Hold'}</span>`;}
   if(button.dataset.open) {const record=records.find(r=>r.id===button.dataset.open);if(record){enterStudio(record.state);savedName=record.name;renderArt();}}
   if(button.dataset.exportSvg) downloadSVG(records.find(r=>r.id===button.dataset.exportSvg));
   if(button.dataset.exportJson) downloadRecord(records.find(r=>r.id===button.dataset.exportJson));
 });
-document.addEventListener('input',event=>{if(event.target.dataset.control){state=normalize({...state,[event.target.dataset.control]:Number(event.target.value)/100});savedName='';renderArt();}});
+document.addEventListener('input',event=>{if(event.target.dataset.control){stopRandomTransition();state=normalize({...state,[event.target.dataset.control]:Number(event.target.value)/100});savedName='';renderArt();}});
 document.addEventListener('change',async event=>{
   const target=event.target;
-  if(target.id==='growth'){state.growth=target.checked;renderArt();}
+  if(target.id==='growth'){stopRandomTransition();state.growth=target.checked;renderArt();}
   if(target.dataset.status){
     const record=records.find(r=>r.id===target.dataset.status),previous=record.status;target.disabled=true;
     try {if(server)await api(`vases/${record.id}`,{method:'PATCH',body:JSON.stringify({status:target.value})});record.status=target.value;if(!server&&!writeLocal('ways-records',records))throw new Error('Browser storage is full. Download your record to keep it.');toast(`Marked as ${target.value}`);}
     catch(error){record.status=previous;target.value=previous;toast(error.message);}finally{target.disabled=false;}
   }
   if(target.id==='import-file'&&target.files[0]){
-    try { const file=target.files[0];if(file.size>1000000)throw new Error('Choose a vase record smaller than 1 MB.');const record=JSON.parse(await file.text());if(record.schemaVersion!==1||!['2.2.0',VERSION].includes(record.generatorVersion)||!record.state||CONTROLS.some(c=>!Number.isFinite(record.state[c.key])||record.state[c.key]<0||record.state[c.key]>1)||!Number.isInteger(record.state.seed)||!PALETTE.some(c=>c.id===record.state.color)||typeof record.state.growth!=='boolean')throw new Error('Choose a compatible Vase 2.0 JSON record.');enterStudio(record.state);savedName=typeof record.name==='string'?record.name.slice(0,60):'';renderArt();toast('Vase imported'); }
+    try { const file=target.files[0];if(file.size>1000000)throw new Error('Choose a vase record smaller than 1 MB.');const record=JSON.parse(await file.text());if(record.schemaVersion!==1||!['2.2.0','2.3.0',VERSION].includes(record.generatorVersion)||!record.state||CONTROLS.some(c=>!Number.isFinite(record.state[c.key])||record.state[c.key]<0||record.state[c.key]>1)||!Number.isInteger(record.state.seed)||!PALETTE.some(c=>c.id===record.state.color)||typeof record.state.growth!=='boolean')throw new Error('Choose a compatible Vase 2.0 JSON record.');enterStudio(record.state);savedName=typeof record.name==='string'?record.name.slice(0,60):'';renderArt();toast('Vase imported'); }
     catch(error){toast(error instanceof SyntaxError?'This file is not a valid vase record.':error.message);}
   }
 });

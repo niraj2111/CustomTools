@@ -1,4 +1,4 @@
-export const VERSION = '2.3.0';
+export const VERSION = '2.3.1';
 
 export const PAPER = { widthMM: 148, heightMM: 210, marginMM: 20 };
 export const BELLY_BUFFER_MM = 5;

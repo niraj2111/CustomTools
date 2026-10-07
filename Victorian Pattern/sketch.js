@@ -1582,7 +1582,8 @@ function findBranchAnchor(chain, startT = 0.58, endT = 0.82) {
 }
 
 function tryRequiredOffshoot(chain, scale, grid, queue) {
-  if (chain.kind !== "stroke" || chain.depth >= params.depth) {
+  const growthDepth = Math.min(params.depth, chain.maxGrowthDepth ?? params.depth);
+  if (chain.kind !== "stroke" || chain.depth >= growthDepth) {
     return false;
   }
 
@@ -1614,6 +1615,11 @@ function tryRequiredOffshoot(chain, scale, grid, queue) {
       childRole
     );
     if (child && child.kind === "stroke") {
+      child.maxGrowthDepth = chain.maxGrowthDepth;
+      child.branchRateScale = Math.min(
+        child.branchRateScale ?? 1,
+        (chain.branchRateScale ?? 1) * 0.82
+      );
       queue.push({ chain: child, scale: childScale });
       return true;
     }
@@ -1650,6 +1656,51 @@ function probeClearanceAlongRay(grid, x, y, angle, maxDistance, step = 16, start
   }
 
   return limit;
+}
+
+function probePlacedSpawnRay(grid, x, y, angle, maxDistance, step = 16) {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const seamX = params.mirror ? stageWidth() / 2 - params.clearance * 0.5 : Infinity;
+  const seamY = params.verticalSymmetry ? stageHeight() / 2 + params.clearance * 0.5 : -Infinity;
+  const limit = Math.max(step, maxDistance);
+
+  for (let dist = 0; dist <= limit; dist += step) {
+    const px = x + dx * dist;
+    const py = y + dy * dist;
+    if (
+      !inBounds(px, py) ||
+      inVoidWithSymmetry(px, py) ||
+      px > seamX ||
+      py < seamY ||
+      (dist > step && grid.near(px, py, params.clearance * 0.92))
+    ) {
+      return dist;
+    }
+  }
+
+  return limit;
+}
+
+function measurePlacedSpawnCapacity(grid, point) {
+  const angle = point.launchAngle ?? flowAngleAt(point.x, point.y, "spine");
+  const step = Math.max(su(10), params.clearance * 0.8);
+  const maxForward = Math.max(su(420), params.spacing * 9);
+  const forward = probePlacedSpawnRay(grid, point.x, point.y, angle, maxForward, step);
+  const shoulderOffset = Math.min(su(64), Math.max(su(24), forward * 0.16));
+  const shoulderX = point.x + Math.cos(angle) * shoulderOffset;
+  const shoulderY = point.y + Math.sin(angle) * shoulderOffset;
+  const sideLimit = Math.max(su(220), params.spacing * 5.5);
+  const left = probePlacedSpawnRay(grid, shoulderX, shoulderY, angle + HALF_PI, sideLimit, step);
+  const right = probePlacedSpawnRay(grid, shoulderX, shoulderY, angle - HALF_PI, sideLimit, step);
+  const forwardScale = forward / Math.max(su(360), params.spacing * 7.5);
+  const corridorScale = (left + right) / Math.max(su(260), params.spacing * 6);
+
+  return {
+    forward,
+    corridor: left + right,
+    scale: clamp(Math.min(forwardScale, corridorScale), 0.42, 1.08),
+  };
 }
 
 function measureStemBreathing(samples, grid, options = {}) {
@@ -2847,11 +2898,94 @@ function seedPlacedSpawnsMotif(grid, queue, tiers, bounds) {
       manualSpawnAllowed(point)
   );
 
-  queuePointsAsSpines(grid, points, tiers.large, queue, {
-    spreadX: 0,
-    spreadY: 0,
-    bounds,
-  });
+  const constrainedFirst = points
+    .map((point) => ({ point, capacity: measurePlacedSpawnCapacity(grid, point) }))
+    .sort((a, b) => a.capacity.scale - b.capacity.scale);
+
+  for (const { point } of constrainedFirst) {
+    const placed = buildAdaptivePlacedSpine(grid, point, tiers.large, bounds);
+    if (placed) {
+      queue.push({ chain: placed.chain, scale: placed.scale });
+    }
+  }
+}
+
+function buildAdaptivePlacedSpine(grid, point, tier, bounds, options = {}) {
+  const capacity = measurePlacedSpawnCapacity(grid, point);
+  const requestedScale = Math.min(tier.rootScale ?? 1, capacity.scale);
+  const initialRole = options.role ?? point.role ?? tier.role ?? "hero";
+  const attempts = [
+    { scale: requestedScale, role: initialRole, breathing: 0.82 },
+    { scale: requestedScale * 0.82, role: "support", breathing: 0.68 },
+    { scale: requestedScale * 0.66, role: "support", breathing: 0.56 },
+    { scale: requestedScale * 0.52, role: "filler", breathing: 0.46 },
+  ];
+  const triedScales = [];
+
+  for (const attempt of attempts) {
+    const scale = clamp(attempt.scale, 0.32, tier.rootScale ?? 1.08);
+    if (triedScales.some((value) => Math.abs(value - scale) < 0.025)) {
+      continue;
+    }
+    triedScales.push(scale);
+    const chain = buildSpine(grid, 0, 1, {
+      ...tier,
+      rootScale: scale,
+      role: attempt.role,
+      minBreathingScale: attempt.breathing,
+      tries: 22,
+      preferredPoint: {
+        ...point,
+        launchAngle: point.launchAngle ?? findOpenLaunchAngle(grid, point, flowAngleAt(point.x, point.y, "spine")),
+        lockToGuide: true,
+      },
+      spreadX: 0,
+      spreadY: 0,
+      guideXMin: bounds.xMin,
+      guideXMax: bounds.xMax,
+      yMin: bounds.yMin,
+      yMax: bounds.yMax,
+    });
+    if (chain) {
+      const relativeScale = scale / Math.max(0.01, tier.rootScale ?? 1);
+      chain.placedSpawnScale = scale;
+      chain.branchRateScale = relativeScale < 0.62 ? 0.34 : relativeScale < 0.82 ? 0.56 : 0.78;
+      chain.maxGrowthDepth = relativeScale < 0.62 ? 1 : relativeScale < 0.82 ? 2 : 3;
+      return { chain, scale, capacity };
+    }
+  }
+
+  return null;
+}
+
+function fillPlacedSpawnPockets(grid, queue, tiers, bounds) {
+  const manualCount = appState.manualSpawnPoints.length;
+  if (manualCount <= 0) {
+    return;
+  }
+
+  const supportCount = Math.min(2, Math.max(1, Math.ceil(manualCount / 5)));
+  const supportSeeds = collectPocketSeeds(grid, supportCount, su(82), bounds);
+  for (const seed of supportSeeds) {
+    const point = {
+      ...seed,
+      role: "support",
+      launchAngle: findOpenLaunchAngle(grid, seed, flowAngleAt(seed.x, seed.y, "spine")),
+    };
+    const placed = buildAdaptivePlacedSpine(
+      grid,
+      point,
+      { ...tiers.medium, rootScale: Math.min(0.68, tiers.medium.rootScale ?? 0.68) },
+      bounds,
+      { role: "support" }
+    );
+    if (placed) {
+      placed.chain.profile = "pocket-spine";
+      placed.chain.branchRateScale = Math.min(placed.chain.branchRateScale ?? 1, 0.42);
+      placed.chain.maxGrowthDepth = 1;
+      queue.push({ chain: placed.chain, scale: placed.scale });
+    }
+  }
 }
 
 function seedMotifPreset(grid, queue, tiers, bounds, aspect) {
@@ -2909,6 +3043,9 @@ function buildSpine(grid, col, nCols, tier = {}) {
   const x1 = genW - su(70);
   const cw = (x1 - x0) / nCols;
   const rootScale = tier.rootScale ?? 1;
+  const triesLimit = tier.tries ?? 30;
+  const guideXMin = tier.guideXMin ?? x0;
+  const guideXMax = tier.guideXMax ?? x1;
   const yMin = tier.yMin ?? m + su(50);
   const yMax = tier.yMax ?? stageHeight() - m - su(50);
   const bodyChance = tier.bodyChance ?? 0.7;
@@ -2922,15 +3059,16 @@ function buildSpine(grid, col, nCols, tier = {}) {
   const startClearanceSkipOverride = tier.startClearanceSkip ?? null;
   const parentId = tier.parentId ?? null;
   const role = tier.role ?? "support";
+  const minBreathingScale = tier.minBreathingScale ?? 1;
   const target = stemGestureTarget(0, 0, tier, { bounds: sourceBounds() });
   let bestCandidate = null;
   let bestScore = -Infinity;
 
-  for (let tries = 0; tries < 30; tries++) {
+  for (let tries = 0; tries < triesLimit; tries++) {
     const rawPoint = {
       x: preferredPoint
         ? preferredPoint.lockToGuide
-          ? constrain(preferredPoint.x, x0, x1)
+          ? constrain(preferredPoint.x, guideXMin, guideXMax)
           : constrain(preferredPoint.x + rnd(-spreadX, spreadX), x0, x1)
         : x0 + cw * (col + rnd(0.1, 0.9)),
       y: preferredPoint
@@ -2983,7 +3121,7 @@ function buildSpine(grid, col, nCols, tier = {}) {
         : role === "support"
           ? Math.max(su(22), params.spacing * 0.72)
           : Math.max(su(16), params.spacing * 0.5);
-    if (breathing.minSide < minBreathing * (1 - contourBias * 0.45)) {
+    if (breathing.minSide < minBreathing * minBreathingScale * (1 - contourBias * 0.45)) {
       continue;
     }
     const targetAngle = Math.atan2(target.y - py, target.x - px);
@@ -3704,9 +3842,24 @@ function generate() {
   }
 
   growQueue(queue, grid);
+  if (isPlacedSpawnMotif()) {
+    fillPlacedSpawnPockets(
+      grid,
+      queue,
+      {
+        large: largeTier,
+        medium: mediumTier,
+        small: smallTier,
+      },
+      bounds
+    );
+    growQueue(queue, grid);
+  }
   runSecondPassSpines(grid, queue, bounds, largeTier);
   growQueue(queue, grid);
-  enrichAttachedInfill(grid);
+  if (!isPlacedSpawnMotif()) {
+    enrichAttachedInfill(grid);
+  }
   finishStats();
 }
 
@@ -3721,7 +3874,8 @@ function growQueue(queue, grid) {
     }
 
     const d = chain.depth;
-    if (d >= params.depth) {
+    const growthDepth = Math.min(params.depth, chain.maxGrowthDepth ?? params.depth);
+    if (d >= growthDepth) {
       continue;
     }
 
@@ -3780,6 +3934,11 @@ function growQueue(queue, grid) {
       }
 
       if (child && child.kind === "stroke") {
+        child.maxGrowthDepth = chain.maxGrowthDepth;
+        child.branchRateScale = Math.min(
+          child.branchRateScale ?? 1,
+          (chain.branchRateScale ?? 1) * 0.82
+        );
         chain.hasOffshoot = true;
         queue.push({ chain: child, scale: childScale });
       }

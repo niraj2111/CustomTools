@@ -1,6 +1,7 @@
 const MM_PER_INCH = 25.4;
 const BELLY_BUFFER_MM = 5;
 const ARTWORK_WIDTH_TO_HEIGHT = 108 / 170;
+const SVG_UNITS_PER_MM = 96 / MM_PER_INCH;
 
 const PAPER_SIZES_MM = {
   Custom: null,
@@ -20,6 +21,18 @@ let vaseInstances = [];
 let dialRoot;
 let dialController;
 let dialSyncing = false;
+let randomAnimationFrame = null;
+let inlineLockFrame = null;
+
+const saxiState = {
+  socket: null,
+  connected: false,
+  reconnectTimer: null,
+  streamTimer: null,
+  statusText: "Stream module ready",
+};
+
+const RANDOM_ANIMATION_DURATION_MS = 700;
 
 const P = {
   // Canvas & Layout
@@ -76,6 +89,7 @@ const P = {
   lock_a2: false,
   lock_a3: false,
   lock_bulbHeightRatio: false,
+  lock_branchHeightRatio: false,
   
   // Proportions & Density
   neckDepth: 5,
@@ -90,6 +104,11 @@ const P = {
 
   showControls: false,
   svgFilename: "Vase-Bundle",
+
+  // SAXI WebSocket
+  saxiAutoStream: false,
+  saxiHost: "127.0.0.1:9080",
+  saxiPath: "/chat",
 };
 
 const RANDOM_CONTROL_RANGES = {
@@ -111,6 +130,8 @@ const RANDOM_CONTROL_RANGES = {
 };
 
 const INTEGER_RANDOM_CONTROLS = new Set(["branchSeed"]);
+const ANIMATED_RANDOM_CONTROLS = Object.keys(RANDOM_CONTROL_RANGES)
+  .filter(key => !INTEGER_RANDOM_CONTROLS.has(key));
 
 const VASE_GEOMETRY_KEYS = [
   "neckWidth", "rimFlare", "baseWidth", "a4",
@@ -118,7 +139,7 @@ const VASE_GEOMETRY_KEYS = [
   "lock_neckWidth", "lock_rimFlare", "lock_baseWidth", "lock_a4",
   "lock_bellyWidth", "lock_a2", "lock_a3", "lock_bulbHeightRatio",
   "neckDepth", "baseDepth", "vaseLines",
-  "showBranch", "branchHeightRatio", "branchSeed", "branchAngle",
+  "showBranch", "branchHeightRatio", "lock_branchHeightRatio", "branchSeed", "branchAngle",
 ];
 
 function captureVaseGeometry(source = P) {
@@ -185,6 +206,7 @@ function setup() {
 
   buildPane();
   hookUI();
+  connectSaxiSocket();
   updateCanvasDisplaySize();
   redraw();
 }
@@ -462,6 +484,56 @@ function newRandomSeed() {
   return Math.floor(Math.random() * 0x100000000);
 }
 
+function cancelRandomAnimation() {
+  if (randomAnimationFrame === null) return;
+  cancelAnimationFrame(randomAnimationFrame);
+  randomAnimationFrame = null;
+}
+
+function easeInOut(value) {
+  return value * value * (3 - (2 * value));
+}
+
+function lerpRandomControls(from, to, amount) {
+  ANIMATED_RANDOM_CONTROLS.forEach(key => {
+    P[key] = lerp(from[key], to[key], amount);
+  });
+}
+
+function animateRandomVase(target) {
+  cancelRandomAnimation();
+  const start = captureVaseGeometry();
+  const startTime = performance.now();
+
+  // A branch seed is discrete, so interpolate its height and spread while
+  // switching the branching pattern once instead of flickering every frame.
+  P.branchSeed = target.branchSeed;
+
+  const tick = now => {
+    const progress = Math.min(1, (now - startTime) / RANDOM_ANIMATION_DURATION_MS);
+    lerpRandomControls(start, target, easeInOut(progress));
+
+    saveActiveVaseGeometry();
+    pane.refresh();
+    redraw();
+
+    if (progress < 1) {
+      randomAnimationFrame = requestAnimationFrame(tick);
+      return;
+    }
+
+    Object.assign(P, target);
+    enforceVaseConstraints(P);
+    saveActiveVaseGeometry();
+    pane.refresh();
+    redraw();
+    randomAnimationFrame = null;
+    queueSaxiAutoStream();
+  };
+
+  randomAnimationFrame = requestAnimationFrame(tick);
+}
+
 function branch(len, state) {
   line(0, 0, 0, -len * 0.4);
   translate(0, -len * 0.4);
@@ -499,14 +571,6 @@ const DIAL_PARAM_PATHS = {
   "vaseBody.shoulderA4": "a4",
   "vaseBody.baseWidth": "baseWidth",
   "vaseBody.bulbPosition": "bulbHeightRatio",
-  "vaseBody.locks.lockNeck": "lock_neckWidth",
-  "vaseBody.locks.lockFlare": "lock_rimFlare",
-  "vaseBody.locks.lockBelly": "lock_bellyWidth",
-  "vaseBody.locks.lockTopHandle": "lock_a2",
-  "vaseBody.locks.lockBottomHandle": "lock_a3",
-  "vaseBody.locks.lockShoulder": "lock_a4",
-  "vaseBody.locks.lockBase": "lock_baseWidth",
-  "vaseBody.locks.lockBulbPosition": "lock_bulbHeightRatio",
   "proportions.neckHeight (mm)": "neckDepth",
   "proportions.baseHeight (mm)": "baseDepth",
   "proportions.density": "vaseLines",
@@ -524,6 +588,9 @@ const DIAL_PARAM_PATHS = {
   "styling.inkColor": "lineColor",
   "styling.lineweight (mm)": "strokeWeightMM",
   "styling.guides": "showControls",
+  "saxiConnection.autoStream": "saxiAutoStream",
+  "saxiConnection.host": "saxiHost",
+  "saxiConnection.path": "saxiPath",
 };
 
 function buildLayoutDialConfig() {
@@ -584,17 +651,6 @@ function buildDialConfig() {
       shoulderA4: [P.a4, 0.1, 1, 0.01],
       baseWidth: [P.baseWidth, 0.1, 1, 0.01],
       bulbPosition: [P.bulbHeightRatio, 0.1, 0.9, 0.01],
-      locks: {
-        _collapsed: true,
-        lockNeck: P.lock_neckWidth,
-        lockFlare: P.lock_rimFlare,
-        lockBelly: P.lock_bellyWidth,
-        lockTopHandle: P.lock_a2,
-        lockBottomHandle: P.lock_a3,
-        lockShoulder: P.lock_a4,
-        lockBase: P.lock_baseWidth,
-        lockBulbPosition: P.lock_bulbHeightRatio,
-      },
     },
     proportions: {
       _collapsed: false,
@@ -632,6 +688,14 @@ function buildDialConfig() {
       inkColor: { type: "color", default: P.lineColor },
       "lineweight (mm)": [P.strokeWeightMM, 0.05, 1, 0.05],
       guides: P.showControls,
+    },
+    saxiConnection: {
+      _collapsed: true,
+      autoStream: P.saxiAutoStream,
+      host: { type: "text", default: P.saxiHost },
+      path: { type: "text", default: P.saxiPath },
+      reconnect: { type: "action", label: "Reconnect" },
+      sendVaseAndBranches: { type: "action", label: "Send Vase + Branches" },
     },
   };
 }
@@ -679,16 +743,6 @@ function buildDialValues() {
       shoulderA4: P.a4,
       baseWidth: P.baseWidth,
       bulbPosition: P.bulbHeightRatio,
-      locks: {
-        lockNeck: P.lock_neckWidth,
-        lockFlare: P.lock_rimFlare,
-        lockBelly: P.lock_bellyWidth,
-        lockTopHandle: P.lock_a2,
-        lockBottomHandle: P.lock_a3,
-        lockShoulder: P.lock_a4,
-        lockBase: P.lock_baseWidth,
-        lockBulbPosition: P.lock_bulbHeightRatio,
-      },
     },
     proportions: {
       "neckHeight (mm)": P.neckDepth,
@@ -715,6 +769,11 @@ function buildDialValues() {
       "lineweight (mm)": P.strokeWeightMM,
       guides: P.showControls,
     },
+    saxiConnection: {
+      autoStream: P.saxiAutoStream,
+      host: P.saxiHost,
+      path: P.saxiPath,
+    },
   };
 }
 
@@ -736,6 +795,77 @@ function refreshDialFromP(rebuild = false) {
   if (rebuild) dialController.updateConfig(buildDialConfig());
   dialController.setValues(buildDialValues());
   dialSyncing = false;
+  queueInlineLockButtons();
+}
+
+const INLINE_LOCK_CONTROLS = [
+  ["Neck Width", "lock_neckWidth"],
+  ["Rim Flare A1", "lock_rimFlare"],
+  ["Belly Width", "lock_bellyWidth"],
+  ["Bulb Top Handle A2", "lock_a2"],
+  ["Bulb Bottom Handle A3", "lock_a3"],
+  ["Shoulder A4", "lock_a4"],
+  ["Base Width", "lock_baseWidth"],
+  ["Bulb Position", "lock_bulbHeightRatio"],
+  ["Height", "lock_branchHeightRatio"],
+];
+
+function lockIcon(locked) {
+  const shackle = locked
+    ? '<path d="M5.5 7V5.5a2.5 2.5 0 0 1 5 0V7"/>'
+    : '<path d="M6.5 7V5.5a2.5 2.5 0 0 1 4.7-1.2"/>';
+  return `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">${shackle}<rect x="4" y="7" width="8" height="6.5" rx="1.5"/></svg>`;
+}
+
+function updateInlineLockButton(button) {
+  const lockKey = button.dataset.lockKey;
+  const locked = Boolean(P[lockKey]);
+  const controlName = button.dataset.controlName;
+  button.setAttribute("aria-pressed", String(locked));
+  button.setAttribute("aria-label", `${locked ? "Unlock" : "Lock"} ${controlName}`);
+  button.title = `${locked ? "Unlock" : "Lock"} ${controlName}`;
+  button.innerHTML = lockIcon(locked);
+}
+
+function installInlineLockButtons() {
+  const paneElement = document.getElementById("pane");
+  if (!paneElement) return;
+  const sliders = Array.from(paneElement.querySelectorAll(".dialkit-slider[aria-label]"));
+
+  INLINE_LOCK_CONTROLS.forEach(([label, lockKey]) => {
+    const track = sliders.find(slider => slider.getAttribute("aria-label") === label);
+    const wrapper = track?.closest(".dialkit-slider-wrapper");
+    if (!wrapper) return;
+
+    wrapper.classList.add("vase-lock-control");
+    let button = wrapper.querySelector(".vase-inline-lock");
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "vase-inline-lock";
+      wrapper.append(button);
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        cancelRandomAnimation();
+        const key = button.dataset.lockKey;
+        P[key] = !P[key];
+        saveActiveVaseGeometry();
+        updateInlineLockButton(button);
+      });
+    }
+    button.dataset.lockKey = lockKey;
+    button.dataset.controlName = label;
+    updateInlineLockButton(button);
+  });
+}
+
+function queueInlineLockButtons() {
+  if (inlineLockFrame !== null) cancelAnimationFrame(inlineLockFrame);
+  inlineLockFrame = requestAnimationFrame(() => {
+    inlineLockFrame = null;
+    installInlineLockButtons();
+  });
 }
 
 function applyDialValues(values) {
@@ -748,6 +878,7 @@ function applyDialValues(values) {
     changed.push(param);
   });
   if (!changed.length) return;
+  cancelRandomAnimation();
 
   if (changed.includes("canvasSizePreset") || changed.includes("paperOrientation")) applyPaperPreset();
   if (changed.includes("activeInstance")) {
@@ -772,6 +903,9 @@ function applyDialValues(values) {
   refreshDialFromP(rebuildLayout);
   syncCanvasSize();
   redraw();
+  if (changed.some(key => ["saxiHost", "saxiPath"].includes(key))) reconnectSaxiSocket();
+  else if (changed.includes("saxiAutoStream")) updateSaxiStatus();
+  else queueSaxiAutoStream();
 }
 
 function buildPane() {
@@ -789,6 +923,8 @@ function buildPane() {
     onAction: action => {
       if (action === "presetsManagement.saveBundle") exportBundle();
       if (action === "presetsManagement.loadJsonPreset") document.getElementById("presetInput")?.click();
+      if (action === "saxiConnection.reconnect") reconnectSaxiSocket();
+      if (action === "saxiConnection.sendVaseAndBranches") streamVaseToSaxi();
     },
   });
   pane = { refresh: () => refreshDialFromP(false) };
@@ -799,12 +935,12 @@ function buildPane() {
 function hookUI() {
   document.getElementById("randomBtn").addEventListener("click", () => {
     const random = mulberry32(newRandomSeed());
-    Object.assign(P, randomControlState(random));
-    enforceVaseConstraints(P);
-    saveActiveVaseGeometry();
-    pane.refresh(); redraw();
+    const target = randomControlState(random);
+    enforceVaseConstraints(target);
+    animateRandomVase(target);
   });
   document.getElementById("svgBtn").addEventListener("click", exportBundle);
+  document.getElementById("saxiStreamBtn").addEventListener("click", streamVaseToSaxi);
   
   // Hidden Preset Input
   const inp = document.createElement("input");
@@ -835,6 +971,7 @@ function hookUI() {
         updateLayoutControlVisibility();
         enforceVaseConstraints(P);
         pane.refresh(); syncCanvasSize(); redraw();
+        queueSaxiAutoStream();
       } catch (err) { console.error("Error loading preset:", err); }
     };
     reader.readAsText(file);
@@ -842,6 +979,7 @@ function hookUI() {
   document.body.appendChild(inp);
 
   window.addEventListener("resize", () => { syncCanvasSize(); redraw(); });
+  window.addEventListener("beforeunload", disconnectSaxiSocket);
   window.addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     if (e.repeat && ["r", "s", "g"].includes(key)) return;
@@ -869,6 +1007,134 @@ function mousePressed() {
   loadActiveVaseGeometry();
   pane.refresh();
   redraw();
+}
+
+function updateSaxiStatus(message = "") {
+  if (message) saxiState.statusText = message;
+  const status = document.getElementById("saxiStatus");
+  const badge = document.getElementById("saxiConnectionBadge");
+  if (status) {
+    status.textContent = message || `${P.saxiAutoStream ? "Auto stream on" : "Ready to stream vase + branches"}`;
+  }
+  if (badge) {
+    badge.textContent = `socket: ${saxiState.connected ? "connected" : "disconnected"}`;
+    badge.dataset.connected = String(saxiState.connected);
+  }
+}
+
+function getSaxiSocketUrl() {
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const host = String(P.saxiHost || "").trim() || "127.0.0.1:9080";
+  const rawPath = String(P.saxiPath || "").trim() || "/chat";
+  const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+  return `${protocol}://${host}${path}`;
+}
+
+function disconnectSaxiSocket() {
+  if (saxiState.streamTimer) {
+    window.clearTimeout(saxiState.streamTimer);
+    saxiState.streamTimer = null;
+  }
+  if (saxiState.reconnectTimer) {
+    window.clearTimeout(saxiState.reconnectTimer);
+    saxiState.reconnectTimer = null;
+  }
+  if (saxiState.socket) {
+    const socket = saxiState.socket;
+    saxiState.socket = null;
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onclose = null;
+    socket.onerror = null;
+    try { socket.close(); } catch (_error) { /* Ignore close errors. */ }
+  }
+  saxiState.connected = false;
+  updateSaxiStatus("Disconnected");
+}
+
+function reconnectSaxiSocket() {
+  disconnectSaxiSocket();
+  connectSaxiSocket();
+}
+
+function connectSaxiSocket() {
+  updateSaxiStatus("Connecting…");
+  let socket;
+  try {
+    socket = new WebSocket(getSaxiSocketUrl());
+  } catch (_error) {
+    updateSaxiStatus("Socket unavailable");
+    return;
+  }
+  saxiState.socket = socket;
+  socket.addEventListener("open", () => {
+    if (saxiState.socket !== socket) return;
+    saxiState.connected = true;
+    updateSaxiStatus("Connected to SAXI");
+    if (P.saxiAutoStream) streamVaseToSaxi();
+  });
+  socket.addEventListener("close", () => {
+    if (saxiState.socket !== socket) return;
+    saxiState.socket = null;
+    saxiState.connected = false;
+    updateSaxiStatus("Disconnected — retrying…");
+    saxiState.reconnectTimer = window.setTimeout(() => {
+      saxiState.reconnectTimer = null;
+      connectSaxiSocket();
+    }, 1000);
+  });
+  socket.addEventListener("error", () => {
+    if (saxiState.socket !== socket) return;
+    saxiState.connected = false;
+    updateSaxiStatus("Socket error");
+  });
+}
+
+function queueSaxiAutoStream() {
+  if (!P.saxiAutoStream) return;
+  if (saxiState.streamTimer) window.clearTimeout(saxiState.streamTimer);
+  saxiState.streamTimer = window.setTimeout(() => {
+    saxiState.streamTimer = null;
+    streamVaseToSaxi();
+  }, 160);
+}
+
+function streamVaseToSaxi() {
+  if (!saxiState.socket || saxiState.socket.readyState !== WebSocket.OPEN) {
+    updateSaxiStatus("Socket not connected");
+    return;
+  }
+  saxiState.socket.send(JSON.stringify({
+    c: "incoming-svg",
+    p: { svg: buildSaxiStreamSVG() },
+  }));
+  updateSaxiStatus(`Streamed vase + branches at ${new Date().toLocaleTimeString()}`);
+}
+
+function buildSaxiStreamSVG() {
+  const svg = [];
+  const { width: baseW, height: baseH } = getArtworkArea();
+  const width = P.canvasWMM * SVG_UNITS_PER_MM;
+  const height = P.canvasHMM * SVG_UNITS_PER_MM;
+
+  svg.push('<?xml version="1.0" encoding="UTF-8"?>');
+  svg.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(width)} ${fmt(height)}">`);
+  svg.push(`<g transform="scale(${fmt(SVG_UNITS_PER_MM)})">`);
+  getLayoutItems().forEach(item => {
+    const state = vaseInstances[item.index].geometry;
+    const number = item.index + 1;
+    const transform = `translate(${fmt(item.x)} ${fmt(item.y)}) scale(${fmt(item.scale)})`;
+    const artwork = buildArtworkSVG(0, -baseH / 2, baseW, baseH, state);
+    svg.push(`<g id="Vase-${number}" transform="${transform}" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM)}" stroke-linecap="round" stroke-linejoin="round">`);
+    svg.push(artwork.vase);
+    svg.push("</g>");
+    svg.push(`<g id="Branches-${number}" transform="${transform}" fill="none" stroke="${P.lineColor}" stroke-width="${fmt(P.strokeWeightMM * 0.7)}" stroke-linecap="round">`);
+    svg.push(artwork.branches);
+    svg.push("</g>");
+  });
+  svg.push("</g>");
+  svg.push("</svg>");
+  return svg.join("\n");
 }
 
 function exportBundle() {
