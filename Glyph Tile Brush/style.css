@@ -1,0 +1,164 @@
+:root {
+  --panel-width: 360px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: grid;
+  grid-template-columns: var(--panel-width) minmax(0, 1fr);
+  overflow: hidden;
+  background: #101010;
+  color: #ededed;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+aside {
+  min-width: 0;
+  padding: 16px;
+  overflow-y: auto;
+  background: #181818;
+  border-right: 1px solid #303030;
+}
+
+.tool-header {
+  margin-bottom: 14px;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: #8e8e8e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.tool-header > p:last-child {
+  margin: 7px 0 0;
+  color: #a7a7a7;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+#pane .dialkit-root {
+  width: 100%;
+  max-width: none;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+button {
+  min-height: 38px;
+  padding: 8px 11px;
+  color: #efefef;
+  background: #2b2b2b;
+  border: 1px solid #424242;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #363636;
+  border-color: #575757;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button.primary {
+  grid-column: 1 / -1;
+  color: #151515;
+  background: #f0f0f0;
+  border-color: #f0f0f0;
+  font-weight: 650;
+}
+
+.status {
+  min-height: 18px;
+  margin-top: 12px;
+  color: #bdbdbd;
+  font-size: 11px;
+}
+
+.hint {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  color: #858585;
+  border-top: 1px solid #2e2e2e;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+kbd {
+  padding: 1px 4px;
+  color: #cfcfcf;
+  background: #242424;
+  border: 1px solid #3b3b3b;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+main,
+#wrap {
+  min-width: 0;
+  min-height: 0;
+}
+
+main {
+  overflow: hidden;
+  background: #0d0d0d;
+}
+
+#wrap {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 16px;
+}
+
+canvas {
+  display: block;
+  background: #fff;
+  box-shadow: 0 18px 55px rgb(0 0 0 / 55%);
+  touch-action: none;
+}
+
+@media (max-width: 760px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(250px, 42vh) minmax(0, 1fr);
+  }
+
+  aside {
+    border-right: 0;
+    border-bottom: 1px solid #303030;
+  }
+}

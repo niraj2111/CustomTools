@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glyph Tile Brush</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dialkit@2.0.2/dist/vanilla/styles.css" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <aside>
+      <header class="tool-header">
+        <p class="eyebrow">Custom Tools</p>
+        <h1>Glyph Tile Brush</h1>
+        <p>Paint connected tiles. Each cell chooses its glyph from its active neighbours.</p>
+      </header>
+
+      <div id="pane"></div>
+
+      <div class="actions">
+        <button id="clearBtn" type="button">Clear</button>
+        <button id="randomBtn" type="button">Random Fill</button>
+        <button id="svgBtn" class="primary" type="button">Export SVG</button>
+      </div>
+
+      <div class="status" id="status" role="status" aria-live="polite">Ready</div>
+      <p class="hint">
+        Drag to paint. Right-drag always erases. Shortcuts: <kbd>1</kbd>–<kbd>4</kbd> choose a glyph set,
+        <kbd>G</kbd> toggles the grid, <kbd>C</kbd> clears, and <kbd>S</kbd> exports SVG.
+      </p>
+    </aside>
+
+    <main>
+      <div id="wrap"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dialkit@2.0.2/dist/vanilla/browser.global.js"></script>
+    <script src="../shared/paper.js"></script>
+    <script src="../shared/export.js"></script>
+    <script src="./sketch.js"></script>
+  </body>
+</html>
