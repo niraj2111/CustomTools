@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f2eb">
+  <meta name="description" content="Create a vase as a portrait without a face and export it for pen plotting.">
+  <title>Vases — Generative portraits</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=3.8.0">
+  <script type="module" src="app.js?v=3.8.0"></script>
+</head>
+<body>
+  <div class="floating-nav" aria-label="Site navigation">
+    <button class="brand" data-action="home" aria-label="Return to the homepage">
+      <span><b>Vases</b><small>Generative portraits</small></span>
+    </button>
+    <button class="quiet-link" data-action="help">About</button>
+  </div>
+  <main id="app"></main>
+  <dialog id="help-dialog">
+    <button class="dialog-close" data-action="close-help" aria-label="Close">×</button>
+    <span class="eyebrow">ABOUT</span>
+    <h2>A tool for thinking through generative art.</h2>
+    <p>Generative art begins with a system, but the work does not end there. The same rules can produce many forms; attention and choice give one of them meaning.</p>
+    <p>Here, you move between chance and intention—randomising, adjusting, locking, rejecting and keeping. Authorship gathers across those decisions rather than sitting only in the code or final image.</p>
+    <p>The vase becomes a portrait without likeness. No parameter has a fixed meaning. Character emerges through your association with posture, proportion and presence.</p>
+    <p>The final plotted drawing carries the whole process: a shared system, its variations, and the form you chose to recognise.</p>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
