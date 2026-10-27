@@ -15,6 +15,29 @@
         <p>Paint connected tiles. Each cell chooses its glyph from its active neighbours.</p>
       </header>
 
+      <section class="source-card" aria-labelledby="sourceTitle">
+        <div class="source-heading">
+          <div>
+            <h2 id="sourceTitle">Media Source</h2>
+            <p id="sourceMeta">Drop a photo or video here</p>
+          </div>
+          <span class="source-state" id="sourceState">Manual</span>
+        </div>
+        <div id="mediaDropZone" class="media-preview" tabindex="0" role="button" aria-label="Import a photo or video">
+          <div id="mediaPlaceholder" class="media-placeholder">Photo · Video · Webcam</div>
+          <img id="sourceImage" alt="Imported source preview" hidden />
+          <video id="sourceVideo" muted loop playsinline hidden></video>
+        </div>
+        <div class="source-actions">
+          <button id="importMediaBtn" type="button">Import Media</button>
+          <button id="webcamBtn" type="button">Use Webcam</button>
+          <button id="playPauseBtn" type="button" disabled>Play</button>
+          <button id="captureFrameBtn" type="button" disabled>Capture Frame</button>
+          <button id="clearSourceBtn" type="button" disabled>Clear Source</button>
+        </div>
+        <input id="mediaFileInput" type="file" accept="image/*,video/*" hidden />
+      </section>
+
       <div id="pane"></div>
 
       <div class="actions">
@@ -25,7 +48,7 @@
 
       <div class="status" id="status" role="status" aria-live="polite">Ready</div>
       <p class="hint">
-        Drag to paint. Right-drag always erases. Shortcuts: <kbd>1</kbd>–<kbd>4</kbd> choose a glyph set,
+        Pause live media before painting. Drag to paint and right-drag to erase. Shortcuts: <kbd>1</kbd>–<kbd>4</kbd> choose a glyph set,
         <kbd>G</kbd> toggles the grid, <kbd>C</kbd> clears, and <kbd>S</kbd> exports SVG.
       </p>
     </aside>
@@ -38,6 +61,8 @@
     <script src="https://cdn.jsdelivr.net/npm/dialkit@2.0.2/dist/vanilla/browser.global.js"></script>
     <script src="../shared/paper.js"></script>
     <script src="../shared/export.js"></script>
+    <script src="./glyph-data.js"></script>
+    <script src="./media-utils.js"></script>
     <script src="./sketch.js"></script>
   </body>
 </html>
