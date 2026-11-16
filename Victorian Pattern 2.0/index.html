@@ -1,0 +1,1932 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Victorian Flourish 2.0</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed drafting sheet on a 5 mm dot grid; a slim instrument panel floats at the left (bottom sheet on phones) */
+:root{
+  --paper:#EDF0E9; --paper-dot:#CFD6CA; --ink:#1D2620; --panel:#F8FAF5; --line:#CBD3C5;
+  --muted:#5D695F; --sap:#4E7D35; --sap-soft:#DCE8D2; --shadow:rgba(29,38,32,.08);
+  --f-display:"Bricolage Grotesque","Hanken Grotesk",system-ui,sans-serif;
+  --f-body:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#131714; --paper-dot:#262D27; --ink:#DCE4D6; --panel:#1A1F1B; --line:#2F3830;
+    --muted:#8F9B90; --sap:#8CC06A; --sap-soft:#26341E; --shadow:rgba(0,0,0,.35); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#131714; --paper-dot:#262D27; --ink:#DCE4D6; --panel:#1A1F1B; --line:#2F3830;
+  --muted:#8F9B90; --sap:#8CC06A; --sap-soft:#26341E; --shadow:rgba(0,0,0,.35); color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);overflow:hidden}
+.app{position:fixed;inset:0;background:var(--paper)}
+#sheet{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;display:block}
+#sheet.void-tool{cursor:cell}
+#guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block}
+.sel{width:100%;font:500 13px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+.seg.three{grid-template-columns:1fr 1fr 1fr}
+
+.panel{position:absolute;
+  top:calc(16px + env(safe-area-inset-top,0px));left:calc(16px + env(safe-area-inset-left,0px));
+  width:268px;max-height:calc(100% - 32px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 6px 24px var(--shadow);overflow:hidden}
+.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 14px 10px}
+.panel-head h1{margin:0;font:600 19px/1.1 var(--f-display);letter-spacing:-.01em}
+.sub{margin:4px 0 0;font-size:12.5px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+.panel-body{overflow-y:auto;padding:0 14px 14px;display:flex;flex-direction:column;gap:14px}
+.sec{display:flex;flex-direction:column;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
+.sec h2{margin:0;font:500 10.5px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-direction:column;gap:4px}
+.row-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
+.row-top output{font:400 11.5px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+input[type=range]{width:100%;margin:0;accent-color:var(--sap);height:18px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:500 12.5px var(--f-body);padding:6px 0;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--sap-soft);color:var(--ink)}
+.swatches{display:flex;gap:8px}
+.sw{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;cursor:pointer;padding:0}
+.sw i{width:14px;height:14px;border-radius:50%;display:block}
+.sw[aria-pressed="true"]{outline:2px solid var(--sap);outline-offset:1px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+.btn{font:500 13px var(--f-body);padding:8px 10px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:6px;cursor:pointer}
+.btn:hover{background:var(--sap-soft)}
+.btn.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.btn.primary:hover{opacity:.88;background:var(--ink)}
+.icon-btn{font:500 12px var(--f-body);padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;flex:none}
+button:focus-visible,input:focus-visible{outline:2px solid var(--sap);outline-offset:2px}
+.hint-keys{font:400 11px var(--f-mono);color:var(--muted)}
+
+.status{position:absolute;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;align-items:flex-end;gap:3px;font:400 11.5px var(--f-mono);color:var(--muted);
+  pointer-events:none;text-align:right;font-variant-numeric:tabular-nums}
+#stats{display:none}
+.toast{position:absolute;left:50%;top:calc(18px + env(safe-area-inset-top,0px));transform:translateX(-50%);
+  background:var(--ink);color:var(--panel);font:500 13px var(--f-body);padding:8px 14px;border-radius:6px;
+  opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.out{position:absolute;inset:0;background:rgba(0,0,0,.35);display:grid;place-items:center;padding:16px}
+.out-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;width:min(560px,100%);display:flex;flex-direction:column;gap:10px}
+.out-card p{margin:0;font-size:13px}
+.out-card textarea{width:100%;height:220px;font:11px/1.4 var(--f-mono);background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;box-sizing:border-box;resize:vertical}
+
+@media (max-width:640px){
+  .panel{top:auto;left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));
+    bottom:calc(12px + env(safe-area-inset-bottom,0px));width:auto;max-height:52%}
+  .status{bottom:auto;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px))}
+}
+</style>
+
+<div class="app" id="app">
+  <canvas id="sheet" aria-label="Drawing sheet. Drag to lay a stem; branches grow from it."></canvas>
+  <canvas id="guides" aria-hidden="true"></canvas>
+
+  <aside class="panel" id="panel">
+    <header class="panel-head">
+      <div>
+        <h1>Victorian Flourish 2.0</h1>
+        <p class="sub">Drag to lay a stem. Shoots peel off tangentially and resolve into scrolls.</p>
+      </div>
+      <button id="toggle" class="icon-btn" aria-expanded="true" aria-controls="panelBody">Hide</button>
+    </header>
+    <div class="panel-body" id="panelBody">
+      <div id="controls" style="display:flex;flex-direction:column;gap:14px"></div>
+      <div class="actions">
+        <button class="btn" id="undo">Undo</button>
+        <button class="btn" id="clear">Clear sheet</button>
+        <button class="btn" id="regrow">Regrow all</button>
+        <button class="btn primary" id="copy">Copy SVG</button>
+      </div>
+      <div class="hint-keys">⌘/Ctrl Z undo · growth settings apply to the next stem, or use Regrow all · symmetry applies to new stems and voids</div>
+    </div>
+  </aside>
+
+  <div class="status"><span id="stats"></span><span id="hint">Example sketch · drag anywhere to plant your own</span></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="out" id="out" hidden>
+    <div class="out-card">
+      <p>Copying was blocked here. The SVG is selected; press ⌘C or Ctrl C.</p>
+      <textarea id="svgOut" readonly></textarea>
+      <button class="btn primary" id="outDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const cv=$('#sheet'), ctx=cv.getContext('2d');
+const DEG=Math.PI/180;
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const wrap=a=>{while(a>Math.PI)a-=2*Math.PI;while(a<-Math.PI)a+=2*Math.PI;return a};
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+/* ---------- parameters ---------- */
+const P={size:92,internode:19,meander:0,depth:5,falloff:.62,arrange:'alternate',fair:true,term:'leaf',decay:.69,turns:1.45,counter:.55,flow:'rule',hook:.2,collar:.9,nest:.6,veins:0,band:'off',bandW:.23,pocket:'curls',fill:.35,construct:'hidden',rev:.45,leaves:.6,
+  light:.4,seek:.85,gradient:-.1,wander:1,gap:3.5,width:.8,speed:4,color:'#5873C9',
+  preset:'medallion',tool:'stem',sym:'mirror-x',frame:'rounded',margin:20,frameLine:'drawn',voidLine:'drawn'};
+const SW=[['ink','Ink'],['#5B8C3E','Moss'],['#C0602F','Rust'],['#5873C9','Blue']];
+const fmtLight=v=>v>0.04?`${v.toFixed(2)} upright`:v<-0.04?`${(-v).toFixed(2)} weeping`:'level';
+const fmtGrad=v=>v>0.04?`base +${v.toFixed(2)}`:v<-0.04?`tip +${(-v).toFixed(2)}`:'even';
+const SECTIONS=[
+  {title:'Layout',rows:[
+    {k:'preset',type:'select',label:'Start from',opts:[['medallion','Medallion panel'],['candelabrum','Candelabrum'],['rinceau','Rinceau band'],['rosette','Rosette'],['tree','Tree of life'],['corners','Corner panel'],['free','Free scroll']],on:()=>{applyPreset(P.preset);hint.textContent='Preset loaded · drag to add your own stems'}},
+    {k:'tool',type:'seg',label:'Tool',opts:[['stem','Stem'],['oval','Oval void'],['rect','Rect void']],on:()=>{cv.classList.toggle('void-tool',P.tool!=='stem');hint.textContent=P.tool==='stem'?'':'Drag to place a void · growth keeps clear of it'}},
+    {k:'sym',type:'select',label:'Symmetry',opts:[['none','None'],['mirror-x','Mirror left–right'],['mirror-y','Mirror top–bottom'],['quad','Four-way'],['radial-3','Radial ×3'],['radial-4','Radial ×4'],['radial-5','Radial ×5'],['radial-6','Radial ×6'],['radial-8','Radial ×8']],on:()=>drawGuides()},
+    {k:'frame',type:'select',label:'Frame',opts:[['none','None'],['rect','Rectangle'],['rounded','Rounded'],['oval','Oval'],['circle','Circle'],['arch','Arch'],['band','Band']],on:()=>layoutChanged()},
+    ['margin','Frame margin',0,160,1,v=>`${v} px`,()=>layoutChanged()],
+    {k:'frameLine',type:'seg',label:'Frame line',opts:[['drawn','Drawn'],['guide','Guide only']],on:()=>{drawAll();drawGuides()}},
+    {k:'voidLine',type:'seg',label:'Void outline',opts:[['drawn','Drawn'],['guide','Guide only']],on:()=>{drawAll();drawGuides()}},
+    {k:'clearVoids',type:'button',label:'Clear voids',on:()=>{voids=[];history=history.filter(h=>h.t!=='void');hashRebuild();drawAll();drawGuides()}}
+  ]},
+  {title:'Growth',rows:[
+    ['size','Scroll size',20,240,1,v=>`${v} px`],
+    ['internode','Branch spacing',10,100,1,v=>`${v} px`],
+    ['depth','Branch orders',1,5,1,v=>`${v}`],
+    ['falloff','Falloff',.4,.85,.01,v=>`×${v.toFixed(2)} per order`],
+    ['arrange'],
+    ['fair']
+  ]},
+  {title:'Scroll',rows:[
+    ['decay','Decay',.62,.88,.01,v=>`×${v.toFixed(2)} per ¼ turn`],
+    ['turns','Curl turns',.5,2.5,.05,v=>`up to ${v.toFixed(2)}`],
+    {k:'flow',type:'seg',label:'Branch spirals',opts:[['rule','Counter-rotate'],['free','Free']]},
+    ['rev','S-scrolls',0,1,.05,v=>`${Math.round(v*100)}%`],
+    ['hook','Inward S-hooks',0,1,.05,v=>v<0.02?'off':`${Math.round(v*100)}%`],
+    ['leaves','Leaves',0,1,.05,v=>`${Math.round(v*100)}%`],
+    {k:'band',type:'seg',label:'Inner ribbon',opts:[['off','Off'],['smooth','Smooth'],['scalloped','Scalloped']]},
+    ['bandW','Band width',.12,.5,.01,v=>`${Math.round(v*100)}% of scroll`],
+    ['nest','Nested scrolls',0,1,.05,v=>`${Math.round(v*100)}%`],
+    ['veins','Lobe lines',0,1,.05,v=>v<0.02?'off':`${Math.round(v*100)}%`],
+    ['collar','Junction leaves',0,1,.05,v=>`${Math.round(v*100)}%`],
+    {k:'pocket',type:'select',label:'Pocket fill',opts:[['off','Off'],['curls','Fitted curls'],['flowers','Flowers'],['both','Curls, some flowers']]},
+    ['fill','Fill amount',0,1,.05,v=>v<0.02?'none':`${Math.round(v*100)}%`],
+    {k:'construct',type:'seg',label:'Construction circles',opts:[['hidden','Hidden'],['shown','Shown']],on:()=>drawGuides()}
+  ]},
+  {title:'Habit',rows:[
+    ['light','Gravitropism',-1,1,.05,fmtLight],
+    ['seek','Light seeking',0,1,.05,v=>v.toFixed(2)],
+    ['gradient','Length gradient',-1,1,.05,fmtGrad],
+    ['wander','Variation',0,1,.05,v=>v.toFixed(2)],
+    ['gap','Line gap',1,20,.5,v=>`${v.toFixed(1)} px`]
+  ]},
+  {title:'Pen',rows:[
+    ['width','Line width',.3,6,.1,v=>`${v.toFixed(1)} px`],
+    ['color'],
+    ['speed','Growth speed',1,14,1,v=>`${v}×`]
+  ]}
+];
+const host=$('#controls');
+for(const sec of SECTIONS){
+  const s=document.createElement('section');s.className='sec';
+  s.innerHTML=`<h2>${sec.title}</h2>`;
+  for(const r of sec.rows){
+    const row=document.createElement('div');row.className='row';
+    if(!Array.isArray(r)){
+      if(r.type==='seg'){
+        row.innerHTML=`<div class="row-top"><span>${r.label}</span></div><div class="seg${r.opts.length===3?' three':''}" role="group" aria-label="${r.label}">${r.opts.map(([v,l])=>`<button id="${r.k}-${v}" data-v="${v}" aria-pressed="${P[r.k]===v}">${l}</button>`).join('')}</div>`;
+        row.querySelectorAll('button').forEach(b=>b.onclick=()=>{P[r.k]=b.dataset.v;row.querySelectorAll('button').forEach(o=>o.setAttribute('aria-pressed',o===b));r.on&&r.on()});
+      }else if(r.type==='select'){
+        row.innerHTML=`<div class="row-top"><label for="sel-${r.k}">${r.label}</label></div><select class="sel" id="sel-${r.k}">${r.opts.map(([v,l])=>`<option value="${v}"${P[r.k]===v?' selected':''}>${l}</option>`).join('')}</select>`;
+        const sel=row.querySelector('select');sel.addEventListener('change',()=>{P[r.k]=sel.value;r.on&&r.on()});
+      }else if(r.type==='button'){
+        row.innerHTML=`<button class="btn" id="btn-${r.k}">${r.label}</button>`;
+        row.querySelector('button').onclick=r.on;
+      }
+      s.appendChild(row);continue;
+    }
+    const [k,label,min,max,step,fmt,onCh]=r;
+    if(k==='arrange'){
+      row.innerHTML=`<div class="row-top"><span>Phyllotaxis</span></div>
+        <div class="seg" role="group" aria-label="Phyllotaxis">
+        <button id="arr-alt" data-v="alternate" aria-pressed="true">Alternate</button>
+        <button id="arr-opp" data-v="opposite" aria-pressed="false">Opposite</button></div>`;
+      row.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+        P.arrange=b.dataset.v;row.querySelectorAll('button').forEach(o=>o.setAttribute('aria-pressed',o===b))});
+    }else if(k==='fair'){
+      row.innerHTML=`<div class="row-top"><span>Stem</span></div>
+        <div class="seg" role="group" aria-label="Stem line">
+        <button id="fair-on" data-v="1" aria-pressed="true">Line of beauty</button>
+        <button id="fair-off" data-v="0" aria-pressed="false">As drawn</button></div>`;
+      row.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+        P.fair=b.dataset.v==='1';row.querySelectorAll('button').forEach(o=>o.setAttribute('aria-pressed',o===b))});
+    }else if(k==='term'){
+      row.innerHTML=`<div class="row-top"><span>Terminal</span></div>
+        <div class="seg" role="group" aria-label="Terminal">
+        <button id="term-leaf" data-v="leaf" aria-pressed="true">Curled leaf</button>
+        <button id="term-vol" data-v="volute" aria-pressed="false">Volute</button></div>`;
+      row.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+        P.term=b.dataset.v;row.querySelectorAll('button').forEach(o=>o.setAttribute('aria-pressed',o===b))});
+    }else if(k==='color'){
+      row.innerHTML=`<div class="row-top"><span>Ink</span></div><div class="swatches" role="group" aria-label="Ink colour"></div>`;
+      const wrapEl=row.querySelector('.swatches');
+      SW.forEach(([c,name],i)=>{
+        const b=document.createElement('button');b.className='sw';b.id='sw-'+i;b.title=name;b.setAttribute('aria-label',name);
+        b.setAttribute('aria-pressed',c===P.color);
+        b.innerHTML=`<i style="background:${c==='ink'?'var(--ink)':c}"></i>`;
+        b.onclick=()=>{P.color=c;wrapEl.querySelectorAll('.sw').forEach(o=>o.setAttribute('aria-pressed',o===b))};
+        wrapEl.appendChild(b);
+      });
+    }else{
+      const id='p-'+k;
+      row.innerHTML=`<div class="row-top"><label for="${id}">${label}</label><output id="o-${k}"></output></div>
+        <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${P[k]}">`;
+      const inp=row.querySelector('input'),out=row.querySelector('output');
+      const upd=()=>{P[k]=parseFloat(inp.value);out.textContent=fmt(P[k])};
+      inp.addEventListener('input',upd);upd();
+      if(onCh)inp.addEventListener('change',onCh);
+    }
+    s.appendChild(row);
+  }
+  host.appendChild(s);
+}
+
+/* ---------- canvas + occupancy grid ---------- */
+let W=0,H=0,DPR=1,VS=1;const DESIGN_MIN=720;   /* the sheet is never smaller than this on its short side; small screens zoom out */
+/* spatial hash of every drawn point: [x, y, pathId, arc] */
+const HC=12;let hash=new Map();
+/* light field (shadow propagation): each newly occupied cell casts a soft cone of shade downward */
+const SC=8,SDEPTH=10;let SGW=0,SGH=0,shade=new Float32Array(1),socc=new Uint8Array(1);
+function shadeInit(){SGW=Math.ceil(W/SC)+2;SGH=Math.ceil(H/SC)+2;shade=new Float32Array(SGW*SGH);socc=new Uint8Array(SGW*SGH)}
+function castShade(x,y){
+  const i=Math.floor(x/SC),j=Math.floor(y/SC);
+  if(i<0||j<0||i>=SGW||j>=SGH)return;const k=j*SGW+i;if(socc[k])return;socc[k]=1;
+  for(let q=1;q<=SDEPTH;q++){const jj=j+q;if(jj>=SGH)break;const v=0.42*Math.pow(1.55,-q+1)/(1+q*0.15);
+    for(let d=-q;d<=q;d++){const ii=i+d;if(ii<0||ii>=SGW)continue;shade[jj*SGW+ii]+=v}}
+}
+function lightAt(x,y){
+  const i=Math.floor(x/SC),j=Math.floor(y/SC);
+  if(i<0||j<0||i>=SGW||j>=SGH)return 1;
+  return clamp(1-shade[j*SGW+i]*0.42,0,1);
+}
+const hkey=(i,j)=>(i+4096)*8192+(j+4096);
+function hashAdd(x,y,id,arc){castShade(x,y);const k=hkey(Math.floor(x/HC),Math.floor(y/HC));let c=hash.get(k);if(!c){c=[];hash.set(k,c)}c.push(x,y,id,arc)}
+function hashRebuild(){
+  resetField();
+  for(const pl of plants)for(const p of pl.paths){
+    const a=p.plan||p.pts;let arc=0;
+    for(let i=0;i<a.length;i+=2){if(i)arc+=Math.hypot(a[i]-a[i-2],a[i+1]-a[i-1]);hashAddAll(pl,a[i],a[i+1],p.id,arc)}
+  }
+}
+let inkColor='#1D2620';
+function readInk(){inkColor=getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()||'#1D2620'}
+const col=c=>c==='ink'?inkColor:c;
+/* ---------- layout: frame, voids, symmetry ----------
+   Frames and voids are obstacles: their outlines go into the collision field (no shade), so shoots keep one line gap
+   from them, and every planned point must lie inside the frame and outside every void.
+   Symmetry: each plant carries the transforms in force when it was drawn. Only the master geometry is grown;
+   every copy is reserved in the field under its own id and drawn/exported through the transform, so the
+   copies are exact. A candidate shoot must also clear its own mirror images, which keeps the axes clean. */
+const FRAME_ID=-1,VOID_ID=-2,COPY=1e7;
+let frameShape=null,voids=[],history=[];
+function stageRect(){
+  const pad=16;let x0=pad,y0=pad,x1=W-pad,y1=H-pad;
+  const pnl=document.getElementById('panel').getBoundingClientRect(),cr=cv.getBoundingClientRect();
+  if(cr.width>640){if(!document.getElementById('panelBody').hidden)x0=Math.max(x0,(pnl.right-cr.left)/VS+pad)}
+  else{
+    /* phones: size the sheet to the collapsed panel, so opening Settings doesn't shrink the layout */
+    const head=document.querySelector('.panel-head'),hh=head?head.getBoundingClientRect().height:110;
+    y0=48/VS;y1=Math.min(y1,(cr.bottom-cr.top-hh-28)/VS-pad);
+  }
+  return{x0,y0,x1,y1};
+}
+function computeFrame(){
+  const s=stageRect(),m=P.margin;
+  if(P.frame==='none'){frameShape=null;return}
+  const x0=s.x0+m,y0=s.y0+m,x1=s.x1-m,y1=s.y1-m,w=Math.max(40,x1-x0),h=Math.max(40,y1-y0);
+  const cx=(x0+x1)/2,cy=(y0+y1)/2;
+  const t=P.frame;
+  frameShape={type:t,cx,cy,rx:w/2,ry:h/2,rot:0,r:0};
+  if(t==='circle'){const r=Math.min(w,h)/2;frameShape.rx=frameShape.ry=r}
+  if(t==='rounded')frameShape.r=Math.min(w,h)*0.14;
+  if(t==='arch'&&frameShape.rx>frameShape.ry)frameShape.rx=frameShape.ry*0.9;
+  if(t==='band'){frameShape.type='rect';frameShape.ry=Math.min(frameShape.ry,Math.max(70,frameShape.rx*0.3))}
+}
+function toLocal(sh,x,y){
+  let dx=x-sh.cx,dy=y-sh.cy;
+  if(sh.rot){const c=Math.cos(-sh.rot),s=Math.sin(-sh.rot);const ax=dx*c-dy*s;dy=dx*s+dy*c;dx=ax}
+  return[dx,dy];
+}
+function insideShape(sh,x,y){
+  const[dx,dy]=toLocal(sh,x,y);
+  switch(sh.type){
+    case'oval':case'circle':return dx*dx/(sh.rx*sh.rx)+dy*dy/(sh.ry*sh.ry)<=1;
+    case'rect':case'rounded':{
+      const r=sh.r||0,adx=Math.abs(dx),ady=Math.abs(dy);
+      if(adx>sh.rx||ady>sh.ry)return false;
+      const ax=adx-(sh.rx-r),ay=ady-(sh.ry-r);
+      if(ax<=0||ay<=0)return true;
+      return ax*ax+ay*ay<=r*r;
+    }
+    case'arch':{
+      if(Math.abs(dx)>sh.rx||dy>sh.ry||dy<-sh.ry)return false;
+      const ya=-sh.ry+sh.rx;
+      if(dy>=ya)return true;
+      return dx*dx+(dy-ya)*(dy-ya)<=sh.rx*sh.rx;
+    }
+  }
+  return false;
+}
+/* closed outline, sampled every `step` px, in world coordinates */
+function outlinePts(sh,step){
+  const L=[];
+  const line=(ax,ay,bx,by)=>{const n=Math.max(1,Math.ceil(Math.hypot(bx-ax,by-ay)/step));for(let i=0;i<n;i++)L.push([ax+(bx-ax)*i/n,ay+(by-ay)*i/n])};
+  const arc=(cx,cy,r,a0,a1)=>{if(r<=0)return;const n=Math.max(1,Math.ceil(Math.abs(a1-a0)*r/step));for(let i=0;i<n;i++){const a=a0+(a1-a0)*i/n;L.push([cx+Math.cos(a)*r,cy+Math.sin(a)*r])}};
+  const{rx,ry}=sh;
+  if(sh.type==='oval'||sh.type==='circle'){
+    const per=Math.PI*(3*(rx+ry)-Math.sqrt((3*rx+ry)*(rx+3*ry))),n=Math.max(24,Math.ceil(per/step));
+    for(let i=0;i<n;i++){const a=i/n*2*Math.PI;L.push([Math.cos(a)*rx,Math.sin(a)*ry])}
+  }else if(sh.type==='arch'){
+    const ya=-ry+rx;
+    line(-rx,ry,rx,ry);line(rx,ry,rx,ya);arc(0,ya,rx,0,-Math.PI);line(-rx,ya,-rx,ry);
+  }else{
+    const r=sh.r||0;
+    line(-rx+r,-ry,rx-r,-ry);arc(rx-r,-ry+r,r,-Math.PI/2,0);
+    line(rx,-ry+r,rx,ry-r);arc(rx-r,ry-r,r,0,Math.PI/2);
+    line(rx-r,ry,-rx+r,ry);arc(-rx+r,ry-r,r,Math.PI/2,Math.PI);
+    line(-rx,ry-r,-rx,-ry+r);arc(-rx+r,-ry+r,r,Math.PI,Math.PI*1.5);
+  }
+  const c=Math.cos(sh.rot||0),s=Math.sin(sh.rot||0);
+  return L.map(([x,y])=>[sh.cx+x*c-y*s,sh.cy+x*s+y*c]);
+}
+function symCenter(){
+  if(frameShape)return[frameShape.cx,frameShape.cy];
+  const s=stageRect();return[(s.x0+s.x1)/2,(s.y0+s.y1)/2];
+}
+function symTransforms(mode,cx,cy){
+  const id={f:(x,y)=>[x,y],rot:0};
+  const mx={f:(x,y)=>[2*cx-x,y],rot:0},my={f:(x,y)=>[x,2*cy-y],rot:0},mxy={f:(x,y)=>[2*cx-x,2*cy-y],rot:Math.PI};
+  if(mode==='mirror-x')return[id,mx];
+  if(mode==='mirror-y')return[id,my];
+  if(mode==='quad')return[id,mx,my,mxy];
+  if(mode&&mode.startsWith('radial-')){
+    const n=+mode.split('-')[1],out=[];
+    for(let k=0;k<n;k++){const a=2*Math.PI*k/n,c=Math.cos(a),s=Math.sin(a);
+      out.push({f:(x,y)=>[cx+(x-cx)*c-(y-cy)*s,cy+(x-cx)*s+(y-cy)*c],rot:a})}
+    return out;
+  }
+  return[id];
+}
+function obstacleAdd(x,y,id){const k=hkey(Math.floor(x/HC),Math.floor(y/HC));let c=hash.get(k);if(!c){c=[];hash.set(k,c)}c.push(x,y,id,0)}
+function addObstacles(){
+  if(frameShape)for(const p of outlinePts(frameShape,2))obstacleAdd(p[0],p[1],FRAME_ID);
+  for(const v of voids)for(const p of outlinePts(v,2))obstacleAdd(p[0],p[1],VOID_ID);
+}
+function resetField(){hash=new Map();shadeInit();addObstacles()}
+/* reserve a point of plant pl in every symmetric copy */
+function hashAddAll(pl,x,y,id,arc){
+  const T=pl.T;
+  for(let k=0;k<T.length;k++){const p=k?T[k].f(x,y):[x,y];hashAdd(p[0],p[1],k?id+k*COPY:id,arc)}
+}
+/* free space: inside the frame (or the sheet), outside every void, for every symmetric copy */
+function inFree(pl,x,y){
+  for(let k=0;k<pl.T.length;k++){
+    const p=k?pl.T[k].f(x,y):[x,y];
+    if(frameShape){if(!insideShape(frameShape,p[0],p[1]))return false}
+    else if(p[0]<4||p[1]<4||p[0]>W-4||p[1]>H-4)return false;
+    for(const v of voids)if(insideShape(v,p[0],p[1]))return false;
+  }
+  return true;
+}
+/* a candidate must stay one gap away from its own symmetric images */
+function selfClear(pl,X,Y,R,skip){
+  /* a shoot forking from a stem that lies on the axis shares that fork with its image; only then may its first
+     points come close to their mirror */
+  let onAxis=false;
+  for(let k=1;k<pl.T.length;k++){const p=pl.T[k].f(X[0],Y[0]);if(Math.hypot(p[0]-X[0],p[1]-Y[0])<R*0.5)onAxis=true}
+  const s0=onAxis?Math.ceil((skip||0)*1.5):0;
+  const T=pl.T;if(T.length<2)return true;
+  const g=new Map(),cs=R*2,key=(i,j)=>i*100003+j;
+  for(let k=1;k<T.length;k++)for(let i=s0;i<X.length;i+=2){
+    const p=T[k].f(X[i],Y[i]),kk=key(Math.floor(p[0]/cs),Math.floor(p[1]/cs));
+    let c=g.get(kk);if(!c){c=[];g.set(kk,c)}c.push(p[0],p[1]);
+  }
+  const R2=R*R;
+  for(let i=s0;i<X.length;i+=2){
+    const ci=Math.floor(X[i]/cs),cj=Math.floor(Y[i]/cs);
+    for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){
+      const c=g.get(key(ci+di,cj+dj));if(!c)continue;
+      for(let q=0;q<c.length;q+=2){const dx=c[q]-X[i],dy=c[q+1]-Y[i];if(dx*dx+dy*dy<R2)return false}
+    }
+  }
+  return true;
+}
+/* voids are placed in every symmetric position of the current mode */
+function addVoid(type,cx,cy,rx,ry){
+  const[sx,sy]=symCenter(),T=symTransforms(P.sym,sx,sy),items=[];
+  for(const t of T){
+    const[x,y]=t.f(cx,cy);
+    if(items.some(v=>Math.hypot(v.cx-x,v.cy-y)<1))continue;
+    items.push({type,cx:x,cy:y,rx,ry,rot:type==='rect'?t.rot:t.rot,r:0});
+  }
+  voids.push(...items);history.push({t:'void',items});
+}
+const gcv=document.getElementById('guides'),gctx=gcv.getContext('2d');
+let dragVoid=null;
+function shapePath(c,sh){const pts=outlinePts(sh,3);c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.closePath()}
+function drawGuides(){
+  gctx.clearRect(0,0,W,H);
+  const mut=getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()||'#5D695F';
+  gctx.strokeStyle=mut;gctx.lineWidth=1;gctx.setLineDash([4,5]);gctx.globalAlpha=0.55;
+  if(P.sym!=='none'){
+    const[cx,cy]=symCenter(),big=Math.hypot(W,H);gctx.beginPath();
+    if(P.sym==='mirror-x'||P.sym==='quad'){gctx.moveTo(cx,0);gctx.lineTo(cx,H)}
+    if(P.sym==='mirror-y'||P.sym==='quad'){gctx.moveTo(0,cy);gctx.lineTo(W,cy)}
+    if(P.sym.startsWith('radial-')){const n=+P.sym.split('-')[1];for(let k=0;k<n;k++){const a=-Math.PI/2+2*Math.PI*k/n;gctx.moveTo(cx,cy);gctx.lineTo(cx+Math.cos(a)*big,cy+Math.sin(a)*big)}}
+    gctx.stroke();
+  }
+  if(P.construct==='shown')for(const pl of plants)for(const c of pl.circles||[])for(let k=0;k<pl.T.length;k++){
+    const p=k?pl.T[k].f(c.x,c.y):[c.x,c.y];gctx.beginPath();gctx.arc(p[0],p[1],c.r,0,2*Math.PI);gctx.stroke();
+  }
+  if(frameShape&&P.frameLine==='guide'){shapePath(gctx,frameShape);gctx.stroke()}
+  if(P.voidLine==='guide')for(const v of voids){shapePath(gctx,v);gctx.stroke()}
+  if(dragVoid){gctx.globalAlpha=0.9;shapePath(gctx,dragVoid);gctx.stroke()}
+  gctx.setLineDash([]);gctx.globalAlpha=1;
+}
+function layoutChanged(){computeFrame();hashRebuild();drawAll();drawGuides()}
+
+
+function resize(){
+  const r=cv.getBoundingClientRect(),sw=Math.max(1,r.width),sh=Math.max(1,r.height);
+  VS=Math.min(1,Math.min(sw,sh)/DESIGN_MIN);W=sw/VS;H=sh/VS;
+  DPR=Math.min(window.devicePixelRatio||1,3);
+  cv.width=Math.round(sw*DPR);cv.height=Math.round(sh*DPR);gcv.width=cv.width;gcv.height=cv.height;
+  ctx.setTransform(DPR*VS,0,0,DPR*VS,0,0);ctx.lineCap='round';ctx.lineJoin='round';
+  gctx.setTransform(DPR*VS,0,0,DPR*VS,0,0);
+  if(!plants.length&&!voids.length)computeFrame();
+  hashRebuild();drawAll();drawGuides();
+}
+
+/* ---------- plants ---------- */
+let plants=[],pidc=0,seedc=(Date.now()&0xfffff);
+function newSeed(){seedc=(seedc+1)>>>0;return Math.imul(seedc,2654435761)>>>0}
+function newPlant(x,y){
+  const pl={seed:newSeed(),prm:{...P},color:P.color,width:P.width,raw:[x,y],paths:[],ms:[],fseg:[],len:0,circles:[],filled:false,stemDone:false,detailed:false};
+  const[cx,cy]=symCenter();pl.T=symTransforms(P.sym,cx,cy);
+  pl.rng=mulberry32(pl.seed);initStem(pl,x,y);plants.push(pl);history.push({t:'plant',pl});return pl;
+}
+function initStem(pl,x,y){
+  const path={id:++pidc,pts:[x,y],kind:'stem',order:0};pl.paths.push(path);
+  pl.stem={path,rx:x,ry:y,sx:x,sy:y,lx:x,ly:y,a:-Math.PI/2,arc:0,
+    lag:pl.prm.fair?46:26,sdk:pl.prm.fair?0.0016:0.0035,major:pl.rng()<.5,
+    k:0,started:false,trail:[[x,y]],ti:0,next:pl.prm.internode*(0.8+pl.rng()*0.4),idx:0,side:pl.rng()<.5?1:-1,dormant:[]};
+  hashAddAll(pl,x,y,path.id,0);
+}
+/* ---------- shoots: classical scroll construction ----------
+   A shoot is one spiral. Its radius of curvature shrinks by a constant RATIO per turn on the
+   outside (a logarithmic spiral, so curvature keeps accelerating from fork to eye, no arc-then-curl),
+   and switches to shrinking by a constant AMOUNT near the eye (the Ionic volute rule), so the loops
+   stay one even gap apart and the scroll can wind its full number of turns into a small closed eye.
+   The switch happens where both rules give the same rate, so even the curvature's rate of change is continuous.
+   Forks are tangent (G1, as in traditional junctions) with a decisive curvature difference, so a child
+   clears its parent within about three line gaps.
+   Each candidate is traced, tested against everything already reserved, and scored on how evenly it
+   fills the space around it; side and size come from the open space at the bud. */
+const STEP=1.4;
+function shootR(pl){return pl.prm.gap+pl.width}
+function hitOther(x,y,r,ign){
+  const r2=r*r,ci=Math.floor(x/HC),cj=Math.floor(y/HC),n=Math.ceil(r/HC);
+  for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){
+    const c=hash.get(hkey(ci+di,cj+dj));if(!c)continue;
+    for(let q=0;q<c.length;q+=4){
+      const dx=c[q]-x,dy=c[q+1]-y;if(dx*dx+dy*dy>r2)continue;
+      if(ign&&ign.indexOf(c[q+2])>=0)continue;
+      return true;
+    }
+  }
+  return false;
+}
+function nearOwners(x,y,r,own){
+  const r2=r*r,ci=Math.floor(x/HC),cj=Math.floor(y/HC),n=Math.ceil(r/HC);
+  for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){
+    const c=hash.get(hkey(ci+di,cj+dj));if(!c)continue;
+    for(let q=0;q<c.length;q+=4){
+      if(own.indexOf(c[q+2])<0)continue;
+      const dx=c[q]-x,dy=c[q+1]-y;if(dx*dx+dy*dy<=r2)return true;
+    }
+  }
+  return false;
+}
+function setPoint(pr,order,a){
+  const g=pr.light;
+  let phi=g>=0?(90+(20+(order-1)*20-90)*g):(90+75*(-g));
+  phi=clamp(phi,6,174)*DEG;
+  return -Math.PI/2+(Math.cos(a)>=0?1:-1)*phi;
+}
+/* total heading a scroll turns: log part down to the switch radius, then even-gap part down to the eye */
+function scrollTheta(b,S,g,rhoE){
+  const ar=Math.max(0,S-rhoE)*2*Math.PI/g;
+  if(b<=1e-6)return ar;
+  const rs=g/(2*Math.PI*b);
+  if(rs>=S)return ar;
+  return Math.log(S/rs)/b+Math.max(0,rs-rhoE)*2*Math.PI/g;
+}
+function solveB(S,T,g,rhoE){
+  const target=T*2*Math.PI;
+  if(scrollTheta(0,S,g,rhoE)<=target)return 0;      /* small scroll: pure even-gap volute, as many turns as fit */
+  let lo=1e-4,hi=6;
+  for(let i=0;i<48;i++){const mid=(lo+hi)/2;if(scrollTheta(mid,S,g,rhoE)>target)lo=mid;else hi=mid}
+  return hi;
+}
+function traceShoot(x,y,a,kj,segs,sp){
+  const X=[x],Y=[y],A=[a],K=[kj];let k=kj;
+  for(const sg of segs){
+    const n=Math.max(1,Math.round(sg.L/STEP)),dk=(sg.k1-k)/n;
+    for(let i=0;i<n;i++){k+=dk;a+=k*STEP;x+=Math.cos(a)*STEP;y+=Math.sin(a)*STEP;X.push(x);Y.push(y);A.push(a);K.push(k)}
+  }
+  const sIdx=X.length-1;let vIdx=sIdx,th=0;
+  if(sp){
+    let rho=sp.S;const rs=sp.b>0?sp.g/(2*Math.PI*sp.b):Infinity,last=Math.min(sp.thTot,sp.thMax||1e9)-2*Math.PI;vIdx=-1;
+    while(X.length<8000){
+      const dth=STEP/rho;th+=dth;
+      if(rho>rs)rho*=Math.exp(-sp.b*dth);else rho-=sp.g/(2*Math.PI)*dth;
+      if(rho<=sp.rhoE||(sp.thMax&&th>=sp.thMax))break;
+      k=sp.sign/rho;a+=k*STEP;x+=Math.cos(a)*STEP;y+=Math.sin(a)*STEP;X.push(x);Y.push(y);A.push(a);K.push(k);
+      if(vIdx<0&&th>=last)vIdx=X.length-1;
+    }
+    if(vIdx<0)vIdx=sIdx;
+  }
+  return{X,Y,A,K,sIdx,vIdx,th};
+}
+/* the fork: tangent, and at least this much curvature difference so the child clears in ~3 gaps */
+const forkDk=R=>2/(9*R);
+function shootSpec(pl,bud,shrink,side,avail){
+  const pr=pl.prm,r=pl.rng,v=pr.wander,R=shootR(pl);
+  const term=bud.kind==='terminal';
+  const g=R*1.3;
+  const hier=term?pr.size*1.1:pr.size*Math.pow(pr.falloff,bud.order-1)*(bud.mult||1);
+  let S;
+  if(bud.fit)S=bud.fit*shrink*(0.85+r()*0.2);
+  else{S=hier*bud.scale*shrink*(1+(r()-0.5)*0.5*v);if(!term&&avail)S=Math.min(S,avail*(0.4+r()*0.14))}
+  const inward=pl.prm.flow==='rule'&&!term&&Math.abs(bud.k)>0.0025&&side!==-Math.sign(bud.k);
+  /* an inward bud may, now and then, reverse into an S-hook inside the parent's curl */
+  const hookIt=inward&&!bud.same&&!bud.junction&&r()<pr.hook;
+  if((bud.same||(bud.fit&&inward&&!hookIt))&&Math.abs(bud.k)>1e-6)S=Math.min(S,0.72/Math.abs(bud.k));   /* the echo is tighter than the curve it sits in */
+  /* hierarchy holds: a scroll may adapt to its space but not dwindle into a snail */
+  /* curled-leaf terminals keep an open eye, like the reference; volutes wind into a small closed one */
+  /* the curl stays open: it stops where its radius is about a third of the scroll, leaving room for the
+     curled leaf that ends every shoot */
+  const rhoE=Math.max(detailR(pl)*3,S*(0.26+r()*0.1));
+  if(S<rhoE*1.3||(!bud.fit&&S<hier*(term?0.25:0.45)))return null;
+  /* classical volute: the radius shrinks by a constant ratio each quarter turn (round loops, not a snail hook),
+     changing to the even-gap Ionic rule near the eye. Turns follow from size: big scrolls wind more. */
+  const dq=clamp(pr.decay+(r()-0.5)*0.1*(0.4+v),0.6,0.9);
+  const b=Math.log(1/dq)/(Math.PI/2),thTot=scrollTheta(b,S,g,rhoE);
+  if(thTot<Math.PI*0.6)return null;            /* at least a third of a turn of curl before the leaf */
+  const thMax=pr.turns*2*Math.PI*(1+(r()-0.5)*0.1);
+  let rev=!term&&r()<pr.rev;
+  /* flow rule (good/bad spiral direction): where the parent is curving, the branch's spiral turns against it,
+     so parent and branch read as one S. Peeling outward does that directly; peeling inward has to be an S-scroll. */
+  if(bud.same||bud.junction){
+    /* nested echo: peels inward and winds with its parent; it must curl tighter than the parent to separate */
+    rev=false;
+  }else if(!term&&pr.flow==='rule'&&Math.abs(bud.k)>0.0025){
+    /* outward peel: counter-rotates naturally. Inward peel (into the parent's hollow): no S-reversal there, it
+       reads as a hook. A pocket filler winds with the parent instead, as a tighter echo; a regular branch does not
+       grow inward at all. S-scrolls are kept for buds on straight runs, where the S has room to read. */
+    const ds=-Math.sign(bud.k);
+    if(side===ds)rev=false;
+    else if(hookIt)rev=true;
+    else if(bud.fit)rev=false;
+    else return null;
+  }
+  const vs=rev?-side:side;
+  const kp=bud.k,kS=vs/S,dkm=forkDk(R),segs=[];
+  let kj;
+  if(term){
+    kj=kp;
+    if(Math.abs(kS-kp)>1e-4)segs.push({k1:kS,L:Math.min(S*0.35,40)});
+  }else if(rev){
+    /* S-scroll: lead out to one side, pass through zero, wind the other way */
+    const Sa=bud.fit?S*(0.6+r()*0.3):S*(0.8+r()*0.5);
+    let ka=side/Sa;kj=ka;
+    if(side*(ka-kp)<dkm){kj=kp+side*dkm;segs.push({k1:ka,L:4.5*R})}
+    segs.push({k1:ka,L:Math.max(3*R,Sa*(0.35+r()*0.4))});
+    segs.push({k1:kS,L:clamp((1/S+1/Sa)*S*S/Math.max(b,0.05),S*0.3,S*1.1)});
+  }else{
+    kj=kS;
+    if(side*(kS-kp)<dkm){kj=kp+side*dkm;segs.push({k1:kS,L:4.5*R})}
+  }
+  return{kj,segs,sp:{S,b,g,rhoE,sign:vs,thTot,thMax:thTot>thMax?thMax:0},side};
+}
+/* curled-leaf terminal, built like the reference: the inner edge leaves the scroll 40% of the way into its last
+   turn, aimed between the scroll's tangent and the chord to the tip, and runs as one tighter circular arc to the
+   tip, where it meets the scroll in a claw point. The pair encloses a crescent. Drawn as one continuous line:
+   out along the scroll to the tip, then back along the arc. */
+function arcThrough(px,py,tx,ty,qx,qy,sg,maxSweep){
+  const nx=-ty,ny=tx,dx=qx-px,dy=qy-py,d2=dx*dx+dy*dy,den=2*sg*(dx*nx+dy*ny);
+  if(Math.abs(den)<1e-6)return null;
+  const rad=d2/den;if(!(rad>1e-3))return null;
+  const cx=px+sg*nx*rad,cy=py+sg*ny*rad,a0=Math.atan2(py-cy,px-cx);
+  let da=Math.atan2(qy-cy,qx-cx)-a0;
+  if(sg>0){while(da<=0)da+=2*Math.PI}else{while(da>=0)da-=2*Math.PI}
+  if(Math.abs(da)>(maxSweep||Math.PI*1.85))return null;
+  const n=Math.max(4,Math.ceil(Math.abs(da)*rad/STEP)),pts=[];
+  for(let i=0;i<=n;i++){const g=a0+da*i/n;pts.push([cx+Math.cos(g)*rad,cy+Math.sin(g)*rad])}
+  return pts;
+}
+/* long-way return arc on chord P->Q, bulging toward side `bs` (+1/-1 relative to chord left normal), sweep sw (rad, >pi allowed) */
+function clawArc(px,py,qx,qy,bs,sw){
+  const dx=qx-px,dy=qy-py,c=Math.hypot(dx,dy);if(c<1e-6)return null;
+  const ux=dx/c,uy=dy/c,nx=-uy*bs,ny=ux*bs;               /* unit normal toward the bulge */
+  const r=(c/2)/Math.sin(sw/2);
+  const h=Math.sqrt(Math.max(0,r*r-c*c/4))*(sw>Math.PI?1:-1); /* long arc: centre on the bulge side */
+  const mx=(px+qx)/2+nx*h,my=(py+qy)/2+ny*h;
+  const a0=Math.atan2(py-my,px-mx);
+  /* direction: go round through the bulge side */
+  const mid=a0+sw/2,test=[mx+Math.cos(mid)*r-(px+qx)/2,my+Math.sin(mid)*r-(py+qy)/2];
+  const dir=(test[0]*nx+test[1]*ny)>0?1:-1;
+  const n=Math.max(6,Math.ceil(sw*r/STEP)),pts=[];
+  for(let i=0;i<=n;i++){const g=a0+dir*sw*i/n;pts.push([mx+Math.cos(g)*r,my+Math.sin(g)*r])}
+  return pts;
+}
+function lobeOK(T,iS,end,inner,R){
+  let gapMax=0;const m=inner.length;
+  for(let j=1;j<m-1;j++){
+    let best=1e9,bi=iS;
+    for(let i=iS;i<=end;i++){const d=Math.hypot(inner[j][0]-T.X[i],inner[j][1]-T.Y[i]);if(d<best){best=d;bi=i}}
+    const t=j/(m-1),sg=Math.sign(T.K[bi])||1;
+    const side=(inner[j][0]-T.X[bi])*(-Math.sin(T.A[bi]))*sg+(inner[j][1]-T.Y[bi])*Math.cos(T.A[bi])*sg;
+    if(t>0.04&&t<0.96&&side<-0.3)return false;                 /* never crosses the scroll */
+    if(t>0.35&&t<0.85&&best<R*0.55)return false;               /* clear in the middle; tapers to points at both ends */
+    gapMax=Math.max(gapMax,best);
+  }
+  return gapMax>=R*1.2;
+}
+/* curled-leaf terminal, as in the reference: the returning curve leaves the scroll about three-quarters of a turn
+   before the tip and runs back to it as one tight, long-way arc (close to a semicircle on the split-to-tip chord),
+   tucked inside the last loop, so the end reads as a claw. Largest sweep that still clears the scroll wins. */
+function addLobe(T,R,r){
+  T.nMain=T.X.length;
+  const end=T.X.length-1;
+  if(end-T.sIdx<14)return T;
+  let acc=0,iS=end;const want=2*Math.PI*(0.68+r()*0.08);
+  while(iS>T.sIdx+2&&acc<want){acc+=Math.abs(T.K[iS])*STEP;iS--}
+  const k0=Math.abs(T.K[T.sIdx]);
+  while(iS<end-10&&Math.abs(T.K[iS])<k0*2)iS++;
+  if(1/Math.max(1e-6,Math.abs(T.K[iS]))<R*3.4)return T;   /* a tight eye stays a clean spiral; no claw squeezed into it */
+  const px=T.X[iS],py=T.Y[iS],qx=T.X[end],qy=T.Y[end],im=(iS+end)>>1;
+  if(Math.hypot(qx-px,qy-py)<R*2.2)return T;
+  const cr=(qx-px)*(T.Y[im]-py)-(qy-py)*(T.X[im]-px),bs=cr>0?1:-1;
+  for(const sw of [3.5,3.25,3.0,2.75,2.5,2.2,1.9]){
+    const arc=clawArc(px,py,qx,qy,bs,sw);
+    if(!arc||!lobeOK(T,iS,end,arc,R))continue;
+    T.lobeStart=iS;
+    for(let j=arc.length-2;j>=0;j--){T.X.push(arc[j][0]);T.Y.push(arc[j][1]);T.A.push(0);T.K.push(0)}
+    return T;
+  }
+  return T;
+}
+function probe(x,y,dx,dy,maxD,R){
+  for(let d=R*0.8;d<=maxD;d+=R*0.75)if(hitOther(x+dx*d,y+dy*d,R*0.45,null))return d;
+  return maxD;
+}
+/* open room on one side of a bud: along the normal and diagonally forward */
+function openRoom(bud,side,maxD,R){
+  const a=bud.a,nx=-Math.sin(a)*side,ny=Math.cos(a)*side,fx=Math.cos(a),fy=Math.sin(a);
+  const d1=probe(bud.x,bud.y,nx,ny,maxD,R);
+  const dx=(nx+fx)*0.7071,dy=(ny+fy)*0.7071;
+  const d2=probe(bud.x,bud.y,dx,dy,maxD,R);
+  return (d1+d2)/2;
+}
+/* a bud on a symmetry axis forks from a parent that coincides with its own image there */
+function axisOwners(pl,x,y,own,R){
+  const out=own.slice();
+  for(let k=1;k<pl.T.length;k++){const p=pl.T[k].f(x,y);if(Math.hypot(p[0]-x,p[1]-y)<R)for(const o of own)out.push(o+k*COPY)}
+  return out;
+}
+function evalPlan(pl,bud,T,own,spec){
+  const pr=pl.prm,R=shootR(pl),{X,Y,A}=T,n=X.length;
+  own=axisOwners(pl,X[0],Y[0],own,R*2);
+  if(n<8)return null;
+  let skip=-1;
+  for(let i=0;i<n;i++){if(!nearOwners(X[i],Y[i],R,own)){skip=i;break}}
+  if(skip<0||skip>n*0.5)return null;
+  if(bud.kind!=='terminal'&&skip*STEP>4.2*R)return null;   /* no tram lines at forks */
+  skip+=2;
+  for(let i=1;i<n;i+=2){
+    if(!inFree(pl,X[i],Y[i]))return null;
+    if(hitOther(X[i],Y[i],R,i<skip?own:null))return null;
+  }
+  if(!selfClear(pl,X,Y,R,skip))return null;
+  /* even negative space: clearance to the nearest neighbour should sit near a target gap */
+  const Tg=R*4.2,maxD=Tg*2.5;
+  let fit=0,c=0,lt=0,lc=0,dev=0,dc=0;
+  for(let i=Math.max(skip,n*0.08|0);i<n*0.92;i+=9){
+    const nx=-Math.sin(A[i]),ny=Math.cos(A[i]);
+    const cl=Math.min(probe(X[i],Y[i],nx,ny,maxD,R),probe(X[i],Y[i],-nx,-ny,maxD,R));
+    fit+=Math.abs(cl-Tg)/Tg;c++;
+  }
+  for(let i=0;i<n;i+=8){lt+=lightAt(X[i],Y[i]);lc++}
+  if(bud.order>0)for(let i=skip;i<=T.vIdx;i+=8){dev+=Math.abs(wrap(A[i]-setPoint(pr,bud.order,A[i])));dc++}
+  const score=-(c?fit/c:0)*30+Math.sqrt(n*STEP)*1.6+(lc?lt/lc:1)*pr.seek*25-(dc?dev/dc:0)*Math.abs(pr.light)*12
+    +(bud.pref&&spec.side===bud.pref?6:0);
+  return{skip,score};
+}
+function commitPlan(pl,bud,T,ev,leaf,own,kind){
+  const path={id:++pidc,pts:[T.X[0],T.Y[0]],plan:[],kind:kind||(leaf?'leaf':'shoot'),order:bud.order,nMain:T.nMain||T.X.length,filler:!!bud.fit&&!bud.base};
+  if(!leaf)path.geo={X:T.X,Y:T.Y,A:T.A,K:T.K,n:T.nMain||T.X.length,skip:ev.skip||0,vIdx:T.vIdx,lobeStart:T.lobeStart||T.X.length};
+  for(let i=0;i<T.X.length;i++){path.plan.push(T.X[i],T.Y[i]);hashAddAll(pl,T.X[i],T.Y[i],path.id,i*STEP)}
+  pl.paths.push(path);
+  const m={path,pid:path.id,X:T.X,Y:T.Y,A:T.A,K:T.K,n:T.X.length,cur:0,acc:0,order:bud.order,scale:bud.scale,
+    buds:[],delay:2+(pl.rng()*10|0),leaf};
+  if(!leaf&&bud.kind!=='terminal')scheduleBuds(pl,m,ev.skip,T.vIdx);
+  else if(!leaf)scheduleNest(pl,m,(ev.skip||0)+Math.round(3*shootR(pl)/STEP),T.vIdx);
+  pl.ms.push(m);
+  if(!leaf){const ownB=axisOwners(pl,T.X[0],T.Y[0],own||[],shootR(pl)*2);m.band=buildBand(pl,T,path.id,ev.skip,ownB)}
+  T.forkSkip=ev.skip||0;
+  if(!leaf&&bud.order>=1&&!bud.fit&&!bud.same&&own&&own.length&&pl.rng()<pl.prm.collar)junctionCurl(pl,T,own,path.id,bud);
+  return m;
+}
+/* rhythm: offshoots come off the body only (never the last turn of the volute), at intervals that shorten
+   toward the volute, alternating major and minor; a leaf may sit on the shoulder where the volute begins */
+/* a large scroll can carry a scaled-down echo of itself: an offshoot that peels into its own hollow and curls the
+   same way, filling the open centre. Terminal scrolls (the biggest) get one too. */
+function scheduleNest(pl,m,start,vIdx){
+  const pr=pl.prm,r=pl.rng,R=shootR(pl),rel=Math.round(Math.max(18,pr.internode)/STEP);
+  if(vIdx<=start+8)return;
+  const big=1/Math.max(1e-6,Math.abs(m.K[Math.min(start,m.n-1)]));
+  if(big>pr.size*0.45&&r()<pr.nest){
+    const i=start+Math.round((vIdx-start)*(0.5+r()*0.18)),kk=m.K[i],rho=1/Math.max(1e-6,Math.abs(kk));
+    if(rho>Math.max(14,R*3.5)){m.buds.push({i,forceSide:Math.sign(kk)||1,same:true,mult:0.42+r()*0.1,kind:'shoot',rel:i+rel});m.buds.sort((a,b)=>a.rel-b.rel)}
+  }
+}
+function scheduleBuds(pl,m,skip,vIdx){
+  const pr=pl.prm,r=pl.rng,R=shootR(pl);
+  const rel=Math.round(Math.max(18,pr.internode)/STEP);
+  const start=skip+Math.round(3*R/STEP);
+  /* each scroll repeats the unit at a smaller scale: one main offshoot from the crest of its body, and sometimes a
+     second, smaller one further on. Never a comb. */
+  if(m.order<pr.depth&&vIdx>start+8){
+    const span=vIdx-start,rho0=1/Math.max(1e-6,Math.abs(m.K[Math.min(start,m.n-1)]));
+    const picks=[[0.26+r()*0.18,1]];
+    if(r()<0.5-0.12*m.order)picks.push([0.6+r()*0.15,0.55+r()*0.12]);
+    for(const [t,mult] of picks){
+      const i=start+Math.round(span*t),rho=1/Math.max(1e-6,Math.abs(m.K[i]));
+      if(rho<rho0*0.42||rho<Math.max(12,R*2.5))continue;
+      const kk=m.K[i];
+      const pref=Math.abs(kk)>0.003?(pr.flow==='rule'||r()<pr.counter?-Math.sign(kk):Math.sign(kk)):(r()<.5?1:-1);
+      m.buds.push({i,pref,mult,kind:'shoot',rel:i+rel});
+    }
+    scheduleNest(pl,m,start,vIdx);
+  }
+  if(r()<pr.leaves&&vIdx>start){
+    const i=vIdx;
+    m.buds.push({i,forceSide:-Math.sign(m.K[i])||1,kind:'leaf',rel:i+rel});
+  }
+  m.buds.sort((a,b)=>a.rel-b.rel);
+}
+function planShoot(pl,bud,own){
+  const pr=pl.prm,R=shootR(pl);
+  if(bud.kind==='leaf')return planLeaf(pl,bud,own,leafHint(pl,bud));
+  const term=bud.kind==='terminal';
+  const sides=term?[bud.side]:bud.forceSide?[bud.forceSide]:[bud.pref||1,-(bud.pref||1)];
+  const hierMax=pr.size*Math.pow(pr.falloff,Math.max(0,bud.order-1))*1.2;
+  const room={};
+  for(const s of sides)room[s]=term?0:openRoom(bud,s,hierMax*3,R);
+  let best=null,bs=-1e18;
+  for(const shrink of term?[1,0.75,0.55,0.4,0.3]:[1,0.8,0.64]){
+    for(const s of sides)for(let t=0;t<5;t++){
+      const spec=shootSpec(pl,bud,shrink,s,room[s]);if(!spec)continue;
+      let T=traceShoot(bud.x,bud.y,bud.a,spec.kj,spec.segs,spec.sp);
+      T=addTermLeaf(T,pl);if(!T)continue;
+      const ev=evalPlan(pl,bud,T,own,spec);
+      if(ev&&ev.score>bs){bs=ev.score;best={T,ev}}
+    }
+    if(best)break;
+  }
+  if(best)return commitPlan(pl,bud,best.T,best.ev,false,own);
+  /* a leaf fills the pocket only if it is a real pocket */
+  if(!term&&pr.leaves>0){
+    const s=sides[0],rm=room[s]||0;
+    if(rm>R*3&&pl.rng()<pr.leaves)return planLeaf(pl,{...bud,forceSide:rm>=(room[-s]||0)?s:-s},own,Math.min(leafHint(pl,bud),rm*0.6));
+  }
+  return null;
+}
+function leafHint(pl,bud){return pl.prm.size*Math.pow(pl.prm.falloff,Math.max(0,bud.order-1))*0.38}
+/* leaf: tangent stalk, then an outline around a curved midrib, fuller toward the base and slightly asymmetric */
+function planLeaf(pl,bud,own,hint){
+  const r=pl.rng,R=shootR(pl);
+  const sides=bud.forceSide?[bud.forceSide]:[bud.pref||1,-(bud.pref||1)];
+  let best=null,bs=-1e18;
+  for(const side of sides)for(let t=0;t<4;t++){
+    const L=clamp(hint*(0.75+r()*0.5),9,64),Wd=L*(0.28+r()*0.12),asym=(r()-0.5)*0.5;
+    let kj=side/(L*1.6);
+    if(side*(kj-bud.k)<forkDk(R))kj=bud.k+side*forkDk(R);
+    const Ls=3.5*R+L*0.12;
+    const T=traceShoot(bud.x,bud.y,bud.a,kj,[{k1:side/(L*2.2),L:Ls}],null);
+    const e=T.X.length-1;
+    const km=side*(0.3+r()*0.9)/(L*1.3);
+    const N=Math.max(6,Math.ceil(L/1.1));
+    const mx=[T.X[e]],my=[T.Y[e]],ma=[T.A[e]];
+    for(let j=1;j<=N;j++){const a=ma[j-1]+km*(L/N);ma.push(a);mx.push(mx[j-1]+Math.cos(a)*(L/N));my.push(my[j-1]+Math.sin(a)*(L/N))}
+    const half=(j,sg)=>{const tt=j/N,w=Wd*0.5*Math.pow(Math.sin(Math.PI*Math.pow(tt,0.8)),0.85)*(1+sg*asym);
+      return[mx[j]-Math.sin(ma[j])*w*sg,my[j]+Math.cos(ma[j])*w*sg]};
+    for(let j=1;j<=N;j++){const p=half(j,1);T.X.push(p[0]);T.Y.push(p[1]);T.A.push(0);T.K.push(0)}
+    for(let j=N-1;j>=0;j--){const p=half(j,-1);T.X.push(p[0]);T.Y.push(p[1]);T.A.push(0);T.K.push(0)}
+    const ev=evalLeaf(pl,T,own,e,R);
+    if(ev&&ev.score>bs){bs=ev.score;best={T,ev}}
+  }
+  return best?commitPlan(pl,{...bud,kind:'leaf'},best.T,best.ev,true):null;
+}
+function evalLeaf(pl,T,own,stalkEnd,R){
+  const{X,Y}=T,n=X.length,m=4;
+  own=axisOwners(pl,X[0],Y[0],own,R*2);
+  let skip=-1;
+  for(let i=0;i<=stalkEnd;i++){if(!nearOwners(X[i],Y[i],R,own)){skip=i;break}}
+  if(skip<0||skip*STEP>4.2*R)return null;skip+=2;
+  for(let i=1;i<n;i++){
+    if(!inFree(pl,X[i],Y[i]))return null;
+    if(hitOther(X[i],Y[i],R,i<skip?own:null))return null;
+  }
+  if(!selfClear(pl,X,Y,R,skip))return null;
+  let lt=0,c=0;for(let i=0;i<n;i+=6){lt+=lightAt(X[i],Y[i]);c++}
+  return{skip,score:lt/c+pl.rng()*0.2};
+}
+function budLight(x,y,a,side,R){
+  const d=R*2.5+10;
+  return lightAt(x+Math.cos(a)*d*0.6-Math.sin(a)*side*d,y+Math.sin(a)*d*0.6+Math.cos(a)*side*d);
+}
+function releaseBud(pl,m,b){
+  const pr=pl.prm,r=pl.rng,i=b.i,s=b.forceSide||b.pref||1;
+  const Lq=budLight(m.X[i],m.Y[i],m.A[i],s,shootR(pl));
+  if(Lq<0.1)return;
+  const scale=Math.pow(m.scale,0.6)*(0.72+0.42*Lq)*(0.9+r()*0.2);
+  const bud={x:m.X[i],y:m.Y[i],a:m.A[i],k:m.K[i],order:m.order+1,scale,mult:b.mult,pref:b.pref,forceSide:b.forceSide,same:b.same,kind:b.kind};
+  if(pr.arrange==='opposite'&&b.kind==='shoot'){
+    const first=planShoot(pl,{...bud,forceSide:s},[m.pid]);
+    planShoot(pl,{...bud,forceSide:-s},first?[m.pid,first.pid]:[m.pid]);
+  }else planShoot(pl,bud,[m.pid]);
+}
+function releaseStemBud(pl,b){
+  const pr=pl.prm,st=pl.stem;
+  if(b.kind==='stemleaf'){stemLeaf(pl,b);return}
+  const Lq=budLight(b.x,b.y,b.a,b.pref,shootR(pl));
+  if(Lq<0.1)return;
+  const bud={...b,scale:b.scale*(0.7+0.45*Lq)};
+  if(pr.arrange==='opposite'){
+    const first=planShoot(pl,{...bud,forceSide:b.pref},[st.path.id]);
+    const sec=planShoot(pl,{...bud,forceSide:-b.pref},first?[st.path.id,first.pid]:[st.path.id]);
+    if(first||sec)st.lastFork=b.arc;
+  }else{const m=planShoot(pl,bud,[st.path.id]);if(m)st.lastFork=b.arc}
+}
+function advance(pl,m){
+  if(m.delay>0){m.delay--;return true}
+  const X=m.X,Y=m.Y;
+  const Lq=lightAt(X[m.cur],Y[m.cur]),prog=m.cur/(m.n-1);
+  m.acc+=(0.55+0.7*Lq)*(0.45+0.55*Math.sin(Math.PI*clamp(prog*0.85+0.12,0,1)))*(1-0.05*m.order);
+  while(m.acc>=1&&m.cur<m.n-1){
+    m.acc-=1;const i=++m.cur;
+    pl.fseg.push(X[i-1],Y[i-1],X[i],Y[i]);m.path.pts.push(X[i],Y[i]);pl.len+=STEP;
+    while(m.buds.length&&m.buds[0].rel<=m.cur)releaseBud(pl,m,m.buds.shift());
+  }
+  if(m.cur>=m.n-1){while(m.buds.length)releaseBud(pl,m,m.buds.shift());return false}
+  return true;
+}
+
+/* ---------- ornament details learned from the references ----------
+   Pocket circles (pencil construction sheet): once growth settles, the largest enclosed empty circles are found
+   with a distance field. Each is filled with a curl that branches from the nearest line and is sized to the circle,
+   or with a monoline rosette. Acanthus collars (engraving band): a scalloped sheath leaf hugs a new shoot from its
+   fork, the way engraved acanthus wraps a junction. */
+function fieldMask(G){
+  const gw=Math.ceil(W/G),gh=Math.ceil(H/G),M=new Uint8Array(gw*gh);
+  for(let j=0;j<gh;j++)for(let i=0;i<gw;i++){
+    const x=(i+.5)*G,y=(j+.5)*G;
+    let out=i===0||j===0||i===gw-1||j===gh-1;
+    if(!out&&frameShape&&!insideShape(frameShape,x,y))out=true;
+    if(!out)for(const v of voids)if(insideShape(v,x,y)){out=true;break}
+    if(out)M[j*gw+i]=1;
+  }
+  return{M,gw,gh,G};
+}
+function distField(mask){
+  const{M,gw,gh,G}=mask,D=new Float32Array(gw*gh);
+  for(let k=0;k<D.length;k++)D[k]=M[k]?0:1e6;
+  for(const c of hash.values())for(let q=0;q<c.length;q+=4){
+    const i=Math.floor(c[q]/G),j=Math.floor(c[q+1]/G);if(i>=0&&j>=0&&i<gw&&j<gh)D[j*gw+i]=0;
+  }
+  const b=1.4142;
+  for(let j=0;j<gh;j++)for(let i=0;i<gw;i++){
+    const k=j*gw+i;let v=D[k];
+    if(i>0)v=Math.min(v,D[k-1]+1);
+    if(j>0){v=Math.min(v,D[k-gw]+1);if(i>0)v=Math.min(v,D[k-gw-1]+b);if(i<gw-1)v=Math.min(v,D[k-gw+1]+b)}
+    D[k]=v;
+  }
+  for(let j=gh-1;j>=0;j--)for(let i=gw-1;i>=0;i--){
+    const k=j*gw+i;let v=D[k];
+    if(i<gw-1)v=Math.min(v,D[k+1]+1);
+    if(j<gh-1){v=Math.min(v,D[k+gw]+1);if(i<gw-1)v=Math.min(v,D[k+gw+1]+b);if(i>0)v=Math.min(v,D[k+gw-1]+b)}
+    D[k]=v;
+  }
+  return{D,gw,gh,G};
+}
+/* a pocket is enclosed when lines close it on at least 6 of 8 sides */
+function enclosed(F,cx,cy,r,need){
+  let hits=0;
+  for(let d=0;d<8;d++){
+    const a=d*Math.PI/4,ux=Math.cos(a),uy=Math.sin(a);
+    for(let s=r*0.9;s<=r*2.6;s+=F.G){
+      const i=Math.floor((cx+ux*s)/F.G),j=Math.floor((cy+uy*s)/F.G);
+      if(i<0||j<0||i>=F.gw||j>=F.gh||F.D[j*F.gw+i]<0.75){hits++;break}
+    }
+  }
+  return hits>=(need||5);
+}
+function nearestLine(x,y,maxD){
+  let best=null,bd=maxD*maxD;
+  const ci=Math.floor(x/HC),cj=Math.floor(y/HC),n=Math.ceil(maxD/HC);
+  for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){
+    const c=hash.get(hkey(ci+di,cj+dj));if(!c)continue;
+    for(let q=0;q<c.length;q+=4){const dx=c[q]-x,dy=c[q+1]-y,d=dx*dx+dy*dy;if(d<bd){bd=d;best={x:c[q],y:c[q+1],id:c[q+2]}}}
+  }
+  return best;
+}
+/* a curl branching from the nearest point of a shoot or stem, sized to the pocket */
+function pocketCurl(pl,p,cx,cy,r,R){
+  const a=p.plan||p.pts,lim=Math.min(a.length/2,p.nMain||a.length/2,p.geo&&p.geo.lobeStart?p.geo.lobeStart-4:1e9);
+  let bi=-1,bd=1e18;
+  for(let i=3;i<lim-3;i++){const d=(a[2*i]-cx)**2+(a[2*i+1]-cy)**2;if(d<bd){bd=d;bi=i}}
+  if(bi<0)return false;
+  const x=a[2*bi],y=a[2*bi+1];
+  const a1=Math.atan2(y-a[2*bi-3],x-a[2*bi-4]),a2=Math.atan2(a[2*bi+5]-y,a[2*bi+4]-x);
+  const ds=Math.hypot(a[2*bi+4]-a[2*bi-4],a[2*bi+5]-a[2*bi-3])/2||1;
+  const ang=Math.atan2(a[2*bi+3]-a[2*bi-1],a[2*bi+2]-a[2*bi-2]),k=wrap(a2-a1)/ds;
+  if(Math.abs(k)>1/(R*2.5))return false;
+  const side=Math.sign((cx-x)*(-Math.sin(ang))+(cy-y)*Math.cos(ang))||1;
+  const bud={x,y,a:ang,k,order:Math.max(pl.prm.depth,(p.order||0)+1),scale:1,mult:1,fit:r*0.8,forceSide:side,kind:'shoot'};
+  return!!planShoot(pl,bud,[p.id]);
+}
+/* monoline rosette: a ring and five or six vesica petals, sized to the pocket */
+function rosette(pl,cx,cy,r,R){
+  const rf=r-R*1.3;if(rf<R*2.4)return false;
+  const rg=pl.rng,n=rg()<0.5?5:6,ri=rf*0.3,rot=rg()*Math.PI*2,hw=(rf-ri)*0.34;
+  const shapes=[],ring=[],nc=Math.max(12,Math.ceil(2*Math.PI*ri*0.7/1.2));
+  for(let i=0;i<=nc;i++){const t=i/nc*2*Math.PI;ring.push([cx+Math.cos(t)*ri*0.7,cy+Math.sin(t)*ri*0.7])}
+  shapes.push(ring);
+  for(let j=0;j<n;j++){
+    const th=rot+2*Math.PI*j/n,ux=Math.cos(th),uy=Math.sin(th),vx=-uy,vy=ux,N=Math.max(8,Math.ceil((rf-ri)/1.2)),pts=[];
+    const at=(t,sg)=>{const d=ri+(rf-ri)*t,w=Math.min(hw*Math.pow(Math.sin(Math.PI*Math.pow(t,0.85)),0.75),d*Math.sin(Math.PI/n)*0.78);return[cx+ux*d+vx*w*sg,cy+uy*d+vy*w*sg]};
+    for(let i=0;i<=N;i++)pts.push(at(i/N,1));
+    for(let i=N-1;i>=0;i--)pts.push(at(i/N,-1));
+    shapes.push(pts);
+  }
+  const AX=[],AY=[];
+  for(const s of shapes)for(const q of s){if(!inFree(pl,q[0],q[1])||hitOther(q[0],q[1],R,null))return false;AX.push(q[0]);AY.push(q[1])}
+  if(!selfClear(pl,AX,AY,R))return false;
+  shapes.forEach((s,i)=>{
+    const T={X:s.map(q=>q[0]),Y:s.map(q=>q[1]),A:s.map(()=>0),K:s.map(()=>0)};
+    const m=commitPlan(pl,{order:9,kind:'leaf'},T,{skip:0},true,null,'flower');m.delay=4+i*6;
+  });
+  return true;
+}
+/* runs a few searches per frame so the page never stalls; returns true when the plant is done */
+/* ---------- side-view flower ----------
+   Profile of a lily/fleur-de-lis bloom, symmetric about the stalk axis, every edge a circular arc:
+   a cup-shaped calyx with two small curled sepals, a pointed central petal (vesica), and two side petals that flare
+   out and curl their tips outward and down. Local frame: v across the axis, u along it (u=0 at the calyx base). */
+function bulgeArc(p,q,amt,D){
+  const dx=q[0]-p[0],dy=q[1]-p[1],c=Math.hypot(dx,dy);if(c<1e-6)return[p,q];
+  const nx=-dy/c,ny=dx/c,mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2,sg=Math.sign(nx*(D[0]-mx)+ny*(D[1]-my))||1;
+  return arcSag(p,q,sg*amt*c);
+}
+function flowerLocal(H,W,rg){
+  rg=rg||Math.random;
+  const J=a=>1+(rg()-0.5)*2*a,hb=H*0.17,out=[];
+  const join=(...arcs)=>{const o=arcs[0].slice();for(let i=1;i<arcs.length;i++)o.push(...arcs[i].slice(1));return o};
+  /* calyx cup */
+  const cw=W*0.17;
+  out.push(bulgeArc([-cw,hb],[cw,hb],0.36,[0,-H]));
+  /* sepals: small hooks curling out and down from the cup's rim */
+  for(const s of [-1,1]){
+    const a=[s*cw,hb],b=[s*(cw+W*0.15*J(0.15)),hb*0.45];
+    out.push(bulgeArc(a,b,0.42,[s*W,H]));
+  }
+  /* central petal: a pointed vesica */
+  const pb=W*0.09,tip=[0,H];
+  out.push(join(bulgeArc([-pb,hb],tip,0.13*J(0.15),[-W,H*0.5]),bulgeArc(tip,[pb,hb],0.13*J(0.15),[W,H*0.5])));
+  /* side petals: outer edge flares out, the tip curls outward and down, the inner edge returns concave */
+  const ht=H*(0.62+rg()*0.08),tw=W*(0.4+rg()*0.06);
+  for(const s of [-1,1]){
+    const base=[s*cw*0.95,hb*1.05],T=[s*tw,ht],T2=[s*(tw+W*0.09),ht-H*0.13],inner=[s*W*0.15,hb*1.6];
+    out.push(join(bulgeArc(base,T,0.24,[s*W,0]),bulgeArc(T,T2,0.5,[s*W*2,H*2]),bulgeArc(T2,inner,0.17,[0,H*1.2])));
+  }
+  return out;
+}
+/* a flower on a stalk that springs tangentially from the host line nearest the pocket and turns into it */
+function pocketFlower(pl,p,cx,cy,r){
+  const Rd=detailR(pl),a=p.plan||p.pts,lim=Math.min(a.length/2,p.nMain||a.length/2,p.geo&&p.geo.lobeStart?p.geo.lobeStart-4:1e9);
+  let bi=-1,bd=1e18;
+  for(let i=3;i<lim-3;i++){const d=(a[2*i]-cx)**2+(a[2*i+1]-cy)**2;if(d<bd){bd=d;bi=i}}
+  if(bi<0)return false;
+  const hx=a[2*bi],hy=a[2*bi+1],ht=Math.atan2(a[2*bi+3]-a[2*bi-1],a[2*bi+2]-a[2*bi-2]);
+  for(const sc of [1,0.82,0.66]){
+    const H=r*1.05*sc,W=H*(0.85+pl.rng()*0.15);
+    if(H<Rd*6)continue;
+    for(const dir of [1,-1]){
+      let tx=Math.cos(ht)*dir,ty=Math.sin(ht)*dir;
+      let axis=Math.atan2(cy-hy,cx-hx),B=null,arc=null;
+      for(let it=0;it<5;it++){
+        B=[cx-Math.cos(axis)*H*0.42,cy-Math.sin(axis)*H*0.42];
+        const sg=Math.sign(tx*(B[1]-hy)-ty*(B[0]-hx))||1;
+        arc=arcThrough(hx,hy,tx,ty,B[0],B[1],sg,Math.PI*1.1);
+        if(!arc)break;
+        const e=arc.length-1;axis=Math.atan2(arc[e][1]-arc[e-1][1],arc[e][0]-arc[e-1][0]);
+      }
+      if(!arc||arc.length<5)continue;
+      let stalkLen=0;for(let i=1;i<arc.length;i++)stalkLen+=Math.hypot(arc[i][0]-arc[i-1][0],arc[i][1]-arc[i-1][1]);
+      if(stalkLen<Rd*3.5)continue;
+      const ca=Math.cos(axis),sa=Math.sin(axis);
+      const shapes=flowerLocal(H,W,pl.rng).map(path=>path.map(([v,u])=>[B[0]+ca*u-sa*v,B[1]+sa*u+ca*v]));
+      /* checks: the stalk leaves its host cleanly; everything else keeps the gap */
+      let skip=-1;for(let j=0;j<arc.length;j++)if(!nearOwners(arc[j][0],arc[j][1],Rd,[p.id])){skip=j;break}
+      if(skip<0||skip*1.2>6*Rd)continue;
+      let ok=true;const AX=[],AY=[];
+      for(let j=1;j<arc.length&&ok;j++){const[x,y]=arc[j];if(!inFree(pl,x,y)||hitOther(x,y,Rd,j<skip+1?[p.id]:null))ok=false;AX.push(x);AY.push(y)}
+      for(const s of shapes){if(!ok)break;for(const[x,y]of s){if(!inFree(pl,x,y)||hitOther(x,y,Rd,null)){ok=false;break}AX.push(x);AY.push(y)}}
+      if(!ok||!selfClear(pl,AX,AY,Rd,skip))continue;
+      const all=[arc].concat(shapes);
+      all.forEach((s,i)=>{
+        const T={X:s.map(q=>q[0]),Y:s.map(q=>q[1]),A:s.map(()=>0),K:s.map(()=>0)};
+        const m=commitPlan(pl,{order:9,kind:'leaf'},T,{skip:0},true,null,'flower');m.delay=i?Math.round(stalkLen/1.4)+i*3:2;
+      });
+      return true;
+    }
+  }
+  return false;
+}
+
+/* every filler grows out of a real line: candidate hosts are the stems and shoots nearest the pocket, across all
+   plants; a host seen through a symmetry copy is mapped back to its master so the filler is mirrored with it */
+function pocketHosts(cx,cy,maxD){
+  const best=new Map(),ci=Math.floor(cx/HC),cj=Math.floor(cy/HC),n=Math.ceil(maxD/HC);
+  for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){
+    const c=hash.get(hkey(ci+di,cj+dj));if(!c)continue;
+    for(let q=0;q<c.length;q+=4){const id=c[q+2];if(id<=0)continue;const d=Math.hypot(c[q]-cx,c[q+1]-cy);if(d<=maxD&&!(best.get(id)<=d))best.set(id,d)}
+  }
+  const out=[];
+  for(const [id,d] of best){
+    const k=Math.floor(id/COPY),mid=id-k*COPY;
+    for(const pl of plants){const p=pl.paths.find(q=>q.id===mid);if(!p)continue;
+      if((p.kind!=='shoot'&&p.kind!=='stem')||p.filler)break;
+      let x=cx,y=cy;
+      if(k){const t=pl.T[k],pr0=[13.7,29.3],f=t.f(pr0[0],pr0[1]);
+        const inv=pl.T.find(u=>{const g=u.f(f[0],f[1]);return Math.hypot(g[0]-pr0[0],g[1]-pr0[1])<1e-6});
+        if(!inv)break;[x,y]=inv.f(cx,cy)}
+      out.push({pl,p,d,x,y});break}
+  }
+  return out.sort((a,b)=>a.d-b.d).slice(0,4);
+}
+function fillPockets(pl){
+  const pr=pl.prm,R=shootR(pl);
+  if(!pl.pk)pl.pk={mask:fieldMask(5),tried:[],placed:0,it:0};
+  const st=pl.pk,mask=st.mask,tried=st.tried;
+  const fl=clamp(pr.fill,0,1);
+  if(fl<0.02)return true;
+  /* Fill amount: how many pockets, how small, and how closed a gap must be to count as one */
+  const rmin=Math.max(R*2.6,9)*(1+(1-fl)*1.4),rmax=pr.size*0.62,maxP=Math.round(3+fl*50),need=fl>0.6?5:6;
+  const maxFl=Math.round(1+fl*5);
+  for(let n=0;n<3;n++){
+    if(st.it>=90||st.placed>=maxP)return true;
+    st.it++;
+    const F=distField(mask);
+    let best=-1,bv=0;
+    for(let k=0;k<F.D.length;k++){
+      const v=F.D[k]*F.G;if(v<rmin||v<=bv)continue;
+      const x=(k%F.gw+.5)*F.G,y=((k/F.gw|0)+.5)*F.G;
+      if(tried.some(t=>(t[0]-x)**2+(t[1]-y)**2<t[2]*t[2]))continue;
+      best=k;bv=v;
+    }
+    if(best<0){st.it=999;return true}
+    const cx=(best%F.gw+.5)*F.G,cy=((best/F.gw|0)+.5)*F.G,r=Math.min(bv,rmax);
+    tried.push([cx,cy,Math.max(r*0.9,rmin)]);
+    if(!enclosed(F,cx,cy,r,need))continue;
+    const hosts=pocketHosts(cx,cy,bv+R*4);
+    st.fl=st.fl||0;
+    const room=st.fl<maxFl&&r>pr.size*0.22;
+    const wantF=room&&(pr.pocket==='flowers'||(pr.pocket==='both'&&pl.rng()<0.18)),allowC=pr.pocket!=='flowers',allowF=room&&pr.pocket!=='curls';
+    let ok=false;
+    for(const h of hosts){
+      if(wantF&&allowF){ok=pocketFlower(h.pl,h.p,h.x,h.y,r);if(ok)st.fl++}
+      if(!ok&&allowC)ok=pocketCurl(h.pl,h.p,h.x,h.y,r,R);
+      if(!ok&&allowC)ok=pocketCurl(h.pl,h.p,h.x,h.y,r*0.72,R);
+      if(!ok&&allowF&&!wantF&&pr.pocket==='flowers')ok=pocketFlower(h.pl,h.p,h.x,h.y,r);
+      if(ok){h.pl.circles.push({x:h.x,y:h.y,r});break}
+    }
+    if(ok){st.placed++;drawGuides()}
+  }
+  return false;
+}
+/* ---------- acanthus leaf, constructed from compass arcs ----------
+   Construction rules (engraved scroll practice):
+   1. a leaf grows out of a junction and lies along the new shoot, so the fork is sheathed;
+   2. its free edge is a run of lobes; each lobe is a convex circular arc (the shoulder) rising from a notch to a
+      point, then a concave circular arc returning to the next notch, so every lobe tip leans with the flow;
+   3. lobe lengths shrink geometrically (x0.72) toward the tip, and the envelope swells then narrows;
+   4. the edge leaves the shoot tangentially and closes back onto it at the leaf tip, so the leaf is one stroke.
+   The arcs are exact circles drawn in the shoot's own frame (distance along it, distance from it), so the leaf
+   bends with the scroll while every lobe stays a true arc. */
+function arcSag(p,q,sag){
+  /* circular arc from p to q whose midpoint sits `sag` to the left of the chord (negative = right) */
+  const dx=q[0]-p[0],dy=q[1]-p[1],c=Math.hypot(dx,dy);
+  if(c<1e-6||Math.abs(sag)<1e-6)return[p,q];
+  const s=Math.abs(sag),r=(c*c/4+s*s)/(2*s),nx=-dy/c,ny=dx/c,sg=Math.sign(sag);
+  const mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2,cx=mx-nx*sg*(r-s),cy=my-ny*sg*(r-s);
+  const a0=Math.atan2(p[1]-cy,p[0]-cx);let da=wrap(Math.atan2(q[1]-cy,q[0]-cx)-a0);
+  const amid=Math.atan2(my+ny*sg*s-cy,mx+nx*sg*s-cx);
+  if(Math.abs(wrap(a0+da/2-amid))>0.01)da=da>0?da-2*Math.PI:da+2*Math.PI;
+  const n=Math.max(3,Math.ceil(Math.abs(da)*r/0.9)),o=[];
+  for(let i=0;i<=n;i++){const g=a0+da*i/n;o.push([cx+Math.cos(g)*r,cy+Math.sin(g)*r])}
+  return o;
+}
+function hostAt(T,u){
+  const f=u/STEP,i=Math.min(T.X.length-2,Math.max(0,Math.floor(f))),t=clamp(f-i,0,1);
+  let a0=T.A[i],a1=T.A[i+1];a1=a0+wrap(a1-a0);
+  return{x:T.X[i]+(T.X[i+1]-T.X[i])*t,y:T.Y[i]+(T.Y[i+1]-T.Y[i])*t,a:a0+(a1-a0)*t,k:T.K[i]+(T.K[i+1]-T.K[i])*t};
+}
+/* leaf outline in the shoot frame: u along the shoot, v away from it.
+   Each lobe: a long convex shoulder sweeping forward to its point, then a concave return cutting back underneath
+   to a notch behind the point, so the point overhangs and hooks with the flow. The next lobe rises from that notch.
+   The last lobe's point is the leaf tip; its return closes onto the shoot behind it. */
+/* tangent arc from p (heading t) to q; cw selects the turning direction in the leaf frame (v up) */
+function tArc(p,t,q,cw){
+  const nx=cw?t[1]:-t[1],ny=cw?-t[0]:t[0],dx=q[0]-p[0],dy=q[1]-p[1],den=2*(dx*nx+dy*ny);
+  if(den<=1e-6)return null;
+  const r=(dx*dx+dy*dy)/den,cx=p[0]+nx*r,cy=p[1]+ny*r;
+  const a0=Math.atan2(p[1]-cy,p[0]-cx);let da=Math.atan2(q[1]-cy,q[0]-cx)-a0;
+  if(cw){while(da>=0)da-=2*Math.PI}else{while(da<=0)da+=2*Math.PI}
+  if(Math.abs(da)>Math.PI*1.5)return null;
+  const n=Math.max(4,Math.ceil(Math.abs(da)*r/0.8)),o=[];
+  for(let i=0;i<=n;i++){const g=a0+da*i/n;o.push([cx+Math.cos(g)*r,cy+Math.sin(g)*r])}
+  return o;
+}
+/* leaf outline in the shoot frame: u along the shoot, v away from it. Compass construction per lobe:
+   a long, low shoulder arc rises forward; its crest curls over as a small circle of about 190 degrees and hooks
+   back underneath; the end of that hook is the next notch, where the next (smaller) lobe rises. Crests break
+   forward like a wave, notches are sharp, and the last lobe comes down onto the shoot as the leaf tip. */
+function leafLocal(L,Wm,lobes,rg){
+  rg=rg||Math.random;
+  const J=a=>1+(rg()-0.5)*2*a,rr=0.7+rg()*0.08,env=[1,0.82*J(0.08),0.66*J(0.1),0.52*J(0.1)];
+  const adv=[];let tot=0;
+  for(let j=0;j<lobes;j++){const a=Math.pow(rr,j)*J(0.08);adv.push(a);tot+=a}
+  const pts=[[0,0]];let P=[0,0];
+  for(let j=0;j<lobes;j++){
+    const l=L*adv[j]/tot*1.05,w=Wm*env[j],last=j===lobes-1;
+    const C=[P[0]+l*(0.66+rg()*0.08),Math.max(P[1]+w*0.35,w)];
+    const sh=arcSag(P,C,(j?0.05:0.07)*J(0.3)*Math.hypot(C[0]-P[0],C[1]-P[1]));
+    pts.push(...sh.slice(1));
+    const e=sh.length-1;let th=Math.atan2(sh[e][1]-sh[e-1][1],sh[e][0]-sh[e-1][0]);
+    if(last){
+      const q=[C[0]+l*(0.3+rg()*0.08),0],cu=tArc(C,[Math.cos(th),Math.sin(th)],q,true);
+      pts.push(...(cu||arcSag(C,q,-0.14*l)).slice(1));
+      break;
+    }
+    /* the curl: centre to the right of the heading, radius limited by the room above the notch */
+    const rc=Math.min(l*(0.15+rg()*0.04),(C[1]-w*0.3)/2.1),sw=(188+(rg()-0.5)*24)*Math.PI/180;
+    const cx=C[0]+Math.sin(th)*rc,cy=C[1]-Math.cos(th)*rc,a0=Math.atan2(C[1]-cy,C[0]-cx),n=Math.max(6,Math.ceil(sw*rc/0.7));
+    for(let i=1;i<=n;i++){const g=a0-sw*i/n;pts.push([cx+Math.cos(g)*rc,cy+Math.sin(g)*rc])}
+    P=pts[pts.length-1].slice();
+  }
+  return pts;
+}
+/* ---------- Alfano leaf construction ----------
+   One leaf, one tip. In the leaf's own frame (u along the stem it sits on, v away from it):
+   back edge  - a long "curve": an arc leaving the stem tangentially, then a second tangent arc rolling over the top
+                into the tip, so the tip points forward (optionally a small lobe near the base);
+   front edge - an "S-curve": concave just under the tip (this is what hooks the tip), then convex down to the stem,
+                cut into two small teeth.
+   Never S-curves on both edges: that turns the tip upward. Proportions vary per leaf within these rules. */
+function leafAlfano(L,Wm,rg){
+  rg=rg||Math.random;
+  const pts=[[0,0]],push=a=>{if(a)pts.push(...a.slice(1))};
+  const tanOf=a=>{const e=a.length-1,dx=a[e][0]-a[e-1][0],dy=a[e][1]-a[e-1][1],l=Math.hypot(dx,dy)||1;return[dx/l,dy/l]};
+  const T=[L*(0.74+rg()*0.08),Wm*(0.8+rg()*0.12)];
+  let last=[0,0],tan=[1,0];
+  if(rg()<0.45){
+    /* small lobe at the base of the back edge */
+    const N0=[L*(0.22+rg()*0.06),Wm*(0.34+rg()*0.08)];
+    const a0=tArc([0,0],[1,0],N0,false)||arcSag([0,0],N0,0.15*L);push(a0);
+    const B=[L*(0.44+rg()*0.06),Wm*(0.76+rg()*0.08)];
+    const a1=arcSag(N0,B,0.22*Math.hypot(B[0]-N0[0],B[1]-N0[1]));push(a1);
+    last=B;tan=tanOf(a1);
+  }else{
+    const Sh=[L*(0.48+rg()*0.06),Wm*(0.86+rg()*0.08)];
+    const a0=tArc([0,0],[1,0],Sh,false)||arcSag([0,0],Sh,0.15*L);push(a0);
+    last=Sh;tan=tanOf(a0);
+  }
+  /* roll over the top into the tip */
+  push(tArc(last,tan,T,true)||arcSag(last,T,0.18*Math.hypot(T[0]-last[0],T[1]-last[1])));
+  /* front S-curve: first it cuts back underneath the tip (concave), so the tip overhangs and leans forward,
+     then it swells forward and down to the stem in two teeth */
+  const M=[T[0]-L*(0.05+rg()*0.04),Wm*(0.46+rg()*0.08)],F=[L*(0.88+rg()*0.04),Wm*(0.2+rg()*0.06)],E=[L,0];
+  const c=(p,q)=>Math.hypot(q[0]-p[0],q[1]-p[1]);
+  push(arcSag(T,M,-0.16*c(T,M)));
+  push(arcSag(M,F,0.15*c(M,F)));
+  push(arcSag(F,E,0.17*c(F,E)));
+  return pts;
+}
+/* every shoot ends in a curled leaf: the scroll's own line is the leaf's back and runs to the tip; the front
+   S-curve comes back from the tip along the inside of the curl and closes onto the scroll. Inside the curl when
+   there is room, otherwise the leaf turns outward. */
+function addTermLeaf(T,pl){
+  const Rd=detailR(pl),rg=pl.rng,n0=T.X.length;
+  const want=2*Math.PI*(0.42+rg()*0.14);
+  /* the leaf body always lies inside the curl, with the scroll as its back edge. If the curl is too tight for it,
+     the scroll stops a little earlier (a more open curl) and the leaf is tried again. */
+  for(let tries=0;tries<5;tries++){
+    const n=T.X.length,end=n-1;
+    if(end-T.sIdx<6&&end<12)return null;
+    let acc=0,iB=end;const maxB=Math.max(4,Math.round(end*0.5));
+    while(iB>Math.max(2,end-maxB)&&acc<want){acc+=Math.abs(T.K[iB])*STEP;iB--}
+    const Lt=(end-iB)*STEP;if(Lt<Rd*5.5)return null;
+    let rmin=1e9;for(let i=iB;i<=end;i++)rmin=Math.min(rmin,1/Math.max(1e-6,Math.abs(T.K[i])));
+    const Wm=Math.min(Lt*0.42,0.4*rmin);
+    if(Wm>=Rd*1.6){
+      const sgK=Math.sign(T.K[end])||1,prof=leafAlfano(Lt,Wm,rg),X=[],Y=[];
+      for(let j=prof.length-2;j>=0;j--){
+        const x=Lt-prof[j][0],v=prof[j][1],f=end-x/STEP,i=Math.max(0,Math.min(end-1,Math.floor(f))),t=f-i;
+        const a0=T.A[i],a1=a0+wrap(T.A[i+1]-a0),a=a0+(a1-a0)*t;
+        const cx=T.X[i]+(T.X[i+1]-T.X[i])*t,cy=T.Y[i]+(T.Y[i+1]-T.Y[i])*t;
+        X.push(cx-Math.sin(a)*v*sgK);Y.push(cy+Math.cos(a)*v*sgK);
+      }
+      let ok=true;
+      for(let j=2;j<X.length-2&&ok;j+=2)for(let i=Math.max(0,iB-40);i<iB-2;i+=2)if(Math.hypot(X[j]-T.X[i],Y[j]-T.Y[i])<Rd){ok=false;break}
+      if(ok){
+        T.nMain=n;T.lobeStart=iB;if(T.vIdx>end)T.vIdx=end;
+        for(let j=0;j<X.length;j++){T.X.push(X[j]);T.Y.push(Y[j]);T.A.push(0);T.K.push(0)}
+        return T;
+      }
+    }
+    /* open the curl: end the scroll a little sooner */
+    const cut=Math.max(4,Math.round(n*0.1));
+    if(n-cut<Math.max(12,T.sIdx+6))return null;
+    T.X.length=T.Y.length=T.A.length=T.K.length=n-cut;
+  }
+  return null;
+}
+/* an Alfano leaf lying along a host line (a stem), side so, starting at the host's first point */
+function leafOnHost(pl,H,pid,so,L,Wm,a0){
+  const Rd=detailR(pl),prof=leafAlfano(L,Wm,pl.rng),X=[],Y=[],nH=H.X.length;
+  for(const [u,v] of prof){
+    const f=u/H.step,i=Math.max(0,Math.min(nH-2,Math.floor(f))),t=clamp(f-i,0,1);
+    const aa=H.A[i],ab=aa+wrap(H.A[i+1]-aa),a=aa+(ab-aa)*t,k=H.K[i];
+    if(so===Math.sign(k)&&v>0.42/Math.max(1e-6,Math.abs(k)))return null;
+    const cx=H.X[i]+(H.X[i+1]-H.X[i])*t,cy=H.Y[i]+(H.Y[i+1]-H.Y[i])*t,x=cx-Math.sin(a)*v*so,y=cy+Math.cos(a)*v*so;
+    if(v>Rd*0.6&&(!inFree(pl,x,y)||bandBlocked(x,y,Rd,pid,a0+u,Wm*2.2+Rd*2,null)))return null;
+    X.push(x);Y.push(y);
+  }
+  if(!selfClear(pl,X,Y,Rd,0))return null;
+  const m=commitPlan(pl,{order:9,kind:'leaf'},{X,Y,A:X.map(()=>0),K:X.map(()=>0)},{skip:0},true,null,'collar');
+  m.path.stemArc=a0;m.delay=4;
+  return m;
+}
+/* a leaf on the stem between branches is built the same way as every other leaf: a small curl springs
+   tangentially from the stem and its own line becomes the curled leaf's back edge (addTermLeaf). */
+function stemLeaf(pl,b){
+  const st=pl.stem,pr=pl.prm,r=pl.rng;
+  const fit=clamp(pr.size*(0.2+r()*0.1),detailR(pl)*4.2,pr.size*0.4);
+  for(const side of [b.pref,-b.pref]){
+    const m=planShoot(pl,{x:b.x,y:b.y,a:b.a,k:b.k,order:Math.max(pr.depth,1),scale:1,mult:1,fit,forceSide:side,junction:true,kind:'shoot'},[st.path.id]);
+    if(m){m.path.stemArc=b.arc;return}
+  }
+}
+
+/* junction leaf, engraving construction: the leaf sheathes the joint. Its host is the smooth path from the
+   parent, a little before the fork, into the branch (they share a tangent at the fork). The leaf lies on the inside
+   of that turn, under the branch, its base on the parent and its tip pointing along the branch, so the branch reads
+   as growing out of the leaf. */
+/* junction leaf, built like a terminal: at the fork a short curl springs tangentially from the parent on the side
+   away from the branch; its own line is the leaf's back edge, and the S-curve front returns inside that curl
+   (addTermLeaf runs on it as on every shoot). So the junction carries a small curled leaf, not a shape glued on. */
+function junctionCurl(pl,T,own,cid,bud){
+  const n=T.nMain||T.X.length,a0=T.A[0],x0=T.X[0],y0=T.Y[0],jj=Math.min(n-1,(T.forkSkip||0)+6);
+  const childSide=Math.sign((T.X[jj]-x0)*(-Math.sin(a0))+(T.Y[jj]-y0)*Math.cos(a0))||1;
+  const Sc=1/Math.max(1e-6,Math.abs(T.K[Math.min(n-1,T.sIdx||0)]));
+  const fit=clamp(Sc*(0.34+pl.rng()*0.1),detailR(pl)*4.2,pl.prm.size*0.4);
+  return planShoot(pl,{x:x0,y:y0,a:a0,k:bud.k,order:Math.max(pl.prm.depth,bud.order+1),scale:1,mult:1,fit,
+    forceSide:-childSide,junction:true,kind:'shoot'},own.concat([cid]));
+}
+function buildJunctionLeaf(pl,T,own,cid,skip){
+  const Rd=detailR(pl),r=pl.rng,pid=own[0],par=pl.paths.find(p=>p.id===pid);
+  if(!par)return null;
+  const g=par.kind==='stem'?shootGeo(par):par.geo;if(!g)return null;
+  const x0=T.X[0],y0=T.Y[0];
+  let bi=-1,bd=1e18;for(let i=0;i<g.n;i++){const d=(g.X[i]-x0)**2+(g.Y[i]-y0)**2;if(d<bd){bd=d;bi=i}}
+  if(bi<3||bd>9)return null;
+  const n=T.nMain||T.X.length,vI=Math.min(n-1,T.vIdx||n-1);
+  const S0=1/Math.max(1e-6,Math.abs(T.K[Math.min(n-1,Math.max(T.sIdx||0,skip))]));
+  const a0=T.A[0],jj=Math.min(n-1,skip+6);
+  const so=Math.sign((T.X[jj]-x0)*(-Math.sin(a0))+(T.Y[jj]-y0)*Math.cos(a0))||1;
+  const ign=own.concat([cid]);
+  for(const sc of [1,0.78,0.6]){
+    const L=S0*(0.95+r()*0.35)*sc,Lb=L*(0.26+r()*0.08),La=L-Lb;
+    if(La>vI*STEP*0.75||L<Rd*7)continue;
+    /* composite host: parent back to Lb before the fork, then the branch; resampled evenly */
+    const P=[];let acc=0,i=bi;
+    while(i>0&&acc<Lb+4){acc+=Math.hypot(g.X[i]-g.X[i-1],g.Y[i]-g.Y[i-1]);i--}
+    for(let k=i;k<=bi;k++)P.push([g.X[k],g.Y[k]]);
+    for(let k=1;k<n&&k*STEP<La+6;k++)P.push([T.X[k],T.Y[k]]);
+    const cs=[0];for(let k=1;k<P.length;k++)cs.push(cs[k-1]+Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]));
+    const h=1.2,X=[],Y=[];let q=0;
+    for(let s2=0;s2<=cs[cs.length-1];s2+=h){while(q<cs.length-2&&cs[q+1]<s2)q++;const t=(s2-cs[q])/Math.max(1e-6,cs[q+1]-cs[q]);X.push(P[q][0]+(P[q+1][0]-P[q][0])*t);Y.push(P[q][1]+(P[q+1][1]-P[q][1])*t)}
+    if(X.length<10)continue;
+    const A=[],K=[];
+    for(let k=0;k<X.length;k++){const k0=Math.max(0,k-1),k1=Math.min(X.length-1,k+1);A.push(Math.atan2(Y[k1]-Y[k0],X[k1]-X[k0]))}
+    for(let k=0;k<X.length;k++){const k0=Math.max(0,k-3),k1=Math.min(X.length-1,k+3);K.push(wrap(A[k1]-A[k0])/Math.max(1,(k1-k0)*h))}
+    const u0=Math.max(0,cs[bi-i]-Lb),Wm=L*(0.3+r()*0.08),prof=leafAlfano(Math.min(L,cs[cs.length-1]-u0),Wm,r);
+    const LX=[],LY=[];let ok=true;
+    for(const [u,v] of prof){
+      const f=(u0+u)/h,k=Math.max(0,Math.min(X.length-2,Math.floor(f))),t=clamp(f-k,0,1);
+      const aa=A[k],ab=aa+wrap(A[k+1]-aa),a=aa+(ab-aa)*t,kk=K[k];
+      if(so===Math.sign(kk)&&v>0.42/Math.max(1e-6,Math.abs(kk))){ok=false;break}
+      const x=X[k]+(X[k+1]-X[k])*t-Math.sin(a)*v*so,y=Y[k]+(Y[k+1]-Y[k])*t+Math.cos(a)*v*so;
+      if(v>Rd*0.6&&(!inFree(pl,x,y)||hitOther(x,y,Rd,ign))){ok=false;break}
+      LX.push(x);LY.push(y);
+    }
+    if(!ok||!selfClear(pl,LX,LY,Rd,0))continue;
+    const m=commitPlan(pl,{order:9,kind:'leaf'},{X:LX,Y:LY,A:LX.map(()=>0),K:LX.map(()=>0)},{skip:0},true,null,'collar');
+    m.delay=6;
+    return m;
+  }
+  return null;
+}
+function buildCollar(pl,T,own,cid,R){
+  const Rd=detailR(pl),n=T.nMain||T.X.length,vI=Math.min(n-1,T.vIdx||n-1);
+  const skip=T.forkSkip||0,u0=Math.max(1,skip)*STEP+Rd*0.4;
+  const S0=1/Math.max(1e-6,Math.abs(T.K[Math.min(n-1,Math.max(T.sIdx||0,skip))]));
+  const room=vI*STEP*0.8-u0;
+  for(const sc of [1,0.78,0.6]){
+    const L=Math.min(S0*(0.8+pl.rng()*0.35)*sc,room),Wm=Math.min(S0*(0.3+pl.rng()*0.1)*sc,L*0.46);
+    if(L<Rd*7||Wm<Rd*1.9)continue;
+    const loc=leafAlfano(L,Wm,pl.rng);
+    const kS=Math.sign(T.K[Math.min(n-1,skip+Math.round(L/2/STEP))])||1;
+    /* the leaf body lies on the inside of the shoot's curve, with the shoot as its back edge, as at the terminals */
+    for(const so of [kS]){
+      const X=[],Y=[];let ok=true;
+      for(let j=0;j<loc.length&&ok;j++){
+        const u=u0+loc[j][0],v=loc[j][1],h=hostAt(T,u);
+        if(so===Math.sign(h.k)&&v>0.42/Math.max(1e-6,Math.abs(h.k)))ok=false;   /* would fold inside a tight curve */
+        const x=h.x-Math.sin(h.a)*v*so,y=h.y+Math.cos(h.a)*v*so;
+        if(ok&&v>Rd*0.6&&(!inFree(pl,x,y)||bandBlocked(x,y,Rd,cid,u,Wm*2.2+Rd*2,u<u0+Wm*1.2?own:null)))ok=false;
+        X.push(x);Y.push(y);
+      }
+      if(!ok||!selfClear(pl,X,Y,Rd,0))continue;
+      const m=commitPlan(pl,{order:9,kind:'leaf'},{X,Y,A:X.map(()=>0),K:X.map(()=>0)},{skip:0},true,null,'collar');
+      m.delay=10+Math.round(u0/STEP);
+      return m;
+    }
+  }
+  return null;
+}
+
+/* ---------- acanthus band: every scroll is a leaf ----------
+   The scroll's backbone is one edge of the leaf. The second edge is an offset on the concave side: it leaves the
+   backbone as a point just past the fork, swells over about two widths, then follows the scroll inward at a
+   fraction of the local radius, so it tightens with the spiral the way an offset of a spiral does. Its edge is cut
+   into lobes; each lobe rises gently and drops at a tooth that points toward the tip, and the lobes shrink with
+   the band, so the rhythm quickens toward the eye. Before the eye (or the curled-leaf claw) the band closes back
+   onto the backbone in a point. Detail lines keep a finer clearance than structural lines, as engraving does. */
+function detailR(pl){return pl.width+Math.max(1.6,pl.prm.gap*0.55)}
+function bandBlocked(x,y,r,pid,arc,win,ign){
+  const r2=r*r,ci=Math.floor(x/HC),cj=Math.floor(y/HC),n=Math.ceil(r/HC);
+  for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){
+    const c=hash.get(hkey(ci+di,cj+dj));if(!c)continue;
+    for(let q=0;q<c.length;q+=4){
+      const dx=c[q]-x,dy=c[q+1]-y;if(dx*dx+dy*dy>r2)continue;
+      const id=c[q+2];
+      if(id===pid){if(Math.abs(c[q+3]-arc)<win)continue;return true}
+      if(ign&&ign.indexOf(id)>=0)continue;
+      return true;
+    }
+  }
+  return false;
+}
+function buildBand(pl,T,pid,skip,own){
+  const pr=pl.prm;if(pr.band==='off')return null;
+  const Rd=detailR(pl),X=T.X,Y=T.Y,A=T.A,K=T.K,n=T.nMain||X.length;
+  const vI=Math.min(n-1,T.vIdx||n-1),sgn=T.sgn||Math.sign(K[vI])||1,st=T.step||STEP,a0=T.arc0||0;
+  let i0=Math.max(2,(skip||0)+1);
+  while(i0<n-1&&Math.sign(K[i0])!==sgn)i0++;
+  const iMax=Math.min(n-2,(T.lobeStart||n)-4);
+  if(iMax-i0<10)return null;
+  const S0=1/Math.max(1e-6,Math.abs(K[Math.max(i0,T.sIdx||i0)]));
+  const Wb=clamp(S0*pr.bandW,Rd*1.2,Rd*8),Lr=Wb*2.1,cap=0.36;
+  const ws=[],ix=[];let phi=0,stop=false;
+  for(let i=i0;i<=iMax;i++){
+    const s=(i-i0)*st,rho=1/Math.max(1e-6,Math.abs(K[i]));
+    if(i>i0+6&&cap*rho<Rd*1.15)break;
+    const rise=Math.pow(Math.sin(Math.min(1,s/Lr)*Math.PI/2),0.85);
+    const wr=Wb*rise,wc=cap*rho,wb=wr*wc/Math.pow(Math.pow(wr,4)+Math.pow(wc,4),0.25);   /* smooth minimum: no corner where the leaf enters the spiral */
+    let w=wb;
+    if(pr.band==='scalloped'){
+      /* lobe: a rounded crest leaning toward the tip (late peak), notches sharp but continuous */
+      /* lobes begin once the band has swelled; each is about four widths long, so a leaf has a few clear lobes */
+      const amt=clamp((s-Lr*0.7)/(Lr*0.6),0,1);
+      if(amt>0)phi+=st/(4.2*Math.max(Wb*0.5,wb));
+      const u=phi-Math.floor(phi),f=Math.pow(Math.sin(Math.PI*Math.pow(u,1.5)),0.45);
+      w=wb*(1-amt*0.36*(1-f));
+    }
+    const a=A[i],x=X[i]-Math.sin(a)*w*sgn,y=Y[i]+Math.cos(a)*w*sgn;
+    if(s>Rd*1.5&&(!inFree(pl,x,y)||bandBlocked(x,y,Rd,pid,a0+i*st,w*2.4+Rd*2,s<Wb*2?own:null))){stop=true;break}
+    ws.push(w);ix.push(i);
+  }
+  let m=ws.length;
+  /* close onto the backbone in a point; back off a little first if the band was stopped by a neighbour */
+  if(stop)m=Math.max(0,m-Math.ceil(Rd/st));
+  if(m*st<Math.max(Wb*2.6,Rd*4))return null;
+  const N=Math.min(m-2,Math.ceil(ws[m-1]*2.2/st)+4);
+  const PX=[],PY=[];
+  for(let j=0;j<m;j++){
+    let w=ws[j];const back=m-1-j;
+    if(back<N)w*=Math.pow(back/N,0.75);
+    const i=ix[j],a=A[i];PX.push(X[i]-Math.sin(a)*w*sgn);PY.push(Y[i]+Math.cos(a)*w*sgn);
+  }
+  if(!selfClear(pl,PX,PY,Rd,2))return null;
+  const mm=commitPlan(pl,{order:9,kind:'leaf'},{X:PX,Y:PY,A:PX.map(()=>0),K:PX.map(()=>0)},{skip:0},true,null,'band');
+  mm.delay=T.arc0!==undefined?2:6+Math.round(i0*0.9);
+  return mm;
+}
+/* the stem carries one leaf per curve: split it at its inflections and band each bend on its hollow side */
+function stemBands(pl,p){
+  const g=shootGeo(p);if(!g||pl.prm.band==='off')return;
+  const n=g.n,kmin=1/(pl.prm.size*6);
+  let a=-1,sg=0;
+  const flush=b=>{if(a>=0&&b-a>24){
+    const seg={X:g.X.slice(a,b),Y:g.Y.slice(a,b),A:g.A.slice(a,b),K:g.K.slice(a,b),sgn:sg,step:SSTEP,arc0:a*SSTEP,sIdx:Math.round((b-a)*0.3)};
+    buildBand(pl,seg,p.id,0,[]);
+  }};
+  for(let i=4;i<n-4;i++){
+    const k=g.K[i],s=Math.abs(k)<kmin?0:Math.sign(k);
+    if(s!==sg){flush(i);a=s?i:-1;sg=s}
+  }
+  flush(n-4);
+}
+
+/* ---------- leaf detailing (engraving construction: the red lobe lines) ----------
+   Every scroll carries acanthus lobe lines in its hollow. Each line leaves the backbone tangentially (G1), on the
+   concave side, as a short clothoid that curls a little tighter than the backbone, so it sweeps around the hollow
+   toward the eye. Lines are laid in growth order and spaced in proportion to the local radius, so they get denser
+   toward the volute; each one stops a line gap short of the one before, which nests them like feathers.
+   Runs after growth and pocket fill, so the structure is never crowded out by its own detail. */
+function shootGeo(p){
+  if(p.geo)return p.geo;
+  const a=p.pts,n=a.length/2;if(n<9)return null;
+  const X=[],Y=[],A=[],K=[];
+  for(let i=0;i<n;i++){X.push(a[2*i]);Y.push(a[2*i+1])}
+  for(let i=0;i<n;i++){const j0=Math.max(0,i-1),j1=Math.min(n-1,i+1);A.push(Math.atan2(Y[j1]-Y[j0],X[j1]-X[j0]))}
+  for(let i=0;i<n;i++){const j0=Math.max(0,i-4),j1=Math.min(n-1,i+4);
+    let s=0;for(let j=j0+1;j<=j1;j++)s+=Math.hypot(X[j]-X[j-1],Y[j]-Y[j-1]);K.push(s>0?wrap(A[j1]-A[j0])/s:0)}
+  p.geo={X,Y,A,K,n,skip:0,vIdx:n-1,lobeStart:n};
+  return p.geo;
+}
+/* curvature of a lobe line: an arc about half the local radius, tangent to the backbone, curling slightly tighter */
+function veinK(k,R,q){const kk=Math.abs(k);return Math.max(kk/q,kk+forkDk(R))}
+function tryVein(pl,p,g,i,sg,rc,R,own){
+  const k=g.K[i],q=0.5+pl.rng()*0.08,k0m=veinK(k,R,q),L=rc*(0.8+pl.rng()*0.3);
+  const T=traceShoot(g.X[i],g.Y[i],g.A[i],sg*k0m,[{k1:sg*k0m*1.3,L}],null),n=T.X.length;
+  let skip=-1;
+  for(let j=0;j<n;j++)if(!nearOwners(T.X[j],T.Y[j],R,own)){skip=j;break}
+  if(skip<0||skip*STEP>6*R)return null;
+  skip+=1;
+  let cut=n;
+  for(let j=1;j<n;j++){
+    if(!inFree(pl,T.X[j],T.Y[j])||hitOther(T.X[j],T.Y[j],R,j<skip?own:null)){cut=j-Math.ceil(R*0.8/STEP);break}
+  }
+  if((cut-skip)*STEP<Math.max(R*3,L*0.25))return null;
+  const X=T.X.slice(0,cut),Y=T.Y.slice(0,cut);
+  if(!selfClear(pl,X,Y,R,skip))return null;
+  const m=commitPlan(pl,{order:9,kind:'leaf'},{X,Y,A:X.map(()=>0),K:X.map(()=>0)},{skip:0},true,null,'vein');
+  m.delay=2+(pl.rng()*8|0);
+  return m;
+}
+function veinPath(pl,p,R){
+  const pr=pl.prm,g=shootGeo(p);if(!g)return;
+  if(p.kind==='stem')stemBands(pl,p);
+  const n=g.n,ord=Math.max(1,p.order||1);
+  const cap=pr.size*0.85*Math.pow(pr.falloff,ord-1);
+  const sgV=Math.sign(g.K[Math.min(n-1,g.vIdx||n-1)])||1;
+  if(p.kind==='stem'||ord>2||pl.rng()>pr.veins)return;      /* detail where it belongs, not on every curve */
+  /* lines sit in the curl, not along the whole body: start a third of a turn into the scroll */
+  let i=Math.max((g.skip||0)+Math.ceil(3*R/STEP),6),tw=0;
+  while(i<n-3&&tw<2.1){tw+=Math.abs(g.K[i])*STEP;i++}
+  const iEnd=Math.min(n-3,(g.lobeStart||n)-3);
+  const spF=0.24+0.3*(1-pr.veins),maxV=2+Math.floor(pl.rng()*4);
+  const own=[p.id];let cnt=0;
+  while(i<iEnd&&cnt<maxV){
+    const k=g.K[i],rho=1/Math.max(1e-6,Math.abs(k));
+    if(rho<R*4.5)break;
+    const rc=Math.min(rho,cap);
+    /* the next line may start once this one has cleared the backbone by a line gap */
+    const sep=Math.sqrt(2*R/Math.max(1e-6,veinK(k,R,0.54)-Math.abs(k)));
+    if(Math.abs(k)>1/(cap*4)){
+      const m=tryVein(pl,p,g,i,Math.sign(k)||sgV,rc*(0.75+pl.rng()*0.35),R,own);
+      if(m){own.push(m.pid);cnt++}
+    }
+    i+=Math.max(2,Math.round(Math.max(sep*1.1,R*2.4,spF*rc)*(1+pl.rng()*0.7)/STEP));
+  }
+}
+function detailPass(pl){
+  if(!pl.dq)pl.dq=pl.paths.filter(p=>p.kind==='shoot'||p.kind==='stem').sort((a,b)=>(a.order||0)-(b.order||0));
+  const R=detailR(pl);
+  for(let c=0;c<3&&pl.dq.length;c++)veinPath(pl,pl.dq.shift(),R);
+  return!pl.dq.length;
+}
+
+/* ---------- the stem: a steering point with a curvature-rate limit follows the pen.
+   Limiting how fast curvature may change makes every bend a clothoid transition. ---------- */
+const SSTEP=1.5,SK=0.075;
+function stemAppend(pl,nx,ny){
+  const st=pl.stem,pr=pl.prm,r=pl.rng;
+  const d=Math.hypot(nx-st.lx,ny-st.ly);
+  pl.fseg.push(st.lx,st.ly,nx,ny);
+  st.path.pts.push(nx,ny);hashAddAll(pl,nx,ny,st.path.id,st.arc+d);
+  st.lx=nx;st.ly=ny;st.arc+=d;pl.len+=d;
+  /* the stem's rhythm: branches at irregular intervals, mostly alternating, with a strong major/minor size contrast,
+     and leaves lying along the stem between them, so a stem is dressed but never a comb */
+  if(st.arc>=st.next){
+    const f=clamp(Math.exp(-pr.gradient*st.idx*0.06),0.25,1.8);
+    let side=st.side;if(r()>0.2)st.side=-side;
+    if(pr.flow==='rule'&&Math.abs(st.k)>1/(pr.size*5))side=-Math.sign(st.k);
+    const major=st.major;st.major=r()<0.72?!st.major:st.major;
+    const leafOnly=!major&&r()<0.5;
+    if(st.arc>pr.internode*0.6)st.dormant.push({x:nx,y:ny,a:st.a,k:st.k,arc:st.arc,order:1,scale:f*(0.8+r()*0.35),
+      mult:major?1:0.5+r()*0.15,pref:side,kind:leafOnly?'stemleaf':'shoot'});
+    st.next=st.arc+pr.size*(major?0.5:0.34)*(0.7+r()*0.6)+pr.internode*0.3;
+    st.idx++;
+  }
+  /* apical dominance: stem buds stay dormant until the stem is finished, so no branch can grow across the stem's
+     own path; they then open largest first (see stemFinish) */
+}
+/* pure pursuit: chase a point on the pen trail one look-ahead away, never the raw cursor */
+function trailTarget(st){
+  const T=st.trail;
+  while(st.ti<T.length-1){
+    const p=T[st.ti],dx=p[0]-st.lx,dy=p[1]-st.ly;
+    const behind=Math.cos(st.a)*dx+Math.sin(st.a)*dy<0;
+    if(Math.hypot(dx,dy)<st.lag||behind)st.ti++;else break;
+  }
+  return T[st.ti];
+}
+/* a stem stops where growth would: outside the frame, inside a void, or one gap short of another line or of
+   its own symmetric copies (a stem lying exactly on a mirror axis may coincide with its image) */
+function stemBlocked(pl,x,y){
+  if(!inFree(pl,x,y))return true;
+  const st=pl.stem,R=shootR(pl)*0.8,ign=[st.path.id];
+  for(let k=1;k<pl.T.length;k++){const p=pl.T[k].f(x,y);if(Math.hypot(p[0]-x,p[1]-y)<R)ign.push(st.path.id+k*COPY)}
+  return hitOther(x,y,R,ign);
+}
+function steer(pl,t){
+  const st=pl.stem;
+  if(st.stopped)return 0;
+  const dx=t[0]-st.lx,dy=t[1]-st.ly,dist=Math.hypot(dx,dy);
+  const diff=wrap(Math.atan2(dy,dx)-st.a);
+  const kT=clamp(2*diff/Math.max(dist,8),-SK,SK);
+  st.k+=clamp(kT-st.k,-st.sdk*SSTEP,st.sdk*SSTEP);   /* curvature may only ramp: clothoid transitions */
+  st.a+=st.k*SSTEP;
+  const nx=st.lx+Math.cos(st.a)*SSTEP,ny=st.ly+Math.sin(st.a)*SSTEP;
+  if(st.arc>4&&stemBlocked(pl,nx,ny)){st.stopped=true;return 0}
+  stemAppend(pl,nx,ny);
+  return diff;
+}
+function stemAdvance(pl,finish){
+  const st=pl.stem;let g=0;
+  while(g++<4000&&!st.stopped){
+    const t=trailTarget(st),dist=Math.hypot(t[0]-st.lx,t[1]-st.ly);
+    const last=st.ti===st.trail.length-1;
+    if(last&&dist<=(finish?SSTEP*2:st.lag))break;
+    const diff=steer(pl,t);
+    if(finish&&last&&Math.abs(diff)>Math.PI*0.6)break;
+  }
+}
+/* rinceau: the stem undulates about the pen's path. Each half-wave draws its own length and depth, so the waves
+   are related but never identical; amplitude eases in from the start so the stem still begins at the pen. */
+function meanderPoint(pl,x,y){
+  const st=pl.stem,pr=pl.prm;
+  if(!(pr.meander>0.02))return[x,y];
+  const W=st.wave||(st.wave={px:x,py:y,s:0,ph:0,dx:0,dy:-1,lam:pr.size*(2.4+pl.rng()*0.8),amp:0});
+  const dx=x-W.px,dy=y-W.py,d=Math.hypot(dx,dy);
+  if(d<1e-6)return[x,y];
+  W.dx+=(dx/d-W.dx)*0.2;W.dy+=(dy/d-W.dy)*0.2;const dl=Math.hypot(W.dx,W.dy)||1;
+  W.px=x;W.py=y;W.s+=d;
+  const ph0=W.ph;W.ph+=d*2*Math.PI/W.lam;
+  if(Math.floor(ph0/Math.PI)!==Math.floor(W.ph/Math.PI))W.lam=pr.size*(2.1+pl.rng()*1.1);
+  const target=pr.meander*W.lam*(0.13+0.05*Math.sin(W.ph*0.37+1.3));
+  W.amp+=(target-W.amp)*0.05;
+  const ease=clamp(W.s/(W.lam*0.6),0,1),off=W.amp*ease*Math.sin(W.ph);
+  return[x-W.dy/dl*off,y+W.dx/dl*off];
+}
+function stemFeed(pl,x,y,record=true){
+  const st=pl.stem;if(record)pl.raw.push(x,y);
+  const l=st.trail[st.trail.length-1];
+  const mp=meanderPoint(pl,x,y);
+  if(Math.hypot(mp[0]-l[0],mp[1]-l[1])>=2)st.trail.push(mp);
+  if(!st.started){
+    if(Math.hypot(x-st.lx,y-st.ly)<st.lag)return;
+    st.started=true;st.a=Math.atan2(y-st.ly,x-st.lx);st.k=0;
+  }
+  stemAdvance(pl,false);
+}
+function stemFinish(pl){
+  const st=pl.stem,t=st.trail[st.trail.length-1];
+  if(!st.started&&Math.hypot(t[0]-st.lx,t[1]-st.ly)>4){st.started=true;st.a=Math.atan2(t[1]-st.ly,t[0]-st.lx);st.k=0}
+  if(st.started)stemAdvance(pl,true);
+  /* the stem resolves into its own volute, planned before the last buds break so it gets first claim on the space */
+  let tip=null,endArc=st.arc;
+  const term=(x,y,a,k)=>planShoot(pl,{x,y,a,k,order:0,scale:1,mult:1,side:Math.sign(k)||(pl.rng()<.5?1:-1),kind:'terminal'},[st.path.id]);
+  /* a spine drawn on a mirror axis cannot curl (its volute would cross its own image): it runs on to its finial,
+     usually a void, and keeps its full length */
+  const spine=pl.T.length>1&&pl.T.slice(1).some(t=>{const p=t.f(st.lx,st.ly);return Math.hypot(p[0]-st.lx,p[1]-st.ly)<2});
+  if(st.started&&st.arc>20&&!spine){
+    tip=term(st.lx,st.ly,st.a,st.k);
+    /* no room for the volute at the tip: walk back along the stem, as a draughtsman would end the line earlier */
+    if(!tip){
+      const pts=st.path.pts,n0=pts.length/2,stepB=Math.max(2,Math.round(16/SSTEP)),minI=Math.ceil(((st.lastFork||0)+24)/SSTEP);
+      for(let i=n0-1-stepB;i>minI&&i>6;i-=stepB){
+        pts.length=(i+1)*2;hashRebuild();
+        const a=Math.atan2(pts[2*i+1]-pts[2*i-1],pts[2*i]-pts[2*i-2]),a4=Math.atan2(pts[2*i-7]-pts[2*i-9],pts[2*i-8]-pts[2*i-10]);
+        tip=term(pts[2*i],pts[2*i+1],a,wrap(a-a4)/(4*SSTEP));
+        if(tip){endArc=i*SSTEP;pl.trimmed=true;break}
+      }
+    }
+  }
+  const order=st.dormant.filter(b=>b.arc<endArc-8).sort((a,b)=>(b.kind==='shoot')-(a.kind==='shoot')||b.mult-a.mult||a.arc-b.arc);
+  /* the start of a stem reads as a node, not an end: a smaller shoot springs backwards from it */
+  if(st.started&&!pl.dead){
+    const pts=st.path.pts,k=Math.min(pts.length/2-1,8);
+    if(k>=3){
+      const a0=Math.atan2(pts[2*k+1]-pts[1],pts[2*k]-pts[0]),own=[st.path.id];
+      let placed=0;
+      const tries=[0,0.45,-0.45,0.9,-0.9,1.35,-1.35];
+      for(const sz of [0.55,0.42,0.32]){
+        for(const off of tries){
+          for(const side of [1,-1]){
+            const m=planShoot(pl,{x:pts[0],y:pts[1],a:a0+Math.PI+off,k:0,order:Math.max(1,pl.prm.depth-1),scale:1,mult:1,fit:pl.prm.size*sz,base:true,forceSide:side,kind:'shoot'},own);
+            if(m){placed++;own.push(m.pid);break}
+          }
+          if(placed)break;
+        }
+        if(placed)break;
+      }
+    }
+  }
+  for(const b of order)releaseStemBud(pl,b);
+  /* a stem that could not end in its own volute is cut back to its last branch, which then reads as the leader;
+     a stem with neither is not kept */
+  if(!tip&&st.started&&!spine){
+    if(st.lastFork===undefined){pl.dead=true}
+    else{const keep=Math.max(2,Math.ceil(st.lastFork/SSTEP)+2);if(st.path.pts.length>keep*2){st.path.pts.length=keep*2;pl.trimmed=true}}
+  }
+  if(pl.trimmed){
+    const lim=(st.path.pts.length/2)*SSTEP-6,gone=new Set(pl.paths.filter(p=>p.stemArc!==undefined&&p.stemArc>lim-pl.prm.size*0.3).map(p=>p.id));
+    if(gone.size){pl.paths=pl.paths.filter(p=>!gone.has(p.id));pl.ms=pl.ms.filter(m=>!gone.has(m.pid));hashRebuild()}
+  }
+  st.dormant=[];pl.stemDone=true;
+}
+function replay(pl){
+  const raw=pl.raw;pl.paths=[];pl.ms=[];pl.fseg=[];pl.len=0;pl.circles=[];pl.filled=false;pl.stemDone=false;pl.pk=null;pl.detailed=false;pl.dq=null;
+  pl.seed=newSeed();pl.rng=mulberry32(pl.seed);pl.prm={...P};pl.width=P.width;
+  initStem(pl,raw[0],raw[1]);
+  for(let i=2;i<raw.length;i+=2)stemFeed(pl,raw[i],raw[i+1],false);
+  stemFinish(pl);
+}
+
+/* ---------- drawing ---------- */
+function strokePts(a){
+  const n=a.length/2;if(n<2)return;ctx.moveTo(a[0],a[1]);
+  if(n===2){ctx.lineTo(a[2],a[3]);return}
+  for(let i=1;i<n-1;i++){const x=a[i*2],y=a[i*2+1];ctx.quadraticCurveTo(x,y,(x+a[i*2+2])/2,(y+a[i*2+3])/2)}
+  ctx.lineTo(a[2*n-2],a[2*n-1]);
+}
+function tPts(a,t){if(!t)return a;const o=new Array(a.length);for(let i=0;i<a.length;i+=2){const p=t.f(a[i],a[i+1]);o[i]=p[0];o[i+1]=p[1]}return o}
+function drawAll(){
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=inkColor;ctx.lineWidth=P.width;
+  if(frameShape&&P.frameLine==='drawn'){shapePath(ctx,frameShape);ctx.stroke()}
+  if(P.voidLine==='drawn')for(const v of voids){shapePath(ctx,v);ctx.stroke()}
+  for(const pl of plants){
+    ctx.strokeStyle=col(pl.color);ctx.lineWidth=pl.width;ctx.beginPath();
+    for(let k=0;k<pl.T.length;k++)for(const p of pl.paths)strokePts(k?tPts(p.pts,pl.T[k]):p.pts);
+    ctx.stroke();pl.fseg=[];
+  }
+}
+function drawSegs(){
+  for(const pl of plants){
+    const s=pl.fseg;if(!s.length)continue;
+    ctx.strokeStyle=col(pl.color);ctx.lineWidth=pl.width;ctx.beginPath();
+    for(let k=0;k<pl.T.length;k++){
+      const t=k?pl.T[k]:null;
+      for(let i=0;i<s.length;i+=4){
+        if(t){const a=t.f(s[i],s[i+1]),b=t.f(s[i+2],s[i+3]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1])}
+        else{ctx.moveTo(s[i],s[i+1]);ctx.lineTo(s[i+2],s[i+3])}
+      }
+    }
+    ctx.stroke();pl.fseg=[];
+  }
+}
+const statsEl=$('#stats');let fc=0;
+function updateStats(){
+  let shoots=0,len=0,growing=0;
+  for(const pl of plants){shoots+=pl.paths.length*pl.T.length;len+=pl.len*pl.T.length;growing+=pl.ms.length}
+  const m=len*25.4/96/1000;
+  statsEl.textContent=plants.length?`${plants.length} stem${plants.length>1?'s':''} · ${shoots} shoots · ${m.toFixed(2)} m of line${growing?' · growing':''}`:'Empty sheet';
+}
+function frame(){
+  const subs=RM?400:P.speed;
+  for(let s=0;s<subs;s++){
+    for(const pl of plants){
+      const ms=pl.ms;if(!ms.length)continue;
+      const alive=[];
+      for(let i=0;i<ms.length;i++){if(advance(pl,ms[i]))alive.push(ms[i])}
+      pl.ms=alive;
+    }
+  }
+  if(!drawing&&plants.length&&plants.every(p=>!p.ms.length)){
+    let busy=false;
+    for(const p of plants)if(p.stemDone&&!p.filled){
+      if(p.prm.pocket==='off'||fillPockets(p)){p.filled=true;p.pk=null}
+      busy=true;break;
+    }
+    if(!busy)for(const p of plants)if(p.filled&&!p.detailed){
+      if(p.prm.veins<0.02||detailPass(p)){p.detailed=true;p.dq=null}
+      break;
+    }
+  }
+  drawSegs();
+  if(++fc%12===0)updateStats();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- input ---------- */
+let drawing=null,pen=null;const ROPE=10;
+const hint=$('#hint');
+function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/VS,y:(e.clientY-r.top)/VS}}
+let voidStart=null;
+cv.addEventListener('pointerdown',e=>{
+  if(e.button>0)return;cv.setPointerCapture(e.pointerId);
+  const p=pt(e);
+  if(P.tool!=='stem'){voidStart=p;dragVoid=null;return}
+  if(frameShape&&!insideShape(frameShape,p.x,p.y)){hint.textContent='Start stems inside the frame';return}
+  if(voids.some(v=>insideShape(v,p.x,p.y))){hint.textContent='That spot is a void · start the stem outside it';return}
+  pen={x:p.x,y:p.y};drawing=newPlant(p.x,p.y);hint.textContent='';
+});
+cv.addEventListener('pointermove',e=>{
+  if(voidStart){
+    const p=pt(e),rx=Math.abs(p.x-voidStart.x)/2,ry=Math.abs(p.y-voidStart.y)/2;
+    dragVoid={type:P.tool==='oval'?'oval':'rect',cx:(p.x+voidStart.x)/2,cy:(p.y+voidStart.y)/2,rx:Math.max(1,rx),ry:Math.max(1,ry),rot:0,r:0};
+    drawGuides();return;
+  }
+  if(!drawing)return;
+  const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
+  for(const ev of (evs.length?evs:[e])){
+    const p=pt(ev),dx=p.x-pen.x,dy=p.y-pen.y,d=Math.hypot(dx,dy);
+    if(d>ROPE){pen.x+=dx/d*(d-ROPE);pen.y+=dy/d*(d-ROPE);stemFeed(drawing,pen.x,pen.y)}
+  }
+});
+function endDraw(){
+  if(voidStart){
+    const d=dragVoid;voidStart=null;dragVoid=null;
+    if(d&&d.rx>=8&&d.ry>=8){addVoid(d.type,d.cx,d.cy,d.rx,d.ry);hashRebuild();drawAll()}
+    drawGuides();return;
+  }
+  if(!drawing)return;stemFinish(drawing);
+  if(drawing.dead&&!drawing.paths.slice(1).length){plants.splice(plants.indexOf(drawing),1);history=history.filter(h=>h.pl!==drawing);hashRebuild();drawAll();drawing=null;hint.textContent='No room to grow there';updateStats();return}
+  if(drawing.trimmed){hashRebuild();drawAll()}
+  if(drawing.stem.arc<4){plants.splice(plants.indexOf(drawing),1);history=history.filter(h=>h.pl!==drawing);hashRebuild();drawAll()}
+  drawing=null;updateStats();
+}
+cv.addEventListener('pointerup',endDraw);cv.addEventListener('pointercancel',endDraw);
+
+function undo(){
+  if(drawing)return;const h=history.pop();if(!h)return;
+  if(h.t==='plant')plants=plants.filter(p=>p!==h.pl);
+  else voids=voids.filter(v=>h.items.indexOf(v)<0);
+  hashRebuild();drawAll();drawGuides();updateStats();
+}
+$('#undo').onclick=undo;
+$('#clear').onclick=()=>{if(drawing)return;plants=[];history=history.filter(h=>h.t==='void');hashRebuild();drawAll();drawGuides();updateStats();hint.textContent=voids.length?'Stems cleared · voids kept (Clear voids removes them)':'Drag anywhere to plant a stem'};
+$('#regrow').onclick=()=>{if(drawing||!plants.length)return;resetField();ctx.clearRect(0,0,W,H);for(const pl of plants)replay(pl);drawAll()};
+addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo()}});
+
+/* ---------- SVG export (Catmull-Rom through decimated points) ---------- */
+function pathD(a){
+  const p=[];for(let i=0;i<a.length;i+=6)p.push([a[i],a[i+1]]);
+  const lx=a[a.length-2],ly=a[a.length-1];if(p[p.length-1][0]!==lx||p[p.length-1][1]!==ly)p.push([lx,ly]);
+  const f=v=>+v.toFixed(2);
+  if(p.length<2)return'';
+  let d=`M${f(p[0][0])} ${f(p[0][1])}`;
+  if(p.length===2)return d+`L${f(p[1][0])} ${f(p[1][1])}`;
+  for(let i=0;i<p.length-1;i++){
+    const p0=p[i-1]||p[i],p1=p[i],p2=p[i+1],p3=p[i+2]||p2;
+    d+=`C${f(p1[0]+(p2[0]-p0[0])/6)} ${f(p1[1]+(p2[1]-p0[1])/6)} ${f(p2[0]-(p3[0]-p1[0])/6)} ${f(p2[1]-(p3[1]-p1[1])/6)} ${f(p2[0])} ${f(p2[1])}`;
+  }
+  return d;
+}
+function buildSVG(){
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(W)}" height="${Math.round(H)}" viewBox="0 0 ${Math.round(W)} ${Math.round(H)}">\n`;
+  const outl=sh=>{const p=outlinePts(sh,2);return'M'+p.map(q=>q[0].toFixed(2)+' '+q[1].toFixed(2)).join('L')+'Z'};
+  const lay=[];
+  if(frameShape&&P.frameLine==='drawn')lay.push(outl(frameShape));
+  if(P.voidLine==='drawn')for(const v of voids)lay.push(outl(v));
+  if(lay.length)s+=`<g fill="none" stroke="#1D2620" stroke-width="${P.width}" stroke-linejoin="round">\n${lay.map(d=>`<path d="${d}"/>`).join('\n')}\n</g>\n`;
+  for(const pl of plants){
+    s+=`<g fill="none" stroke="${pl.color==='ink'?'#1D2620':pl.color}" stroke-width="${pl.width}" stroke-linecap="round" stroke-linejoin="round">\n`;
+    for(let k=0;k<pl.T.length;k++)for(const p of pl.paths){if(p.pts.length>=4)s+=`<path d="${pathD(k?tPts(p.pts,pl.T[k]):p.pts)}"/>\n`}
+    s+='</g>\n';
+  }
+  return s+'</svg>';
+}
+const toast=$('#toast');let tt;
+function say(t){toast.textContent=t;toast.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove('on'),1600)}
+$('#copy').onclick=()=>{
+  if(!plants.length&&!frameShape&&!voids.length){say('Nothing to copy yet');return}
+  const svg=buildSVG();
+  const fallback=()=>{$('#svgOut').value=svg;$('#out').hidden=false;$('#svgOut').select()};
+  try{navigator.clipboard.writeText(svg).then(()=>say('SVG copied · one path per shoot'),fallback)}catch(_){fallback()}
+};
+$('#outDone').onclick=()=>{$('#out').hidden=true};
+
+/* ---------- panel toggle ---------- */
+const body=$('#panelBody'),tog=$('#toggle');
+function setOpen(o){body.hidden=!o;tog.setAttribute('aria-expanded',o);tog.textContent=o?'Hide':'Settings'}
+tog.onclick=()=>setOpen(body.hidden);
+
+/* ---------- theme ---------- */
+function themeChanged(){readInk();drawAll();drawGuides()}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',themeChanged);
+new MutationObserver(themeChanged).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- starting presets: classical ornament layouts ----------
+   Each sets the frame, symmetry and voids, then draws its stems through the same pen path a hand would. */
+function setCtl(k,v){
+  P[k]=v;
+  const sel=document.getElementById('sel-'+k);if(sel&&'value' in sel)sel.value=v;
+  const inp=document.getElementById('p-'+k);if(inp&&'value' in inp){inp.value=v;try{inp.dispatchEvent(new Event('input'))}catch(_){}}
+}
+function stroke(fn){
+  const p0=fn(0),pl=newPlant(p0[0],p0[1]);
+  for(let t=0.004;t<=1.0001;t+=0.004){const p=fn(Math.min(1,t));stemFeed(pl,p[0],p[1])}
+  stemFinish(pl);
+  if(pl.dead&&pl.paths.length<2){plants.splice(plants.indexOf(pl),1);history=history.filter(h=>h.pl!==pl)}
+}
+const PRESETS={
+  medallion:{sym:'mirror-x',frame:'rounded',margin:20,build(f,w,h,top,bot){
+    addVoid('oval',f.cx,top+h*0.3,Math.min(w*0.15,h*0.13),h*0.12);return()=>{
+    const mk=(bx,ht,lean,wob,ph)=>stroke(t=>[bx+lean*t*ht+Math.sin(t*Math.PI*1.3+ph)*wob-Math.sin(ph)*wob,bot-10-t*ht]);
+    mk(f.cx-w*0.06,h*0.86,-0.2,w*0.04,0.4);mk(f.cx-w*0.3,h*0.42,-0.15,w*0.025,1.1)}}},
+  candelabrum:{sym:'mirror-x',frame:'rect',margin:20,build(f,w,h,top,bot){
+    addVoid('oval',f.cx,top+h*0.2,Math.min(w*0.13,h*0.1),h*0.1);return()=>{
+    stroke(t=>[f.cx,bot-10-t*h*0.8]);
+    stroke(t=>[f.cx-w*0.16-Math.sin(t*Math.PI*0.9)*w*0.16,bot-10-t*h*0.62]);
+    stroke(t=>[f.cx-w*0.1-t*w*0.24,top+h*0.06+Math.sin(t*Math.PI)*h*0.08])}}},
+  rinceau:{sym:'none',frame:'band',margin:20,build(f,w,h){
+    return()=>stroke(t=>[f.cx-f.rx+18+t*(w-36),f.cy+Math.sin(t*Math.PI*2*Math.max(1.5,Math.round(w/(h*1.6))/2))*f.ry*0.32])}},
+  rosette:{sym:'radial-6',frame:'circle',margin:20,build(f){
+    const R=f.rx;addVoid('oval',f.cx,f.cy,R*0.17,R*0.17);return()=>{
+    stroke(t=>[f.cx+Math.sin(t*Math.PI*1.1)*R*0.13,f.cy-R*0.25-t*R*0.66])}}},
+  tree:{sym:'mirror-x',frame:'arch',margin:24,build(f,w,h,top,bot){
+    const vr=Math.min(w*0.16,h*0.1);addVoid('oval',f.cx,top+h*0.24,vr,vr);
+    return()=>{
+    stroke(t=>[f.cx,bot-10-t*h*0.9]);
+    stroke(t=>[f.cx-w*0.22-Math.sin(t*Math.PI*0.8)*w*0.14,bot-10-t*h*0.46])}}},
+  corners:{sym:'quad',frame:'rect',margin:20,build(f,w,h,top){
+    addVoid('oval',f.cx,f.cy,f.rx*0.24,f.ry*0.2);return()=>{
+    const x0=f.cx-f.rx;
+    stroke(t=>[x0+w*0.07+t*w*0.34,top+h*0.08+Math.sin(t*Math.PI*0.85)*h*0.26])}}},
+  free:{sym:'none',frame:'none',margin:20,build(f,w,h){
+    return()=>stroke(t=>[f.cx-w*0.32+t*w*0.64,f.cy+h*0.3-t*h*0.6+Math.sin(t*Math.PI*2)*h*0.12])}}
+};
+function applyPreset(name){
+  const ps=PRESETS[name]||PRESETS.medallion;
+  if(drawing)return;
+  setCtl('sym',ps.sym);setCtl('frame',ps.frame);setCtl('margin',ps.margin);
+  plants=[];voids=[];history=[];
+  computeFrame();
+  let f=frameShape;
+  if(!f){const sr=stageRect();f={cx:(sr.x0+sr.x1)/2,cy:(sr.y0+sr.y1)/2,rx:(sr.x1-sr.x0)/2,ry:(sr.y1-sr.y0)/2}}
+  const w=f.rx*2,h=f.ry*2,top=f.cy-f.ry,bot=f.cy+f.ry;
+  const grow=ps.build(f,w,h,top,bot);
+  history=history.filter(x=>x.t!=='void');
+  hashRebuild();drawAll();
+  grow();
+  hashRebuild();drawAll();drawGuides();updateStats();
+}
+function demo(){
+  if(cv.getBoundingClientRect().width<=640)setOpen(false);
+  applyPreset(P.preset);
+}
+
+readInk();resize();demo();updateStats();
+addEventListener('resize',resize);
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
