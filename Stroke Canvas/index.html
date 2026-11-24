@@ -1122,11 +1122,26 @@ function primaryCancel() { if (st.cur) endStroke(true); if (st.lasso) { st.lasso
 
 // --- touch gestures
 const touches = new Map(); let gest = null, holdT = null, fingerStroke = false;
+// iPad browsers expose Pointer Events, but WebKit can drop or cancel one of the
+// pointers in a multi-finger gesture. Prefer native Touch Events when they are
+// available and keep Pointer Events for Pencil, mouse and other browsers.
+const useNativeTouchEvents = 'ontouchstart' in window;
+const directTouches = list => Array.from(list).filter(t => t.touchType !== 'stylus');
+function touchEventLike(t, source, type) {
+  return {
+    nativeTouch: true,
+    pointerId: t.identifier, pointerType: 'touch', type,
+    clientX: t.clientX, clientY: t.clientY,
+    pressure: typeof t.force === 'number' && t.force > 0 ? t.force : 1,
+    altitudeAngle: HALF_PI, azimuthAngle: 0, tiltX: 0, tiltY: 0,
+    timeStamp: source.timeStamp
+  };
+}
 function gState() { const a = [...touches.values()]; const c = a.reduce((m, t) => [m[0] + t.x / a.length, m[1] + t.y / a.length], [0, 0]);
   let d = 1, ang = 0; if (a.length >= 2) { d = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y) || 1; ang = Math.atan2(a[1].y - a[0].y, a[1].x - a[0].x); } return { c, d, ang, n: a.length }; }
 function touchDown(e) {
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
-  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  if (!e.nativeTouch) try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
   if (!gest) gest = { t0: performance.now(), maxN: 0, moved: false, prev: null, picking: false };
   gest.maxN = Math.max(gest.maxN, touches.size);
   if (touches.size === 1 && !st.penSeen && primaryId === null) { fingerStroke = true; primaryDown(e); if (primaryId !== null) return; fingerStroke = false; }
@@ -1182,6 +1197,7 @@ function showRing(cx, cy) { if (st.tool !== 'draw') { hideRing(); return; } cons
 function hideRing() { ring.style.display = 'none'; }
 
 canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch' && useNativeTouchEvents) return;
   e.preventDefault();
   if (popKind) { closePop(); return; } // a tap that dismisses a panel never paints
   if (e.pointerType === 'touch') { touchDown(e); return; }
@@ -1192,13 +1208,32 @@ canvas.addEventListener('pointerdown', e => {
   hideRing(); primaryDown(e);
 }, { passive: false });
 canvas.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch' && useNativeTouchEvents) return;
   if (e.pointerType === 'touch') { touchMove(e); return; }
   if (e.pointerId === primaryId) { primaryMove(e); return; }
   if (primaryId === null && e.buttons === 0) showRing(e.clientX, e.clientY);
 });
-const up = e => { if (e.pointerType === 'touch') { touchUp(e); return; } if (e.pointerId === primaryId) primaryUp(e, e.type === 'pointercancel'); };
+const up = e => { if (e.pointerType === 'touch') { if (!useNativeTouchEvents) touchUp(e); return; } if (e.pointerId === primaryId) primaryUp(e, e.type === 'pointercancel'); };
 canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 canvas.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch' && primaryId === null) hideRing(); });
+if (useNativeTouchEvents) {
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (popKind) { closePop(); return; }
+    for (const t of directTouches(e.changedTouches)) touchDown(touchEventLike(t, e, 'touchstart'));
+  }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of directTouches(e.changedTouches)) touchMove(touchEventLike(t, e, 'touchmove'));
+  }, { passive: false });
+  const touchEnd = e => {
+    e.preventDefault();
+    const type = e.type === 'touchcancel' ? 'pointercancel' : 'touchend';
+    for (const t of directTouches(e.changedTouches)) touchUp(touchEventLike(t, e, type));
+  };
+  canvas.addEventListener('touchend', touchEnd, { passive: false });
+  canvas.addEventListener('touchcancel', touchEnd, { passive: false });
+}
 canvas.addEventListener('wheel', e => {
   e.preventDefault(); const v = st.view;
   if (e.ctrlKey || e.metaKey) { const d = toDoc(e.clientX, e.clientY); v.s = clamp(v.s * Math.exp(-e.deltaY * .01), .05, 60); const sp = toScreen(d[0], d[1]); v.tx += e.clientX - sp[0]; v.ty += e.clientY - sp[1]; }
