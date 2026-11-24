@@ -15,8 +15,8 @@
 html,body{margin:0;height:100%;overflow:hidden;background:#2a2a2c;color:var(--fg);
   font:13px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
   touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
-#c{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none}
-#ov{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:1}
+#c{position:fixed;inset:0;width:100vw;height:100vh;width:100dvw;height:100dvh;display:block;touch-action:none}
+#ov{position:fixed;inset:0;width:100vw;height:100vh;width:100dvw;height:100dvh;pointer-events:none;z-index:1}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 svg{display:block}
 .panel{position:fixed;background:var(--ui);-webkit-backdrop-filter:blur(24px) saturate(1.4);backdrop-filter:blur(24px) saturate(1.4);
@@ -836,14 +836,27 @@ function symMatrices() {
 }
 
 /* ================================================================= view */
-function resize() {
-  canvas.width = Math.round(innerWidth * dpr); canvas.height = Math.round(innerHeight * dpr);
+let viewW = innerWidth, viewH = innerHeight;
+function canvasPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return [(e.clientX - r.left) * viewW / (r.width || viewW), (e.clientY - r.top) * viewH / (r.height || viewH)];
+}
+function canvasClientPoint(x, y) {
+  const r = canvas.getBoundingClientRect();
+  return [r.left + x * r.width / viewW, r.top + y * r.height / viewH];
+}
+function resize(preserveView = false) {
+  const centre = preserveView && st.doc.w ? toDoc(viewW / 2, viewH / 2) : null;
+  const r = canvas.getBoundingClientRect();
+  viewW = Math.max(1, r.width || innerWidth); viewH = Math.max(1, r.height || innerHeight);
+  canvas.width = Math.round(viewW * dpr); canvas.height = Math.round(viewH * dpr);
   const ov = $('#ov'); ov.width = canvas.width; ov.height = canvas.height;
+  if (centre) { const p = toScreen(centre[0], centre[1]); st.view.tx += viewW / 2 - p[0]; st.view.ty += viewH / 2 - p[1]; }
   st.dirty = st.ovDirty = true;
 }
 function fitView() {
-  const s = Math.min(innerWidth / st.doc.w, innerHeight / st.doc.h);
-  st.view = { s, r: 0, tx: (innerWidth - st.doc.w * s) / 2, ty: (innerHeight - st.doc.h * s) / 2 }; st.dirty = true;
+  const s = Math.min(viewW / st.doc.w, viewH / st.doc.h);
+  st.view = { s, r: 0, tx: (viewW - st.doc.w * s) / 2, ty: (viewH - st.doc.h * s) / 2 }; st.dirty = st.ovDirty = true;
 }
 function toDoc(cx, cy) { const v = st.view, x = cx - v.tx, y = cy - v.ty, c = Math.cos(-v.r), s = Math.sin(-v.r); return [(c * x - s * y) / v.s, (s * x + c * y) / v.s]; }
 function toScreen(dx, dy) { const v = st.view, c = Math.cos(v.r), s = Math.sin(v.r); return [v.tx + (c * dx - s * dy) * v.s, v.ty + (s * dx + c * dy) * v.s]; }
@@ -887,7 +900,7 @@ function frame() {
 /* ============================================================ overlay */
 function drawOverlay() {
   const ov = $('#ov'), x = ov.getContext('2d');
-  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, innerWidth, innerHeight);
+  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, viewW, viewH);
   const W = st.doc.w, H = st.doc.h, g = st.guides, ppm = st.doc.paper.ppm, sp = Math.max(1, g.spacing * ppm);
   const ln = (x0, y0, x1, y1) => { const a = toScreen(x0, y0), b = toScreen(x1, y1); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); };
   x.lineWidth = 1; x.setLineDash([]);
@@ -948,9 +961,9 @@ function selHandles() {
   return out;
 }
 function selDown(e) {
-  const p = toDoc(e.clientX, e.clientY);
+  const q = canvasPoint(e), p = toDoc(q[0], q[1]);
   if (st.sel) {
-    let hit = null, bd = 26; for (const q of selHandles()) { const d = Math.hypot(q.s[0] - e.clientX, q.s[1] - e.clientY); if (d < bd) { bd = d; hit = q; } }
+    let hit = null, bd = 26; for (const h of selHandles()) { const d = Math.hypot(h.s[0] - q[0], h.s[1] - q[1]); if (d < bd) { bd = d; hit = h; } }
     const S = st.sel; S.drag = { pid: e.pointerId, h: hit, start: p, t0: S.t.slice(), sx0: S.sx, sy0: S.sy, rot0: S.rot, a0: Math.atan2(p[1] - (S.C[1] + S.t[1]), p[0] - (S.C[0] + S.t[0])) };
     return;
   }
@@ -959,11 +972,11 @@ function selDown(e) {
 function selMove(e) {
   if (st.lasso && st.lasso.pid === e.pointerId) {
     let list = e.getCoalescedEvents ? e.getCoalescedEvents() : null; if (!list || !list.length) list = [e];
-    for (const ev of list) { const p = toDoc(ev.clientX, ev.clientY), P = st.lasso.pts; if (Math.hypot(p[0] - P[P.length - 2], p[1] - P[P.length - 1]) > 2 / st.view.s) P.push(p[0], p[1]); }
+    for (const ev of list) { const q = canvasPoint(ev), p = toDoc(q[0], q[1]), P = st.lasso.pts; if (Math.hypot(p[0] - P[P.length - 2], p[1] - P[P.length - 1]) > 2 / st.view.s) P.push(p[0], p[1]); }
     st.ovDirty = true; return;
   }
   const S = st.sel; if (!S || !S.drag || S.drag.pid !== e.pointerId) return;
-  const D = S.drag, p = toDoc(e.clientX, e.clientY), h = D.h;
+  const D = S.drag, ep = canvasPoint(e), p = toDoc(ep[0], ep[1]), h = D.h;
   const cx = S.C[0] + D.t0[0], cy = S.C[1] + D.t0[1], c = Math.cos(-D.rot0), s = Math.sin(-D.rot0);
   const q = [c * (p[0] - cx) - s * (p[1] - cy), s * (p[0] - cx) + c * (p[1] - cy)];
   if (!h) { S.t = [D.t0[0] + p[0] - D.start[0], D.t0[1] + p[1] - D.start[1]]; }
@@ -1056,7 +1069,7 @@ function flipSel(hz) { const S = st.sel; if (!S) return; if (hz) S.sx = -S.sx; e
 
 /* ================================================================ input */
 function sampleOf(e, t0) {
-  const [x, y] = toDoc(e.clientX, e.clientY);
+  const p0 = canvasPoint(e), [x, y] = toDoc(p0[0], p0[1]);
   let p = e.pointerType === 'pen' ? e.pressure : 1;
   if (e.pointerType === 'pen' && !(p > 0)) p = 0.0001;
   let alt = e.altitudeAngle, az = e.azimuthAngle;
@@ -1121,7 +1134,7 @@ function primaryUp(e, cancel) { if (st.tool === 'select') { if (cancel) { st.las
 function primaryCancel() { if (st.cur) endStroke(true); if (st.lasso) { st.lasso = null; st.ovDirty = true; } if (st.sel) st.sel.drag = null; primaryId = null; }
 
 // --- touch gestures
-const touches = new Map(); let gest = null, holdT = null, fingerStroke = false;
+const touches = new Map(); let gest = null, fingerStroke = false;
 // iPad browsers expose Pointer Events, but WebKit can drop or cancel one of the
 // pointers in a multi-finger gesture. Prefer native Touch Events when they are
 // available and keep Pointer Events for Pencil, mouse and other browsers.
@@ -1140,26 +1153,25 @@ function touchEventLike(t, source, type) {
 function gState() { const a = [...touches.values()]; const c = a.reduce((m, t) => [m[0] + t.x / a.length, m[1] + t.y / a.length], [0, 0]);
   let d = 1, ang = 0; if (a.length >= 2) { d = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y) || 1; ang = Math.atan2(a[1].y - a[0].y, a[1].x - a[0].x); } return { c, d, ang, n: a.length }; }
 function touchDown(e) {
-  touches.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
+  const p = canvasPoint(e);
+  touches.set(e.pointerId, { x: p[0], y: p[1], x0: p[0], y0: p[1] });
   if (!e.nativeTouch) try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-  if (!gest) gest = { t0: performance.now(), maxN: 0, moved: false, prev: null, picking: false };
+  if (!gest) gest = { t0: performance.now(), maxN: 0, moved: false, prev: null };
   gest.maxN = Math.max(gest.maxN, touches.size);
-  if (touches.size === 1 && !st.penSeen && primaryId === null) { fingerStroke = true; primaryDown(e); if (primaryId !== null) return; fingerStroke = false; }
+  if (touches.size === 1 && primaryId === null) { fingerStroke = true; primaryDown(e); if (primaryId !== null) return; fingerStroke = false; }
   if (touches.size > 1 && fingerStroke) { primaryCancel(); fingerStroke = false; }
-  if (touches.size === 1 && st.penSeen && st.tool === 'draw') { clearTimeout(holdT); holdT = setTimeout(() => { if (gest && !gest.moved && touches.size === 1) { gest.picking = true; const t = [...touches.values()][0]; pickAt(t.x, t.y); } }, 380); }
-  if (touches.size > 1) clearTimeout(holdT);
   gest.prev = gState();
 }
 function touchMove(e) {
   const t = touches.get(e.pointerId); if (!t) return;
-  t.x = e.clientX; t.y = e.clientY;
+  const pt = canvasPoint(e); t.x = pt[0]; t.y = pt[1];
   if (fingerStroke && e.pointerId === primaryId) { primaryMove(e); return; }
-  if (Math.hypot(t.x - t.x0, t.y - t.y0) > 9) { gest.moved = true; if (!gest.picking) clearTimeout(holdT); }
-  if (gest.picking) { pickAt(t.x, t.y); return; }
+  if (touches.size < 2) return;
+  if (Math.hypot(t.x - t.x0, t.y - t.y0) > 9) gest.moved = true;
   if (!gest.moved) return;
   const g = gState(), p = gest.prev; if (!p || p.n !== g.n) { gest.prev = g; return; }
   const v = st.view, docPt = toDoc(p.c[0], p.c[1]);
-  if (g.n >= 2) { v.s = clamp(v.s * g.d / p.d, .05, 60); v.r += g.ang - p.ang; }
+  v.s = clamp(v.s * g.d / p.d, .02, 60); v.r += g.ang - p.ang;
   const sp = toScreen(docPt[0], docPt[1]); v.tx += g.c[0] - sp[0]; v.ty += g.c[1] - sp[1];
   gest.prev = g; st.dirty = true; hideRing();
 }
@@ -1167,21 +1179,11 @@ function touchUp(e) {
   touches.delete(e.pointerId);
   if (fingerStroke && e.pointerId === primaryId) { primaryUp(e, e.type === 'pointercancel'); fingerStroke = false; }
   if (touches.size) { gest.prev = gState(); return; }
-  clearTimeout(holdT);
   if (gest) {
     const dt = performance.now() - gest.t0;
-    if (gest.picking) { $('#pick').style.display = 'none'; pushRecent(st.color); }
-    else if (!gest.moved && dt < 320 && gest.maxN >= 2) { gest.maxN === 2 ? undo() : redo(); }
-    else if (gest.moved) settleView();
+    if (!gest.moved && dt < 320 && gest.maxN >= 2) { gest.maxN === 2 ? undo() : redo(); }
   }
   gest = null;
-}
-function settleView() {
-  const v = st.view, fit = Math.min(innerWidth / st.doc.w, innerHeight / st.doc.h);
-  if (v.s < fit * 1.0) { fitView(); return; }
-  const q = Math.round(v.r / HALF_PI) * HALF_PI;
-  if (Math.abs(v.r - q) < .09) { const c = toDoc(innerWidth / 2, innerHeight / 2); v.r = q; const sp = toScreen(c[0], c[1]); v.tx += innerWidth / 2 - sp[0]; v.ty += innerHeight / 2 - sp[1]; }
-  st.dirty = true;
 }
 function pickAt(cx, cy) {
   const [x, y] = toDoc(cx, cy); if (x < 0 || y < 0 || x >= st.doc.w || y >= st.doc.h) return;
@@ -1190,10 +1192,10 @@ function pickAt(cx, cy) {
     const a = px[3] / 255 * l.opacity; C = C.map((v, i) => px[i] / 255 * l.opacity + v * (1 - a)); A = a + A * (1 - a); }
   const c = C.map((v, i) => v + st.paper[i] * (1 - A));
   setColor(c);
-  const pk = $('#pick'); pk.style.display = 'block'; pk.style.left = cx + 'px'; pk.style.top = cy + 'px'; pk.style.background = cssColor(c);
+  const p = canvasClientPoint(cx, cy), pk = $('#pick'); pk.style.display = 'block'; pk.style.left = p[0] + 'px'; pk.style.top = p[1] + 'px'; pk.style.background = cssColor(c);
 }
 const ring = $('#ring');
-function showRing(cx, cy) { if (st.tool !== 'draw') { hideRing(); return; } const d = activeBrush().p.size * st.doc.paper.ppm * st.view.s; if (d < 3) { hideRing(); return; } ring.style.display = 'block'; ring.style.width = ring.style.height = d + 'px'; ring.style.left = cx + 'px'; ring.style.top = cy + 'px'; }
+function showRing(cx, cy) { if (st.tool !== 'draw') { hideRing(); return; } const d = activeBrush().p.size * st.doc.paper.ppm * st.view.s, p = canvasClientPoint(cx, cy); if (d < 3) { hideRing(); return; } ring.style.display = 'block'; ring.style.width = ring.style.height = d + 'px'; ring.style.left = p[0] + 'px'; ring.style.top = p[1] + 'px'; }
 function hideRing() { ring.style.display = 'none'; }
 
 canvas.addEventListener('pointerdown', e => {
@@ -1211,7 +1213,7 @@ canvas.addEventListener('pointermove', e => {
   if (e.pointerType === 'touch' && useNativeTouchEvents) return;
   if (e.pointerType === 'touch') { touchMove(e); return; }
   if (e.pointerId === primaryId) { primaryMove(e); return; }
-  if (primaryId === null && e.buttons === 0) showRing(e.clientX, e.clientY);
+  if (primaryId === null && e.buttons === 0) { const p = canvasPoint(e); showRing(p[0], p[1]); }
 });
 const up = e => { if (e.pointerType === 'touch') { if (!useNativeTouchEvents) touchUp(e); return; } if (e.pointerId === primaryId) primaryUp(e, e.type === 'pointercancel'); };
 canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
@@ -1236,7 +1238,8 @@ if (useNativeTouchEvents) {
 }
 canvas.addEventListener('wheel', e => {
   e.preventDefault(); const v = st.view;
-  if (e.ctrlKey || e.metaKey) { const d = toDoc(e.clientX, e.clientY); v.s = clamp(v.s * Math.exp(-e.deltaY * .01), .05, 60); const sp = toScreen(d[0], d[1]); v.tx += e.clientX - sp[0]; v.ty += e.clientY - sp[1]; }
+  const p = canvasPoint(e);
+  if (e.ctrlKey || e.metaKey) { const d = toDoc(p[0], p[1]); v.s = clamp(v.s * Math.exp(-e.deltaY * .01), .02, 60); const sp = toScreen(d[0], d[1]); v.tx += p[0] - sp[0]; v.ty += p[1] - sp[1]; }
   else { v.tx -= e.deltaX; v.ty -= e.deltaY; }
   st.dirty = true;
 }, { passive: false });
@@ -1279,7 +1282,7 @@ function bubble(el, text) { const r = el.getBoundingClientRect(), bb = $('#bub')
 function vslider(el, get, set, fmt) {
   let id = null, sy = 0, su = 0;
   el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); closePop(); id = e.pointerId; el.setPointerCapture(id); sy = e.clientY; su = get(); bubble(el, fmt()); });
-  el.addEventListener('pointermove', e => { if (e.pointerId !== id) return; const h = el.clientHeight; set(clamp(su - (e.clientY - sy) / h, 0, 1)); syncSliders(); bubble(el, fmt()); if (el.id === 'sizeS') showRing(innerWidth / 2, innerHeight / 2); });
+  el.addEventListener('pointermove', e => { if (e.pointerId !== id) return; const h = el.clientHeight; set(clamp(su - (e.clientY - sy) / h, 0, 1)); syncSliders(); bubble(el, fmt()); if (el.id === 'sizeS') showRing(viewW / 2, viewH / 2); });
   const end = e => { if (e.pointerId !== id) return; id = null; $('#bub').classList.remove('on'); hideRing(); scheduleBrushSave(); };
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
@@ -1562,6 +1565,7 @@ function buildMenu(el) {
   const item = (label, sub, fn, cls) => { const b = h('button', 'mi' + (cls ? ' ' + cls : ''), `<span>${label}</span><span class="s">${sub || ''}</span>`); b.onclick = fn; el.appendChild(b); return b; };
   const n = st.doc.strokes.length;
   const pp = st.doc.paper;
+  item('Fit canvas', 'Reset view', () => { closePop(); fitView(); });
   item('Paper', `${pp.name} · ${r2(pp.wmm)} × ${r2(pp.hmm)} mm`, () => { pop.innerHTML = ''; buildPaper(pop); });
   const gk = { none: '', grid: 'Grid', dots: 'Dots', ruled: 'Ruled', writing: 'Writing', thirds: 'Thirds' }[st.guides.kind], sy = st.guides.sym !== 'off' ? st.guides.sym[0].toUpperCase() + st.guides.sym.slice(1) + ' symmetry' : '';
   item('Guides', [gk, sy].filter(Boolean).join(' · ') || 'Off', () => { pop.innerHTML = ''; buildGuides(pop); });
@@ -1575,7 +1579,7 @@ function buildMenu(el) {
   el.appendChild(h('div', 'sep'));
   const L = st.lastStats;
   el.appendChild(h('div', 'stat', (L ? `Last stroke · ${L.n} samples · ${L.hz} Hz · ${L.inp}<br>${L.per} samples per event · coalesced events ${L.api ? 'supported' : 'not supported'}<br>` : '') + `Paper ${pp.name} · ${r2(pp.wmm)} × ${r2(pp.hmm)} mm · ${r2(pp.ppm)} px/mm`));
-  el.appendChild(h('div', 'hint', 'Two-finger tap undo · three-finger tap redo · pinch to zoom and rotate · with Pencil, one finger pans and touch-and-hold picks a colour · lasso: draw a loop round strokes, then drag, scale, stretch or rotate.'));
+  el.appendChild(h('div', 'hint', 'One finger or Pencil uses the active tool · two fingers pan, zoom and rotate freely · two-finger tap undo · three-finger tap redo · use Fit canvas above to reset the view · lasso: draw a loop round strokes, then drag, scale, stretch or rotate.'));
 }
 
 /* =============================================================== export */
@@ -1739,10 +1743,11 @@ async function boot() {
     for (const l of st.doc.layers) if (l.image) { try { const b = await DB.get(l.image.key); if (b) await loadImageTex(l.image.key, b); } catch (e) { console.warn(e); } }
     const ids = new Set(st.doc.layers.map(l => l.id)); for (const s of st.doc.strokes) if (!ids.has(s.layer)) s.layer = st.doc.layers[0].id;
     rebuildAll();
-  } else { setupDoc(innerWidth >= innerHeight ? makePaper('A4', 297, 210) : makePaper('A4', 210, 297)); recomposite(); }
+  } else { setupDoc(viewW >= viewH ? makePaper('A4', 297, 210) : makePaper('A4', 210, 297)); recomposite(); }
   if (!st.recent.length) st.recent = ['#1f1f21', '#f4f1ea', '#2b4c7e', '#b23a2e', '#d9a441', '#3f6b4f', '#7a5c99', '#8a8a8a'];
   fitView(); setColor(st.color); syncBlend(); setMode('paint'); syncSliders();
-  addEventListener('resize', () => { resize(); fitView(); });
+  addEventListener('resize', () => resize(true));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => resize(true));
   canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); }); canvas.addEventListener('webglcontextrestored', () => location.reload());
   requestAnimationFrame(frame);
   window.__app = { st, Brushes, StrokeBuilder, strokesPayload, importFiles, undo, redo, rebuildAll, commitSel, setTool, setMode, selMatrix, toScreen };
