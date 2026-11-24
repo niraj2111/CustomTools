@@ -1,14 +1,17 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Victorian Flourish 2.0</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Cormorant+Garamond:ital,wght@0,600;1,600&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: full-bleed drafting sheet on a 5 mm dot grid; a slim instrument panel floats at the left (bottom sheet on phones) */
 :root{
   --paper:#EDF0E9; --paper-dot:#CFD6CA; --ink:#1D2620; --panel:#F8FAF5; --line:#CBD3C5;
-  --muted:#5D695F; --sap:#4E7D35; --sap-soft:#DCE8D2; --shadow:rgba(29,38,32,.08);
+  --muted:#5D695F; --sap:#4E7D35; --backdrop:#D9DED4; --sap-soft:#DCE8D2; --shadow:rgba(29,38,32,.08);
   --f-display:"Bricolage Grotesque","Hanken Grotesk",system-ui,sans-serif;
   --f-body:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -16,21 +19,28 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --paper:#131714; --paper-dot:#262D27; --ink:#DCE4D6; --panel:#1A1F1B; --line:#2F3830;
-    --muted:#8F9B90; --sap:#8CC06A; --sap-soft:#26341E; --shadow:rgba(0,0,0,.35); color-scheme:dark;
+    --muted:#8F9B90; --sap:#8CC06A; --backdrop:#0C0F0D; --sap-soft:#26341E; --shadow:rgba(0,0,0,.35); color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --paper:#131714; --paper-dot:#262D27; --ink:#DCE4D6; --panel:#1A1F1B; --line:#2F3830;
-  --muted:#8F9B90; --sap:#8CC06A; --sap-soft:#26341E; --shadow:rgba(0,0,0,.35); color-scheme:dark;
+  --muted:#8F9B90; --sap:#8CC06A; --backdrop:#0C0F0D; --sap-soft:#26341E; --shadow:rgba(0,0,0,.35); color-scheme:dark;
 }
 html,body{height:100%}
+[hidden]{display:none!important}
 body{background:var(--paper);color:var(--ink);font-family:var(--f-body);overflow:hidden}
 .app{position:fixed;inset:0;background:var(--paper)}
 #sheet{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;display:block}
 #sheet.void-tool{cursor:cell}
-#guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block}
-.sel{width:100%;font:500 13px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+#guides{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;z-index:3}
+#textc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;z-index:0}
+#textc.front{z-index:2}
+#sheet{z-index:1}
+.panel,.status,.toast,.out{z-index:10}
+.sel{box-sizing:border-box;width:100%;font:500 13px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
 .seg.three{grid-template-columns:1fr 1fr 1fr}
+.seg.four{grid-template-columns:repeat(4,1fr)}
+.seg.four button{font-size:12px}
 
 .panel{position:absolute;
   top:calc(16px + env(safe-area-inset-top,0px));left:calc(16px + env(safe-area-inset-left,0px));
@@ -77,7 +87,56 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--sap);outline-of
 .out-card p{margin:0;font-size:13px}
 .out-card textarea{width:100%;height:220px;font:11px/1.4 var(--f-mono);background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;box-sizing:border-box;resize:vertical}
 
+/* glyph editor: a full-screen drafting table over the sheet */
+.ge{position:fixed;inset:0;z-index:20;background:var(--paper);display:grid;grid-template-columns:288px 1fr;font-family:var(--f-body)}
+.ge-side{display:flex;flex-direction:column;gap:14px;padding:16px 14px calc(14px + env(safe-area-inset-bottom,0px));background:var(--panel);border-right:1px solid var(--line);overflow-y:auto}
+.ge-side h1{margin:0;font:600 19px/1.1 var(--f-display);letter-spacing:-.01em}
+.ge-side .sub{margin:4px 0 0}
+.ge-canvas{position:relative;overflow:hidden;background:var(--paper)}
+#geSvg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:default;display:block}
+.ge-head{position:absolute;left:16px;top:14px;display:flex;align-items:baseline;gap:10px;pointer-events:none}
+.ge-head b{font:600 15px var(--f-display)}
+.ge-head span{font:400 11px var(--f-mono);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.ge-tools{position:absolute;right:14px;top:12px;display:flex;gap:6px}
+.ge-tools .btn{background:var(--panel);padding:6px 10px}
+.ge-help{position:absolute;left:16px;right:16px;bottom:calc(12px + env(safe-area-inset-bottom,0px));font:400 11.5px/1.45 var(--f-mono);color:var(--muted);pointer-events:none;max-width:640px}
+.ge-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ge-btns .btn{padding:7px 6px;font-size:12.5px}
+.btn[aria-pressed="true"]{background:var(--sap-soft);border-color:var(--sap)}
+.btn:disabled,.seg button:disabled{opacity:.4;cursor:default}
+.off{opacity:.45;pointer-events:none}
+.ge-foot{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+.ge-foot .primary{grid-column:1/-1}
+#geSvg .ge-rib{fill:none;stroke:var(--line);stroke-width:1}
+#geSvg .ge-host{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 4;opacity:.7}
+#geSvg .ge-spine{fill:none;stroke:var(--muted);stroke-width:1.5}
+#geSvg .ge-spine.dim{stroke-dasharray:2 5}
+#geSvg .ge-path{fill:none;stroke:#5873C9;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+#geSvg .ge-path.sel{stroke:var(--ink)}
+#geSvg .ge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer;pointer-events:stroke}
+#geSvg .ge-fill{fill:#5873C9;opacity:.14}
+#geSvg .ge-a{fill:var(--panel);stroke:var(--ink);stroke-width:1.5;cursor:move}
+#geSvg .ge-a.sel{fill:var(--ink)}
+#geSvg .ge-a.pin{stroke:var(--muted);stroke-dasharray:2 2;cursor:default}
+#geSvg .ge-h{fill:var(--sap);stroke:var(--panel);stroke-width:1;cursor:pointer}
+#geSvg .ge-hl{stroke:var(--sap);stroke-width:1}
+.ge-io{position:absolute;inset:0;background:rgba(0,0,0,.35);display:grid;place-items:center;padding:16px;z-index:2}
+@media (max-width:720px){
+  .ge{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+  .ge-canvas{grid-row:1}
+  .ge-side{grid-row:2;max-height:46vh;border-right:0;border-top:1px solid var(--line)}
+  .ge-help{display:none}
+}
+.toast{z-index:30}
+
+#paper{position:absolute;background:var(--paper);box-shadow:0 1px 2px var(--shadow),0 8px 30px var(--shadow);pointer-events:none;z-index:0}
+.app.paper-mode{background:var(--backdrop)}
+#sheet.pan-tool{cursor:grab}
+.zoom{position:absolute;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;z-index:10}
+.zoom button{font:500 13px var(--f-body);min-width:34px;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);cursor:pointer}
+.zoom button:hover{background:var(--sap-soft)}
 @media (max-width:640px){
+  .zoom{bottom:auto;top:calc(40px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px))}
   .panel{top:auto;left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));
     bottom:calc(12px + env(safe-area-inset-bottom,0px));width:auto;max-height:52%}
   .status{bottom:auto;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px))}
@@ -85,7 +144,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--sap);outline-of
 </style>
 
 <div class="app" id="app">
+  <div id="paper" hidden></div>
   <canvas id="sheet" aria-label="Drawing sheet. Drag to lay a stem; branches grow from it."></canvas>
+  <canvas id="textc" aria-hidden="true"></canvas>
   <canvas id="guides" aria-hidden="true"></canvas>
 
   <aside class="panel" id="panel">
@@ -103,12 +164,50 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--sap);outline-of
         <button class="btn" id="clear">Clear sheet</button>
         <button class="btn" id="regrow">Regrow all</button>
         <button class="btn primary" id="copy">Copy SVG</button>
+        <button class="btn" id="editGlyphs" style="grid-column:1/-1">Edit glyphs</button>
       </div>
       <div class="hint-keys">⌘/Ctrl Z undo · growth settings apply to the next stem, or use Regrow all · symmetry applies to new stems and voids</div>
     </div>
   </aside>
 
+  <div class="zoom" id="zoomBar" hidden><button id="zoomOut" aria-label="Zoom out">−</button><button id="zoomFit">Fit</button><button id="zoomIn" aria-label="Zoom in">+</button></div>
   <div class="status"><span id="stats"></span><span id="hint">Example sketch · drag anywhere to plant your own</span></div>
+
+  <div class="ge" id="ge" hidden role="dialog" aria-modal="true" aria-labelledby="geH">
+    <aside class="ge-side">
+      <div><h1 id="geH">Glyph editor</h1><p class="sub">Each glyph is a spine and the graphic drawn along it. Edit either; the brush bends the graphic onto every spine it grows.</p></div>
+      <div class="row"><div class="row-top"><span>Glyph</span></div>
+        <div class="seg three" id="geKinds"><button data-v="curl">Curled leaf</button><button data-v="stalk">Stalked leaf</button><button data-v="flower">Flower</button></div></div>
+      <div class="row"><div class="row-top"><span>Edit</span></div>
+        <div class="seg" id="geModes"><button data-v="spine">Spine</button><button data-v="graphic">Graphic</button></div></div>
+      <div class="row"><div class="row-top"><span>View</span></div>
+        <div class="seg" id="geViews"><button data-v="bent">On spine</button><button data-v="flat">Unrolled</button></div></div>
+      <div id="geCurlRow" class="row" style="gap:10px">
+        <div class="row"><div class="row-top"><label for="geSpan">Span of the last turn</label><output id="geSpanO"></output></div><input type="range" id="geSpan" min="0.2" max="0.6" step="0.01"></div>
+        <div class="row"><div class="row-top"><label for="geTight">Preview curl tightness</label></div><input type="range" id="geTight" min="0" max="1" step="0.01"></div>
+      </div>
+      <div id="geSpineDrawRow" class="row"><div class="row-top"><label for="geSpineDraw">Spine line</label></div><select class="sel" id="geSpineDraw"></select></div>
+      <div class="sec" id="gePointTools"><h2>Point</h2>
+        <div class="seg three" id="geSegs"><button data-v="bez">Curve</button><button data-v="arc">Arc</button><button data-v="line">Line</button></div>
+        <div class="ge-btns"><button class="btn" id="geSmooth">Make smooth</button><button class="btn" id="geAddPt">Add point after</button><button class="btn" id="geDelPt">Delete point</button></div>
+      </div>
+      <div class="sec" id="gePathTools"><h2>Path</h2>
+        <div class="ge-btns"><button class="btn" id="geNewPath">New path</button><button class="btn" id="geDelPath">Delete path</button><button class="btn" id="geClosed">Closed</button><button class="btn" id="geFillB">Filled</button><button class="btn" id="geMirror">Mirror copy</button></div>
+      </div>
+      <div class="sec"><h2>Glyph set</h2>
+        <div class="ge-btns"><button class="btn" id="geReset">Reset this glyph</button><button class="btn" id="geExport">Copy JSON</button><button class="btn" id="geImport">Paste JSON</button></div>
+      </div>
+      <div class="ge-foot"><button class="btn" id="geCancel">Cancel</button><button class="btn" id="geUndo">Undo</button><button class="btn primary" id="geApply">Apply and regrow</button></div>
+    </aside>
+    <div class="ge-canvas" id="geCanvas">
+      <svg id="geSvg" aria-label="Glyph drawing: drag points and handles"></svg>
+      <div class="ge-head"><b id="geTitle"></b><span>spine · graphic</span></div>
+      <div class="ge-tools"><button class="btn" id="geFit">Fit</button></div>
+      <div class="ge-help" id="geHelp"></div>
+      <div class="ge-io" id="geIO" hidden><div class="out-card"><p id="geIOMsg"></p><textarea id="geIOText"></textarea>
+        <div class="ge-btns"><button class="btn" id="geIOClose">Close</button><button class="btn primary" id="geIOLoad">Load</button></div></div></div>
+    </div>
+  </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="out" id="out" hidden>
     <div class="out-card">
@@ -130,26 +229,39 @@ const wrap=a=>{while(a>Math.PI)a-=2*Math.PI;while(a<-Math.PI)a+=2*Math.PI;return
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
 /* ---------- parameters ---------- */
-const P={size:92,internode:19,meander:0,depth:5,falloff:.62,arrange:'alternate',fair:true,term:'leaf',decay:.69,turns:1.45,counter:.55,flow:'rule',hook:.2,collar:.9,nest:.6,veins:0,band:'off',bandW:.23,pocket:'curls',fill:.35,construct:'hidden',rev:.45,leaves:.6,
-  light:.4,seek:.85,gradient:-.1,wander:1,gap:3.5,width:.8,speed:4,color:'#5873C9',
-  preset:'medallion',tool:'stem',sym:'mirror-x',frame:'rounded',margin:20,frameLine:'drawn',voidLine:'drawn'};
+const P={size:92,internode:19,meander:0,depth:5,falloff:.62,arrange:'alternate',fair:true,term:'leaf',decay:.69,turns:1.45,counter:.55,flow:'rule',hook:.2,leafFill:'outline',collar:.9,nest:.6,veins:0,band:'off',bandW:.23,pocket:'curls',fill:.35,construct:'hidden',rev:.45,leaves:.6,
+  light:.4,seek:.85,gradient:-.1,wander:1,gap:3.5,width:1.2,speed:10,color:'#5873C9',
+  sheet:'A3',orient:'portrait',grow:'animate',preset:'medallion',text:'',textSize:90,textY:0,textFont:'upright',textStyle:'filled',textMode:'weave',tool:'stem',sym:'mirror-x',frame:'rounded',margin:20,frameLine:'drawn',voidLine:'drawn'};
 const SW=[['ink','Ink'],['#5B8C3E','Moss'],['#C0602F','Rust'],['#5873C9','Blue']];
 const fmtLight=v=>v>0.04?`${v.toFixed(2)} upright`:v<-0.04?`${(-v).toFixed(2)} weeping`:'level';
 const fmtGrad=v=>v>0.04?`base +${v.toFixed(2)}`:v<-0.04?`tip +${(-v).toFixed(2)}`:'even';
+/* paper sheets are worked at 4 units per millimetre */
+const U=4,SHEETS={A4:[210,297],A3:[297,420],A2:[420,594]};
+function fu(v,dp){if(P.sheet==='screen')return`${dp?v.toFixed(1):v} px`;const mm=v/U;return`${mm<10?mm.toFixed(mm<2?2:1):mm.toFixed(0)} mm`}
 const SECTIONS=[
+  {title:'Sheet',rows:[
+    {k:'sheet',type:'select',label:'Sheet size',opts:[['screen','Screen'],['A4','A4 · 210 × 297 mm'],['A3','A3 · 297 × 420 mm'],['A2','A2 · 420 × 594 mm']],on:()=>sheetChanged()},
+    {k:'orient',type:'seg',label:'Orientation',opts:[['portrait','Portrait'],['landscape','Landscape']],on:()=>sheetChanged()}
+  ]},
   {title:'Layout',rows:[
     {k:'preset',type:'select',label:'Start from',opts:[['medallion','Medallion panel'],['candelabrum','Candelabrum'],['rinceau','Rinceau band'],['rosette','Rosette'],['tree','Tree of life'],['corners','Corner panel'],['free','Free scroll']],on:()=>{applyPreset(P.preset);hint.textContent='Preset loaded · drag to add your own stems'}},
-    {k:'tool',type:'seg',label:'Tool',opts:[['stem','Stem'],['oval','Oval void'],['rect','Rect void']],on:()=>{cv.classList.toggle('void-tool',P.tool!=='stem');hint.textContent=P.tool==='stem'?'':'Drag to place a void · growth keeps clear of it'}},
+    {k:'tool',type:'seg',label:'Tool',opts:[['stem','Stem'],['oval','Oval void'],['rect','Rect void'],['pan','Pan']],on:()=>{cv.classList.toggle('void-tool',P.tool==='oval'||P.tool==='rect');cv.classList.toggle('pan-tool',P.tool==='pan');if(P.tool==='pan'){hint.textContent='Drag to move around the sheet';return}hint.textContent=P.tool==='stem'?'':'Drag to place a void · growth keeps clear of it'}},
     {k:'sym',type:'select',label:'Symmetry',opts:[['none','None'],['mirror-x','Mirror left–right'],['mirror-y','Mirror top–bottom'],['quad','Four-way'],['radial-3','Radial ×3'],['radial-4','Radial ×4'],['radial-5','Radial ×5'],['radial-6','Radial ×6'],['radial-8','Radial ×8']],on:()=>drawGuides()},
     {k:'frame',type:'select',label:'Frame',opts:[['none','None'],['rect','Rectangle'],['rounded','Rounded'],['oval','Oval'],['circle','Circle'],['arch','Arch'],['band','Band']],on:()=>layoutChanged()},
-    ['margin','Frame margin',0,160,1,v=>`${v} px`,()=>layoutChanged()],
+    ['margin','Frame margin',0,160,1,v=>fu(v),()=>layoutChanged()],
     {k:'frameLine',type:'seg',label:'Frame line',opts:[['drawn','Drawn'],['guide','Guide only']],on:()=>{drawAll();drawGuides()}},
     {k:'voidLine',type:'seg',label:'Void outline',opts:[['drawn','Drawn'],['guide','Guide only']],on:()=>{drawAll();drawGuides()}},
-    {k:'clearVoids',type:'button',label:'Clear voids',on:()=>{voids=[];history=history.filter(h=>h.t!=='void');hashRebuild();drawAll();drawGuides()}}
+    {k:'clearVoids',type:'button',label:'Clear voids',on:()=>{voids=[];history=history.filter(h=>h.t!=='void');hashRebuild();drawAll();drawGuides()}},
+    {k:'text',type:'text',label:'Centre text',placeholder:'Type a word or name',on:()=>textChanged()},
+    ['textSize','Text size',24,400,1,v=>fu(v),()=>textChanged()],
+    ['textY','Text position',-.4,.4,.01,v=>Math.abs(v)<0.005?'centre':(v<0?`${Math.round(-v*100)}% up`:`${Math.round(v*100)}% down`),()=>textChanged()],
+    {k:'textFont',type:'seg',label:'Text face',opts:[['upright','Roman'],['italic','Italic']],on:()=>textChanged()},
+    {k:'textStyle',type:'seg',label:'Text drawn',opts:[['filled','Filled'],['outline','Outline'],['guide','Guide only']],on:()=>{drawAll();drawGuides()}},
+    {k:'textMode',type:'seg',label:'Lines and text',opts:[['weave','Woven'],['behind','Behind'],['over','Over'],['avoid','Avoid']],on:()=>{hashRebuild();drawAll();drawGuides();if(textVoid&&plants.length)hint.textContent=P.textMode==='weave'?'Lines now weave over and under the letters':P.textMode==='avoid'?'Regrow all to grow around the text':'Regrow all to grow through the text'}}
   ]},
   {title:'Growth',rows:[
-    ['size','Scroll size',20,240,1,v=>`${v} px`],
-    ['internode','Branch spacing',10,100,1,v=>`${v} px`],
+    ['size','Scroll size',20,240,1,v=>fu(v)],
+    ['internode','Branch spacing',10,100,1,v=>fu(v)],
     ['depth','Branch orders',1,5,1,v=>`${v}`],
     ['falloff','Falloff',.4,.85,.01,v=>`×${v.toFixed(2)} per order`],
     ['arrange'],
@@ -167,6 +279,7 @@ const SECTIONS=[
     ['nest','Nested scrolls',0,1,.05,v=>`${Math.round(v*100)}%`],
     ['veins','Lobe lines',0,1,.05,v=>v<0.02?'off':`${Math.round(v*100)}%`],
     ['collar','Junction leaves',0,1,.05,v=>`${Math.round(v*100)}%`],
+    {k:'leafFill',type:'seg',label:'Leaves',opts:[['outline','Outline'],['filled','Filled']],on:()=>drawAll()},
     {k:'pocket',type:'select',label:'Pocket fill',opts:[['off','Off'],['curls','Fitted curls'],['flowers','Flowers'],['both','Curls, some flowers']]},
     ['fill','Fill amount',0,1,.05,v=>v<0.02?'none':`${Math.round(v*100)}%`],
     {k:'construct',type:'seg',label:'Construction circles',opts:[['hidden','Hidden'],['shown','Shown']],on:()=>drawGuides()}
@@ -176,12 +289,13 @@ const SECTIONS=[
     ['seek','Light seeking',0,1,.05,v=>v.toFixed(2)],
     ['gradient','Length gradient',-1,1,.05,fmtGrad],
     ['wander','Variation',0,1,.05,v=>v.toFixed(2)],
-    ['gap','Line gap',1,20,.5,v=>`${v.toFixed(1)} px`]
+    ['gap','Line gap',1,20,.5,v=>fu(v,2)]
   ]},
   {title:'Pen',rows:[
-    ['width','Line width',.3,6,.1,v=>`${v.toFixed(1)} px`],
+    ['width','Pen width',.3,6,.1,v=>fu(v,2)],
     ['color'],
-    ['speed','Growth speed',1,14,1,v=>`${v}×`]
+    {k:'grow',type:'seg',label:'Growth',opts:[['animate','Animate'],['instant','Instant']]},
+    ['speed','Growth speed',1,40,1,v=>`${v}×`]
   ]}
 ];
 const host=$('#controls');
@@ -192,11 +306,16 @@ for(const sec of SECTIONS){
     const row=document.createElement('div');row.className='row';
     if(!Array.isArray(r)){
       if(r.type==='seg'){
-        row.innerHTML=`<div class="row-top"><span>${r.label}</span></div><div class="seg${r.opts.length===3?' three':''}" role="group" aria-label="${r.label}">${r.opts.map(([v,l])=>`<button id="${r.k}-${v}" data-v="${v}" aria-pressed="${P[r.k]===v}">${l}</button>`).join('')}</div>`;
+        row.innerHTML=`<div class="row-top"><span>${r.label}</span></div><div class="seg${r.opts.length===3?' three':r.opts.length===4?' four':''}" role="group" aria-label="${r.label}">${r.opts.map(([v,l])=>`<button id="${r.k}-${v}" data-v="${v}" aria-pressed="${P[r.k]===v}">${l}</button>`).join('')}</div>`;
         row.querySelectorAll('button').forEach(b=>b.onclick=()=>{P[r.k]=b.dataset.v;row.querySelectorAll('button').forEach(o=>o.setAttribute('aria-pressed',o===b));r.on&&r.on()});
       }else if(r.type==='select'){
         row.innerHTML=`<div class="row-top"><label for="sel-${r.k}">${r.label}</label></div><select class="sel" id="sel-${r.k}">${r.opts.map(([v,l])=>`<option value="${v}"${P[r.k]===v?' selected':''}>${l}</option>`).join('')}</select>`;
         const sel=row.querySelector('select');sel.addEventListener('change',()=>{P[r.k]=sel.value;r.on&&r.on()});
+      }else if(r.type==='text'){
+        row.innerHTML=`<div class="row-top"><label for="txt-${r.k}">${r.label}</label></div><input type="text" class="sel" id="txt-${r.k}" autocomplete="off" placeholder="${r.placeholder||''}">`;
+        const inp=row.querySelector('input');let tm=0;
+        inp.value=P[r.k]||'';
+        inp.addEventListener('input',()=>{P[r.k]=inp.value;clearTimeout(tm);tm=setTimeout(()=>r.on&&r.on(),280)});
       }else if(r.type==='button'){
         row.innerHTML=`<button class="btn" id="btn-${r.k}">${r.label}</button>`;
         row.querySelector('button').onclick=r.on;
@@ -250,7 +369,7 @@ for(const sec of SECTIONS){
 }
 
 /* ---------- canvas + occupancy grid ---------- */
-let W=0,H=0,DPR=1,VS=1;const DESIGN_MIN=720;   /* the sheet is never smaller than this on its short side; small screens zoom out */
+let W=0,H=0,DPR=1,VS=1,OX=0,OY=0,FIT=1;const DESIGN_MIN=720;   /* the sheet is never smaller than this on its short side; small screens zoom out */
 /* spatial hash of every drawn point: [x, y, pathId, arc] */
 const HC=12;let hash=new Map();
 /* light field (shadow propagation): each newly occupied cell casts a soft cone of shade downward */
@@ -288,6 +407,7 @@ const col=c=>c==='ink'?inkColor:c;
 const FRAME_ID=-1,VOID_ID=-2,COPY=1e7;
 let frameShape=null,voids=[],history=[];
 function stageRect(){
+  if(paperDims())return{x0:8,y0:8,x1:W-8,y1:H-8};
   const pad=16;let x0=pad,y0=pad,x1=W-pad,y1=H-pad;
   const pnl=document.getElementById('panel').getBoundingClientRect(),cr=cv.getBoundingClientRect();
   if(cr.width>640){if(!document.getElementById('panelBody').hidden)x0=Math.max(x0,(pnl.right-cr.left)/VS+pad)}
@@ -316,6 +436,10 @@ function toLocal(sh,x,y){
   return[dx,dy];
 }
 function insideShape(sh,x,y){
+  if(sh.type==='text'){
+    const i=Math.floor((x-sh.cx)*sh.s+sh.w/2),j=Math.floor((y-sh.cy)*sh.s+sh.h/2);
+    return i>=0&&j>=0&&i<sh.w&&j<sh.h&&sh.mask[j*sh.w+i]===1;
+  }
   const[dx,dy]=toLocal(sh,x,y);
   switch(sh.type){
     case'oval':case'circle':return dx*dx/(sh.rx*sh.rx)+dy*dy/(sh.ry*sh.ry)<=1;
@@ -337,6 +461,7 @@ function insideShape(sh,x,y){
 }
 /* closed outline, sampled every `step` px, in world coordinates */
 function outlinePts(sh,step){
+  if(sh.type==='text')return sh.flat;
   const L=[];
   const line=(ax,ay,bx,by)=>{const n=Math.max(1,Math.ceil(Math.hypot(bx-ax,by-ay)/step));for(let i=0;i<n;i++)L.push([ax+(bx-ax)*i/n,ay+(by-ay)*i/n])};
   const arc=(cx,cy,r,a0,a1)=>{if(r<=0)return;const n=Math.max(1,Math.ceil(Math.abs(a1-a0)*r/step));for(let i=0;i<n;i++){const a=a0+(a1-a0)*i/n;L.push([cx+Math.cos(a)*r,cy+Math.sin(a)*r])}};
@@ -378,7 +503,7 @@ function symTransforms(mode,cx,cy){
 function obstacleAdd(x,y,id){const k=hkey(Math.floor(x/HC),Math.floor(y/HC));let c=hash.get(k);if(!c){c=[];hash.set(k,c)}c.push(x,y,id,0)}
 function addObstacles(){
   if(frameShape)for(const p of outlinePts(frameShape,2))obstacleAdd(p[0],p[1],FRAME_ID);
-  for(const v of voids)for(const p of outlinePts(v,2))obstacleAdd(p[0],p[1],VOID_ID);
+  for(const v of allVoids())for(const p of outlinePts(v,2))obstacleAdd(p[0],p[1],VOID_ID);
 }
 function resetField(){hash=new Map();shadeInit();addObstacles()}
 /* reserve a point of plant pl in every symmetric copy */
@@ -392,7 +517,7 @@ function inFree(pl,x,y){
     const p=k?pl.T[k].f(x,y):[x,y];
     if(frameShape){if(!insideShape(frameShape,p[0],p[1]))return false}
     else if(p[0]<4||p[1]<4||p[0]>W-4||p[1]>H-4)return false;
-    for(const v of voids)if(insideShape(v,p[0],p[1]))return false;
+    for(const v of allVoids())if(insideShape(v,p[0],p[1]))return false;
   }
   return true;
 }
@@ -430,12 +555,13 @@ function addVoid(type,cx,cy,rx,ry){
   voids.push(...items);history.push({t:'void',items});
 }
 const gcv=document.getElementById('guides'),gctx=gcv.getContext('2d');
+const tcv=document.getElementById('textc'),tctx=tcv.getContext('2d');let segDirty=false;
 let dragVoid=null;
-function shapePath(c,sh){const pts=outlinePts(sh,3);c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.closePath()}
+function shapePath(c,sh){if(sh.type==='text'){textPath(c,sh);return}const pts=outlinePts(sh,3);c.beginPath();pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.closePath()}
 function drawGuides(){
-  gctx.clearRect(0,0,W,H);
+  gctx.save();gctx.setTransform(1,0,0,1,0,0);gctx.clearRect(0,0,gcv.width,gcv.height);gctx.restore();
   const mut=getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()||'#5D695F';
-  gctx.strokeStyle=mut;gctx.lineWidth=1;gctx.setLineDash([4,5]);gctx.globalAlpha=0.55;
+  gctx.strokeStyle=mut;gctx.lineWidth=1/VS;gctx.setLineDash([4/VS,5/VS]);gctx.globalAlpha=0.55;
   if(P.sym!=='none'){
     const[cx,cy]=symCenter(),big=Math.hypot(W,H);gctx.beginPath();
     if(P.sym==='mirror-x'||P.sym==='quad'){gctx.moveTo(cx,0);gctx.lineTo(cx,H)}
@@ -448,19 +574,53 @@ function drawGuides(){
   }
   if(frameShape&&P.frameLine==='guide'){shapePath(gctx,frameShape);gctx.stroke()}
   if(P.voidLine==='guide')for(const v of voids){shapePath(gctx,v);gctx.stroke()}
+  if(textVoid&&P.textStyle==='guide'){textPath(gctx,textVoid);gctx.stroke()}
   if(dragVoid){gctx.globalAlpha=0.9;shapePath(gctx,dragVoid);gctx.stroke()}
   gctx.setLineDash([]);gctx.globalAlpha=1;
 }
-function layoutChanged(){computeFrame();hashRebuild();drawAll();drawGuides()}
+function layoutChanged(){computeFrame();buildTextVoid();hashRebuild();drawAll();drawGuides()}
 
 
+/* Screen sheet: the sheet is the window (never under 720 units). Paper sheet: the sheet is the paper, at 4 units per
+   mm, shown zoomed to fit and movable with zoom and pan. */
+function paperDims(){
+  if(P.sheet==='screen'||!SHEETS[P.sheet])return null;
+  let[w,h]=SHEETS[P.sheet];if(P.orient==='landscape')[w,h]=[h,w];return[w*U,h*U];
+}
+function fitArea(){
+  const cr=cv.getBoundingClientRect(),sw=cr.width,sh=cr.height,pad=20;
+  let x0=pad,y0=pad,x1=sw-pad,y1=sh-pad;
+  if(sw>640){if(!document.getElementById('panelBody').hidden)x0=Math.max(x0,document.getElementById('panel').getBoundingClientRect().right-cr.left+pad)}
+  else{const head=document.querySelector('.panel-head'),hh=head?head.getBoundingClientRect().height:110;y0=56;y1=sh-hh-36}
+  return{x0,y0,x1,y1};
+}
+function fitView(){
+  const a=fitArea(),aw=Math.max(50,a.x1-a.x0),ah=Math.max(50,a.y1-a.y0);
+  FIT=Math.min(aw/W,ah/H);VS=FIT;OX=a.x0+(aw-W*VS)/2;OY=a.y0+(ah-H*VS)/2;
+}
+function applyView(){
+  for(const c of [ctx,gctx,tctx])c.setTransform(DPR*VS,0,0,DPR*VS,DPR*OX,DPR*OY);
+  ctx.lineCap='round';ctx.lineJoin='round';
+  const pp=document.getElementById('paper'),paper=!!paperDims();
+  pp.hidden=!paper;document.getElementById('zoomBar').hidden=!paper;document.getElementById('app').classList.toggle('paper-mode',paper);
+  if(paper){pp.style.left=OX+'px';pp.style.top=OY+'px';pp.style.width=W*VS+'px';pp.style.height=H*VS+'px'}
+}
+let viewRaf=0;
+function viewChanged(){applyView();if(viewRaf)return;viewRaf=requestAnimationFrame(()=>{viewRaf=0;drawAll();drawGuides()})}
+function zoomAt(px,py,f){
+  const nv=clamp(VS*f,FIT*0.6,FIT*24);if(nv===VS)return;
+  OX=px-(px-OX)*(nv/VS);OY=py-(py-OY)*(nv/VS);VS=nv;viewChanged();
+}
+/* on screen, lines are never drawn thinner than about one device pixel, so a fine pen stays visible zoomed out */
+function dw(w){return Math.max(w,0.9/VS)}
 function resize(){
   const r=cv.getBoundingClientRect(),sw=Math.max(1,r.width),sh=Math.max(1,r.height);
-  VS=Math.min(1,Math.min(sw,sh)/DESIGN_MIN);W=sw/VS;H=sh/VS;
   DPR=Math.min(window.devicePixelRatio||1,3);
-  cv.width=Math.round(sw*DPR);cv.height=Math.round(sh*DPR);gcv.width=cv.width;gcv.height=cv.height;
-  ctx.setTransform(DPR*VS,0,0,DPR*VS,0,0);ctx.lineCap='round';ctx.lineJoin='round';
-  gctx.setTransform(DPR*VS,0,0,DPR*VS,0,0);
+  const pd=paperDims();
+  if(pd){[W,H]=pd;fitView()}
+  else{VS=Math.min(1,Math.min(sw,sh)/DESIGN_MIN);W=sw/VS;H=sh/VS;OX=OY=0}
+  cv.width=Math.round(sw*DPR);cv.height=Math.round(sh*DPR);gcv.width=cv.width;gcv.height=cv.height;tcv.width=cv.width;tcv.height=cv.height;
+  applyView();
   if(!plants.length&&!voids.length)computeFrame();
   hashRebuild();drawAll();drawGuides();
 }
@@ -732,7 +892,9 @@ function evalPlan(pl,bud,T,own,spec){
   return{skip,score};
 }
 function commitPlan(pl,bud,T,ev,leaf,own,kind){
-  const path={id:++pidc,pts:[T.X[0],T.Y[0]],plan:[],kind:kind||(leaf?'leaf':'shoot'),order:bud.order,nMain:T.nMain||T.X.length,filler:!!bud.fit&&!bud.base};
+  const path={id:++pidc,pts:[T.X[0],T.Y[0]],plan:[],kind:kind||(leaf?'leaf':'shoot'),order:bud.order,nMain:T.nMain||T.X.length,filler:!!bud.fit&&!bud.base,
+    /* the closed leaf outline inside this path: a curled leaf (scroll back + S front), a stalked leaf's blade, or a whole leaf shape */
+    fillFrom:T.fillFrom!==undefined?T.fillFrom:T.lobeStart!==undefined?T.lobeStart:(leaf&&(kind==='collar'||!kind)?0:-1),planN:T.X.length*2};
   if(!leaf)path.geo={X:T.X,Y:T.Y,A:T.A,K:T.K,n:T.nMain||T.X.length,skip:ev.skip||0,vIdx:T.vIdx,lobeStart:T.lobeStart||T.X.length};
   for(let i=0;i<T.X.length;i++){path.plan.push(T.X[i],T.Y[i]);hashAddAll(pl,T.X[i],T.Y[i],path.id,i*STEP)}
   pl.paths.push(path);
@@ -744,7 +906,20 @@ function commitPlan(pl,bud,T,ev,leaf,own,kind){
   if(!leaf){const ownB=axisOwners(pl,T.X[0],T.Y[0],own||[],shootR(pl)*2);m.band=buildBand(pl,T,path.id,ev.skip,ownB)}
   T.forkSkip=ev.skip||0;
   if(!leaf&&bud.order>=1&&!bud.fit&&!bud.same&&own&&own.length&&pl.rng()<pl.prm.collar)junctionCurl(pl,T,own,path.id,bud);
+  if(T.extra)commitExtras(pl,m,T.extra);
   return m;
+}
+/* extra glyph paths (veins, inner lines, a second petal…) are drawn once their parent line has finished */
+function hostExtras(pl,m,ex,mp){
+  if(!ex||!ex.length)return;
+  commitExtras(pl,m,ex.map(e=>{const q=e.pts.map(([u,v])=>mp(u,v));return{X:q.map(a=>a[0]),Y:q.map(a=>a[1]),fill:e.fill}}));
+}
+function commitExtras(pl,m,ex){
+  for(const e of ex){
+    if(!e.X||e.X.length<2)continue;
+    const T={X:e.X,Y:e.Y,A:e.X.map(()=>0),K:e.X.map(()=>0),fillFrom:e.fill?0:-1};
+    const mm=commitPlan(pl,{order:9,kind:'leaf'},T,{skip:0},true,null,'flower');mm.waitFor=m;mm.delay=3;
+  }
 }
 /* rhythm: offshoots come off the body only (never the last turn of the volute), at intervals that shorten
    toward the volute, alternating major and minor; a leaf may sit on the shoulder where the volute begins */
@@ -807,35 +982,61 @@ function planShoot(pl,bud,own){
   /* a leaf fills the pocket only if it is a real pocket */
   if(!term&&pr.leaves>0){
     const s=sides[0],rm=room[s]||0;
-    if(rm>R*3&&pl.rng()<pr.leaves)return planLeaf(pl,{...bud,forceSide:rm>=(room[-s]||0)?s:-s},own,Math.min(leafHint(pl,bud),rm*0.6));
+    if(rm>R*3&&pl.rng()<pr.leaves)return planLeaf(pl,{...bud,forceSide:rm>=(room[-s]||0)?s:-s},own,Math.min(leafHint(pl,bud),rm*0.42));
   }
   return null;
 }
-function leafHint(pl,bud){return pl.prm.size*Math.pow(pl.prm.falloff,Math.max(0,bud.order-1))*0.38}
+function leafHint(pl,bud){return pl.prm.size*Math.pow(pl.prm.falloff,Math.max(0,bud.order-1))*0.24}
 /* leaf: tangent stalk, then an outline around a curved midrib, fuller toward the base and slightly asymmetric */
+/* a stalked leaf is the 'stalk' glyph: its spine springs tangentially from the host and runs on as the midrib,
+   mirrored to the side it grows on; the blade is bent along the placed spine */
+function gSpineLen(g){return gMapper(gSample(g.spine,40)).L}
+function gBladeU0(g){let u0=1;for(const q of g.paths[0]?g.paths[0].pts:[])u0=Math.min(u0,q.x);return clamp(u0,0.02,0.9)}
 function planLeaf(pl,bud,own,hint){
-  const r=pl.rng,R=shootR(pl);
+  const r=pl.rng,R=shootR(pl),g=getGlyph('stalk'),sl=gSpineLen(g),u0=gBladeU0(g);
   const sides=bud.forceSide?[bud.forceSide]:[bud.pref||1,-(bud.pref||1)];
   let best=null,bs=-1e18;
   for(const side of sides)for(let t=0;t<4;t++){
-    const L=clamp(hint*(0.75+r()*0.5),9,64),Wd=L*(0.28+r()*0.12),asym=(r()-0.5)*0.5;
-    let kj=side/(L*1.6);
-    if(side*(kj-bud.k)<forkDk(R))kj=bud.k+side*forkDk(R);
-    const Ls=3.5*R+L*0.12;
-    const T=traceShoot(bud.x,bud.y,bud.a,kj,[{k1:side/(L*2.2),L:Ls}],null);
-    const e=T.X.length-1;
-    const km=side*(0.3+r()*0.9)/(L*1.3);
-    const N=Math.max(6,Math.ceil(L/1.1));
-    const mx=[T.X[e]],my=[T.Y[e]],ma=[T.A[e]];
-    for(let j=1;j<=N;j++){const a=ma[j-1]+km*(L/N);ma.push(a);mx.push(mx[j-1]+Math.cos(a)*(L/N));my.push(my[j-1]+Math.sin(a)*(L/N))}
-    const half=(j,sg)=>{const tt=j/N,w=Wd*0.5*Math.pow(Math.sin(Math.PI*Math.pow(tt,0.8)),0.85)*(1+sg*asym);
-      return[mx[j]-Math.sin(ma[j])*w*sg,my[j]+Math.cos(ma[j])*w*sg]};
-    for(let j=1;j<=N;j++){const p=half(j,1);T.X.push(p[0]);T.Y.push(p[1]);T.A.push(0);T.K.push(0)}
-    for(let j=N-1;j>=0;j--){const p=half(j,-1);T.X.push(p[0]);T.Y.push(p[1]);T.A.push(0);T.K.push(0)}
-    const ev=evalLeaf(pl,T,own,e,R);
+    const L=clamp(hint*(0.8+r()*0.4),8,pl.prm.size*0.34),Ls=3.5*R+L*0.12;
+    /* the blade is sized by L; if the glyph's own stalk is too short to clear the host, a tangent lead-in peels
+       away first (as every shoot does) and the glyph carries on from its end */
+    const S=L/Math.max(0.1,(1-u0)*sl),ext=Ls-u0*sl*S;
+    let lead=null,x=bud.x,y=bud.y,a=bud.a;
+    if(ext>R*0.5){
+      let kj=side/(L*1.6);if(side*(kj-bud.k)<forkDk(R))kj=bud.k+side*forkDk(R);
+      lead=traceShoot(bud.x,bud.y,bud.a,kj,[{k1:side/(L*2.2),L:ext}],null);
+      const e=lead.X.length-1;x=lead.X[e];y=lead.Y[e];a=lead.A[e];
+    }
+    const T=placeStalked(g,x,y,a,side,S,0.9+r()*0.2,r);
+    if(!T)continue;
+    if(lead){const k=lead.X.length-1;T.X=lead.X.slice(0,k).concat(T.X);T.Y=lead.Y.slice(0,k).concat(T.Y);T.A=lead.A.slice(0,k).concat(T.A);T.K=lead.K.slice(0,k).concat(T.K);T.lobeStart+=k}
+    const ev=evalLeaf(pl,T,own,T.lobeStart,R);
     if(ev&&ev.score>bs){bs=ev.score;best={T,ev}}
   }
   return best?commitPlan(pl,{...bud,kind:'leaf'},best.T,best.ev,true):null;
+}
+function placeStalked(g,x,y,a,side,S,vj,r){
+  if(!g.paths.length)return null;
+  const gp={...g,paths:g.paths.map(p=>gJitter(p,r,0.025,false))};
+  const P=gPlace(gp,[x,y],a,side,S,vj),blade=P.paths[0];
+  if(blade.pts.length<3)return null;
+  /* the stalk runs along the spine to where the blade begins, and the pen carries straight on round the blade */
+  const u0=gBladeU0(g);
+  const cut=u0*P.M.L,X=[],Y=[];
+  for(let i=0;i<P.spine.length&&P.M.cum[i]<=cut;i++){X.push(P.spine[i][0]);Y.push(P.spine[i][1])}
+  const e0=P.M.map(u0,0,S);X.push(e0[0]);Y.push(e0[1]);
+  let pts=blade.pts;
+  if(blade.closed){let bi=0,bd=1e18;pts.forEach((q,i)=>{const d=(q[0]-e0[0])**2+(q[1]-e0[1])**2;if(d<bd){bd=d;bi=i}});
+    const loop=pts.slice(0,-1);pts=loop.slice(bi).concat(loop.slice(0,bi+1))}
+  const e=X.length-1;
+  for(const q of pts){X.push(q[0]);Y.push(q[1])}
+  const A=X.map((_,i)=>{const i0=Math.max(0,i-1),i1=Math.min(X.length-1,i+1);return Math.atan2(Y[i1]-Y[i0],X[i1]-X[i0])});
+  const T={X,Y,A,K:X.map(()=>0),lobeStart:e};
+  if(!blade.fill)T.fillFrom=-1;
+  const ex=P.paths.slice(1).map(p=>({X:p.pts.map(q=>q[0]),Y:p.pts.map(q=>q[1]),fill:p.fill&&p.closed}));
+  if(g.spineDraw==='full'){const mid=P.spine.filter((_,i)=>P.M.cum[i]>cut);mid.unshift(e0);ex.unshift({X:mid.map(q=>q[0]),Y:mid.map(q=>q[1]),fill:false})}
+  if(ex.length)T.extra=ex;
+  return T;
 }
 function evalLeaf(pl,T,own,stalkEnd,R){
   const{X,Y}=T,n=X.length,m=4;
@@ -848,6 +1049,7 @@ function evalLeaf(pl,T,own,stalkEnd,R){
     if(hitOther(X[i],Y[i],R,i<skip?own:null))return null;
   }
   if(!selfClear(pl,X,Y,R,skip))return null;
+  if(T.extra)for(const e of T.extra)for(let i=0;i<e.X.length;i+=2)if(!inFree(pl,e.X[i],e.Y[i])||hitOther(e.X[i],e.Y[i],R*0.8,null))return null;
   let lt=0,c=0;for(let i=0;i<n;i+=6){lt+=lightAt(X[i],Y[i]);c++}
   return{skip,score:lt/c+pl.rng()*0.2};
 }
@@ -879,6 +1081,7 @@ function releaseStemBud(pl,b){
   }else{const m=planShoot(pl,bud,[st.path.id]);if(m)st.lastFork=b.arc}
 }
 function advance(pl,m){
+  if(m.waitFor&&m.waitFor.cur<m.waitFor.n-1)return true;
   if(m.delay>0){m.delay--;return true}
   const X=m.X,Y=m.Y;
   const Lq=lightAt(X[m.cur],Y[m.cur]),prog=m.cur/(m.n-1);
@@ -888,7 +1091,7 @@ function advance(pl,m){
     pl.fseg.push(X[i-1],Y[i-1],X[i],Y[i]);m.path.pts.push(X[i],Y[i]);pl.len+=STEP;
     while(m.buds.length&&m.buds[0].rel<=m.cur)releaseBud(pl,m,m.buds.shift());
   }
-  if(m.cur>=m.n-1){while(m.buds.length)releaseBud(pl,m,m.buds.shift());return false}
+  if(m.cur>=m.n-1){(pl.newFills||(pl.newFills=[])).push(m.path);while(m.buds.length)releaseBud(pl,m,m.buds.shift());return false}
   return true;
 }
 
@@ -903,7 +1106,7 @@ function fieldMask(G){
     const x=(i+.5)*G,y=(j+.5)*G;
     let out=i===0||j===0||i===gw-1||j===gh-1;
     if(!out&&frameShape&&!insideShape(frameShape,x,y))out=true;
-    if(!out)for(const v of voids)if(insideShape(v,x,y)){out=true;break}
+    if(!out)for(const v of allVoids())if(insideShape(v,x,y)){out=true;break}
     if(out)M[j*gw+i]=1;
   }
   return{M,gw,gh,G};
@@ -1044,8 +1247,11 @@ function pocketFlower(pl,p,cx,cy,r){
       if(!arc||arc.length<5)continue;
       let stalkLen=0;for(let i=1;i<arc.length;i++)stalkLen+=Math.hypot(arc[i][0]-arc[i-1][0],arc[i][1]-arc[i-1][1]);
       if(stalkLen<Rd*3.5)continue;
-      const ca=Math.cos(axis),sa=Math.sin(axis);
-      const shapes=flowerLocal(H,W,pl.rng).map(path=>path.map(([v,u])=>[B[0]+ca*u-sa*v,B[1]+sa*u+ca*v]));
+      const gf=getGlyph('flower'),fs=pl.rng()<0.5?1:-1;
+      const FP=gPlace({...gf,paths:gf.paths.map(q=>gJitter(q,pl.rng,0.02,false))},B,axis,fs,H/Math.max(0.2,gSpineLen(gf)),W/(0.9*H),pl.rng);
+      const parts=FP.paths.map(q=>({pts:q.pts,fill:q.fill&&q.closed}));
+      if(gf.spineDraw==='full')parts.unshift({pts:FP.spine,fill:false});
+      const shapes=parts.map(q=>q.pts);
       /* checks: the stalk leaves its host cleanly; everything else keeps the gap */
       let skip=-1;for(let j=0;j<arc.length;j++)if(!nearOwners(arc[j][0],arc[j][1],Rd,[p.id])){skip=j;break}
       if(skip<0||skip*1.2>6*Rd)continue;
@@ -1056,6 +1262,7 @@ function pocketFlower(pl,p,cx,cy,r){
       const all=[arc].concat(shapes);
       all.forEach((s,i)=>{
         const T={X:s.map(q=>q[0]),Y:s.map(q=>q[1]),A:s.map(()=>0),K:s.map(()=>0)};
+        if(i&&parts[i-1].fill)T.fillFrom=0;
         const m=commitPlan(pl,{order:9,kind:'leaf'},T,{skip:0},true,null,'flower');m.delay=i?Math.round(stalkLen/1.4)+i*3:2;
       });
       return true;
@@ -1134,6 +1341,147 @@ function fillPockets(pl){
    4. the edge leaves the shoot tangentially and closes back onto it at the leaf tip, so the leaf is one stroke.
    The arcs are exact circles drawn in the shoot's own frame (distance along it, distance from it), so the leaf
    bends with the scroll while every lobe stays a true arc. */
+/* ---------- glyphs: editable leaf and flower constructions ----------
+   A glyph is a spine plus graphic paths. The spine is a path in the glyph's own frame (base at 0,0, tip at 1,0).
+   Graphic paths are stored relative to the spine: u is the fraction of the way along it, v the distance off it (in
+   spine-chord units, positive to its left). Placing a glyph bends the graphic along whatever spine it lands on:
+   the scroll's own end for the curled leaf, a new stalk-and-midrib for the stalked leaf, the flower's axis.
+   Every point is an anchor; the segment leaving it is a cubic Bezier (two handles), a compass arc (one bulge) or a
+   straight line. */
+const GLYPH_KEY='sprout.glyphs.v1';
+let GLY=null;
+function gA(x,y,o){return Object.assign({x,y,hi:null,ho:null,seg:'bez',bulge:0,smooth:false},o||{})}
+function gClone(o){return JSON.parse(JSON.stringify(o))}
+/* circular arc from p to q whose apex sits `sag` to the left of the chord */
+function gArc(p,q,sag,dens){
+  const dx=q[0]-p[0],dy=q[1]-p[1],c=Math.hypot(dx,dy);
+  if(c<1e-9)return[p.slice(),q.slice()];
+  if(Math.abs(sag)<c*1e-4){const n=Math.max(1,Math.ceil(c*dens)),o=[];for(let i=0;i<=n;i++)o.push([p[0]+dx*i/n,p[1]+dy*i/n]);return o}
+  const nx=-dy/c,ny=dx/c,s=Math.abs(sag),sg=Math.sign(sag),r=(c*c/4+s*s)/(2*s);
+  const ax=(p[0]+q[0])/2+nx*sag,ay=(p[1]+q[1])/2+ny*sag,cx=ax-nx*sg*r,cy=ay-ny*sg*r;
+  const a0=Math.atan2(p[1]-cy,p[0]-cx),a1=Math.atan2(q[1]-cy,q[0]-cx),am=Math.atan2(ay-cy,ax-cx);
+  let da=wrap(a1-a0);const between=(d,m)=>d>0?(wrap(m-a0)>=0&&wrap(m-a0)<=d):(wrap(m-a0)<=0&&wrap(m-a0)>=d);
+  if(!between(da,am))da=da>0?da-2*Math.PI:da+2*Math.PI;
+  const n=Math.max(6,Math.ceil(Math.abs(da)*r*dens)),o=[];
+  for(let i=0;i<=n;i++){const g=a0+da*i/n;o.push([cx+Math.cos(g)*r,cy+Math.sin(g)*r])}
+  return o;
+}
+function gBez(a,p1,p2,b,t){const m=1-t;return[m*m*m*a[0]+3*m*m*t*p1[0]+3*m*t*t*p2[0]+t*t*t*b[0],m*m*m*a[1]+3*m*m*t*p1[1]+3*m*t*t*p2[1]+t*t*t*b[1]]}
+/* points of the segment leaving a toward b, after a, with b included; each tagged with its parameter t */
+function gSeg(a,b,dens,tag){
+  const A=[a.x,a.y],B=[b.x,b.y],ch=Math.hypot(B[0]-A[0],B[1]-A[1]),o=[];
+  if(a.seg==='line'){const n=Math.max(1,Math.ceil(ch*dens));for(let i=1;i<=n;i++){const t=i/n;o.push(tag?{p:[A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t],t}:[A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t])}return o}
+  if(a.seg==='arc'){const pts=gArc(A,B,(a.bulge||0)*ch,dens);for(let i=1;i<pts.length;i++)o.push(tag?{p:pts[i],t:i/(pts.length-1)}:pts[i]);return o}
+  const p1=a.ho||A,p2=b.hi||B,est=ch+Math.hypot(p1[0]-A[0],p1[1]-A[1])+Math.hypot(p2[0]-B[0],p2[1]-B[1]);
+  const n=Math.max(4,Math.ceil(est*dens));
+  for(let i=1;i<=n;i++){const t=i/n,p=gBez(A,p1,p2,B,t);o.push(tag?{p,t}:p)}
+  return o;
+}
+function gSample(path,dens,tag){
+  const P=path.pts;if(!P.length)return[];
+  const o=[tag?{p:[P[0].x,P[0].y],seg:0,t:0}:[P[0].x,P[0].y]];
+  const segs=path.closed?P.length:P.length-1;
+  for(let i=0;i<segs;i++){const s=gSeg(P[i],P[(i+1)%P.length],dens,tag);if(tag)s.forEach(q=>{q.seg=i});o.push(...s)}
+  return o;
+}
+/* bend (u,v) along a polyline: u by arc fraction, v along its left normal, scaled; beyond the ends it carries on straight */
+function gMapper(poly){
+  const n=poly.length,cum=[0];
+  for(let i=1;i<n;i++)cum.push(cum[i-1]+Math.hypot(poly[i][0]-poly[i-1][0],poly[i][1]-poly[i-1][1]));
+  const L=Math.max(1e-9,cum[n-1]);
+  const tan=i=>{const a=poly[Math.max(0,i-2)],b=poly[Math.min(n-1,i+3)],dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1;return[dx/l,dy/l]};
+  const locate=s=>{if(s<=0)return 0;if(s>=L)return n-2;let lo=0,hi=n-1;while(hi-lo>1){const m=(lo+hi)>>1;if(cum[m]<=s)lo=m;else hi=m}return Math.min(lo,n-2)};
+  return{L,poly,cum,
+    map(u,v,sc){
+      if(n<2)return[poly[0][0],poly[0][1]];
+      const s=u*L,i=locate(s),seg=Math.max(1e-9,cum[i+1]-cum[i]),t=(s-cum[i])/seg;
+      const x=poly[i][0]+(poly[i+1][0]-poly[i][0])*t,y=poly[i][1]+(poly[i+1][1]-poly[i][1])*t;
+      let ta=tan(i),tb=tan(i+1);const w=clamp(t,0,1);let tx=ta[0]*(1-w)+tb[0]*w,ty=ta[1]*(1-w)+tb[1]*w;const tl=Math.hypot(tx,ty)||1;tx/=tl;ty/=tl;
+      return[x-ty*v*sc,y+tx*v*sc];
+    },
+    inv(x,y,sc){
+      let best=1e18,bu=0,bv=0;
+      for(let i=0;i<n-1;i++){
+        const ax=poly[i][0],ay=poly[i][1],dx=poly[i+1][0]-ax,dy=poly[i+1][1]-ay,l2=dx*dx+dy*dy||1e-12;
+        let t=((x-ax)*dx+(y-ay)*dy)/l2;
+        if(!(i===0&&t<0)&&!(i===n-2&&t>1))t=clamp(t,0,1);
+        const px=ax+dx*t,py=ay+dy*t,d=Math.hypot(x-px,y-py);
+        if(d<best){best=d;const l=Math.sqrt(l2);bu=(cum[i]+t*l)/L;bv=((x-px)*(-dy)+(y-py)*dx)/l/sc}
+      }
+      return[bu,bv];
+    }};
+}
+/* turn a sampled polyline into a few editable anchors: corners stay sharp, the rest get smooth handles */
+function gFit(P,closed,maxSegs){
+  if(closed)P=P.concat([P[0]]);
+  const n=P.length;if(n<3)return P.map(p=>gA(p[0],p[1],{seg:'line'}));
+  const cum=[0];for(let i=1;i<n;i++)cum.push(cum[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
+  const L=cum[n-1]||1;
+  const turn=i=>{const a=P[Math.max(0,i-2)],b=P[i],c=P[Math.min(n-1,i+2)];return Math.abs(wrap(Math.atan2(c[1]-b[1],c[0]-b[0])-Math.atan2(b[1]-a[1],b[0]-a[0])))};
+  const corner=new Array(n).fill(false);
+  for(let i=2;i<n-2;i++){const t=turn(i);if(t>0.75&&t>=turn(i-1)&&t>=turn(i+1))corner[i]=true}
+  let idx=[0];for(let i=1;i<n-1;i++)if(corner[i]&&cum[i]-cum[idx[idx.length-1]]>L*0.02)idx.push(i);idx.push(n-1);
+  const maxL=L/(maxSegs||7),out=[idx[0]];
+  for(let k=1;k<idx.length;k++){
+    const a=idx[k-1],b=idx[k],len=cum[b]-cum[a],m=Math.ceil(len/maxL);
+    for(let j=1;j<m;j++){const target=cum[a]+len*j/m;let q=a;while(q<b&&cum[q]<target)q++;if(q>out[out.length-1]&&q<b)out.push(q)}
+    out.push(b);
+  }
+  const dir=(i,j)=>{const dx=P[j][0]-P[i][0],dy=P[j][1]-P[i][1],l=Math.hypot(dx,dy)||1;return[dx/l,dy/l]};
+  const A=out.map((i,k)=>{
+    const a=gA(P[i][0],P[i][1]),isC=k===0||k===out.length-1||corner[i];a.smooth=!isC;
+    if(k<out.length-1){const q=out[k+1],len=(cum[q]-cum[i])/3,d=isC?dir(i,Math.min(n-1,i+2)):dir(Math.max(0,i-1),Math.min(n-1,i+1));a.ho=[P[i][0]+d[0]*len,P[i][1]+d[1]*len]}
+    if(k>0){const p=out[k-1],len=(cum[i]-cum[p])/3,d=isC?dir(Math.max(0,i-2),i):dir(Math.max(0,i-1),Math.min(n-1,i+1));a.hi=[P[i][0]-d[0]*len,P[i][1]-d[1]*len]}
+    return a;
+  });
+  if(closed){const last=A.pop();A[0].hi=last.hi}
+  return A;
+}
+/* the default glyphs are the constructions the brush already used, made editable */
+function gDefaults(){
+  const half=()=>0.5;
+  /* curled leaf: Alfano's curve-and-S profile along the end of the scroll */
+  const prof=leafAlfanoBase(100,38,half).map(([x,y])=>[x/100,y/100]);
+  const curl={span:0.39,paths:[{pts:gFit(prof,false,6),closed:false,fill:true}]};
+  curl.paths[0].pts[0].x=0;curl.paths[0].pts[0].y=0;const e=curl.paths[0].pts[curl.paths[0].pts.length-1];e.x=1;e.y=0;
+  /* stalked leaf: a tangent stalk that runs on as a curved midrib; the blade is a vesica around the midrib */
+  const sp=[[0,0]];let x=0,y=0,a=0;const Ls=0.3,L=1;
+  for(let s=0;s<Ls+L;s+=0.02){const k=s<Ls?1/2.2:0.75/1.3;a+=k*0.02;x+=Math.cos(a)*0.02;y+=Math.sin(a)*0.02;sp.push([x,y])}
+  const ch=Math.hypot(x,y),rot=-Math.atan2(y,x),cr=Math.cos(rot),sr=Math.sin(rot);
+  const spn=sp.map(([px,py])=>[(px*cr-py*sr)/ch,(px*sr+py*cr)/ch]);
+  const spine={pts:gFit(spn,false,3)};spine.pts[0].x=0;spine.pts[0].y=0;const se=spine.pts[spine.pts.length-1];se.x=1;se.y=0;
+  const Mm=gMapper(spn),u0=Ls/(Ls+L),Wd=0.3/ch,blade=[];
+  for(let i=0;i<=40;i++){const t=i/40;blade.push([u0+(1-u0)*t,Wd*0.5*Math.pow(Math.sin(Math.PI*Math.pow(t,0.8)),0.85)])}
+  for(let i=39;i>0;i--){const t=i/40;blade.push([u0+(1-u0)*t,-Wd*0.5*Math.pow(Math.sin(Math.PI*Math.pow(t,0.8)),0.85)])}
+  const stalk={spineDraw:'stalk',spine,paths:[{pts:gFit(blade,true,6),closed:true,fill:true}]};
+  /* flower: the side-view lily, symmetric about its axis */
+  const fl=flowerLocal(100,90,half).map(p=>p.map(([v,u])=>[u/100,v/100]));
+  const flower={spineDraw:'none',spine:{pts:[gA(0,0,{seg:'line'}),gA(1,0)]},paths:fl.map(p=>({pts:gFit(p,false,4),closed:false,fill:false}))};
+  return{curl,stalk,flower};
+}
+function gValid(G){
+  try{return!!(G&&G.curl&&G.stalk&&G.flower&&Array.isArray(G.curl.paths)&&G.stalk.spine&&G.flower.spine)}catch(_){return false}
+}
+function getGlyph(kind){
+  if(!GLY){
+    let saved=null;try{saved=JSON.parse(localStorage.getItem(GLYPH_KEY)||'null')}catch(_){}
+    GLY=gValid(saved)?saved:gDefaults();
+  }
+  return GLY[kind];
+}
+function saveGlyphs(){try{localStorage.setItem(GLYPH_KEY,JSON.stringify(GLY))}catch(_){}}
+/* place a glyph whose spine it carries itself (stalked leaf, flower): the spine starts at `origin` heading `ang`,
+   mirrored to `side`, scaled by S; graphic paths are bent along the placed spine */
+function gPlace(g,origin,ang,side,S,vj){
+  const dens=Math.max(4,S/1.2),sp=gSample(g.spine,dens);
+  const k=Math.min(sp.length-1,3),t0=Math.atan2(sp[k][1]-sp[0][1],sp[k][0]-sp[0][0]);
+  const rot=ang-side*t0,c=Math.cos(rot),s=Math.sin(rot);
+  const W=([x,y])=>{const yy=y*side;return[origin[0]+(x*c-yy*s)*S,origin[1]+(x*s+yy*c)*S]};
+  const spine=sp.map(W),M=gMapper(spine),scale=S*M.L/Math.max(1e-9,gMapper(sp).L);
+  const paths=g.paths.map(p=>({pts:gSample(p,dens).map(([u,v])=>M.map(u,v*side*vj,S)),closed:p.closed,fill:p.fill,u0:p.pts.length?p.pts[0].x:0}));
+  return{spine,M,paths,scale};
+}
+
 function arcSag(p,q,sag){
   /* circular arc from p to q whose midpoint sits `sag` to the left of the chord (negative = right) */
   const dx=q[0]-p[0],dy=q[1]-p[1],c=Math.hypot(dx,dy);
@@ -1204,7 +1552,31 @@ function leafLocal(L,Wm,lobes,rg){
    front edge - an "S-curve": concave just under the tip (this is what hooks the tip), then convex down to the stem,
                 cut into two small teeth.
    Never S-curves on both edges: that turns the tip upward. Proportions vary per leaf within these rules. */
+/* the curled leaf comes from the editable glyph: its profile scaled to length L and half-width Wm, each anchor
+   nudged a little so no two leaves are identical; extra glyph paths ride along in .extra */
 function leafAlfano(L,Wm,rg){
+  rg=rg||Math.random;
+  const g=getGlyph('curl'),sv=Wm/0.38,dens=Math.max(4,L/1.1);
+  const conv=p=>gSample(gJitter(p,rg,0.035,p===g.paths[0]),dens).map(([u,v])=>[u*L,v*sv]);
+  const out=conv(g.paths[0]);out.extra=g.paths.slice(1).map(p=>({pts:conv(p),fill:p.fill&&p.closed}));
+  return out;
+}
+function gJitter(p,rg,amt,pin){
+  const q=gClone(p),n=q.pts.length;
+  q.pts.forEach((a,i)=>{
+    if(pin&&!p.closed&&(i===0||i===n-1))return;
+    const dx=(rg()-0.5)*2*amt,dy=(rg()-0.5)*2*amt*0.6;
+    a.x+=dx;a.y+=dy;if(a.hi){a.hi[0]+=dx;a.hi[1]+=dy}if(a.ho){a.ho[0]+=dx;a.ho[1]+=dy}
+  });
+  return q;
+}
+/* how much taller or shorter than the stock leaf the glyph is: the terminal leaf keeps its height inside the curl */
+function gCurlK(g){
+  g=g||getGlyph('curl');let vm=0.05;
+  for(const p of g.paths)for(const [,v] of gSample(p,40))vm=Math.max(vm,v);
+  return 0.342/vm;
+}
+function leafAlfanoBase(L,Wm,rg){
   rg=rg||Math.random;
   const pts=[[0,0]],push=a=>{if(a)pts.push(...a.slice(1))};
   const tanOf=a=>{const e=a.length-1,dx=a[e][0]-a[e-1][0],dy=a[e][1]-a[e-1][1],l=Math.hypot(dx,dy)||1;return[dx/l,dy/l]};
@@ -1238,25 +1610,26 @@ function leafAlfano(L,Wm,rg){
    there is room, otherwise the leaf turns outward. */
 function addTermLeaf(T,pl){
   const Rd=detailR(pl),rg=pl.rng,n0=T.X.length;
-  const want=2*Math.PI*(0.42+rg()*0.14);
+  /* the leaf covers a shorter run of the curl, and the biggest scrolls' leaves are capped */
+  const want=2*Math.PI*(0.34+rg()*0.1),capL=pl.prm.size*0.62;
   /* the leaf body always lies inside the curl, with the scroll as its back edge. If the curl is too tight for it,
      the scroll stops a little earlier (a more open curl) and the leaf is tried again. */
   for(let tries=0;tries<5;tries++){
     const n=T.X.length,end=n-1;
     if(end-T.sIdx<6&&end<12)return null;
     let acc=0,iB=end;const maxB=Math.max(4,Math.round(end*0.5));
-    while(iB>Math.max(2,end-maxB)&&acc<want){acc+=Math.abs(T.K[iB])*STEP;iB--}
+    while(iB>Math.max(2,end-maxB)&&acc<want&&(end-iB)*STEP<capL){acc+=Math.abs(T.K[iB])*STEP;iB--}
     const Lt=(end-iB)*STEP;if(Lt<Rd*5.5)return null;
     let rmin=1e9;for(let i=iB;i<=end;i++)rmin=Math.min(rmin,1/Math.max(1e-6,Math.abs(T.K[i])));
-    const Wm=Math.min(Lt*0.42,0.4*rmin);
+    const Wm=Math.min(Lt*0.38,0.34*rmin*gCurlK());
     if(Wm>=Rd*1.6){
       const sgK=Math.sign(T.K[end])||1,prof=leafAlfano(Lt,Wm,rg),X=[],Y=[];
-      for(let j=prof.length-2;j>=0;j--){
-        const x=Lt-prof[j][0],v=prof[j][1],f=end-x/STEP,i=Math.max(0,Math.min(end-1,Math.floor(f))),t=f-i;
+      const mp=(u,v)=>{const x=Lt-u,f=end-x/STEP,i=Math.max(0,Math.min(end-1,Math.floor(f))),t=f-i;
         const a0=T.A[i],a1=a0+wrap(T.A[i+1]-a0),a=a0+(a1-a0)*t;
         const cx=T.X[i]+(T.X[i+1]-T.X[i])*t,cy=T.Y[i]+(T.Y[i+1]-T.Y[i])*t;
-        X.push(cx-Math.sin(a)*v*sgK);Y.push(cy+Math.cos(a)*v*sgK);
-      }
+        return[cx-Math.sin(a)*v*sgK,cy+Math.cos(a)*v*sgK]};
+      for(let j=prof.length-2;j>=0;j--){const q=mp(prof[j][0],prof[j][1]);X.push(q[0]);Y.push(q[1])}
+      T.extra=prof.extra.map(e=>{const q=e.pts.map(([u,v])=>mp(u,v));return{X:q.map(a=>a[0]),Y:q.map(a=>a[1]),fill:e.fill}});
       let ok=true;
       for(let j=2;j<X.length-2&&ok;j+=2)for(let i=Math.max(0,iB-40);i<iB-2;i+=2)if(Math.hypot(X[j]-T.X[i],Y[j]-T.Y[i])<Rd){ok=false;break}
       if(ok){
@@ -1286,6 +1659,8 @@ function leafOnHost(pl,H,pid,so,L,Wm,a0){
   if(!selfClear(pl,X,Y,Rd,0))return null;
   const m=commitPlan(pl,{order:9,kind:'leaf'},{X,Y,A:X.map(()=>0),K:X.map(()=>0)},{skip:0},true,null,'collar');
   m.path.stemArc=a0;m.delay=4;
+  hostExtras(pl,m,prof.extra,(u,v)=>{const f=u/H.step,i=Math.max(0,Math.min(nH-2,Math.floor(f))),t=clamp(f-i,0,1);
+    const aa=H.A[i],ab=aa+wrap(H.A[i+1]-aa),a=aa+(ab-aa)*t;return[H.X[i]+(H.X[i+1]-H.X[i])*t-Math.sin(a)*v*so,H.Y[i]+(H.Y[i+1]-H.Y[i])*t+Math.cos(a)*v*so]});
   return m;
 }
 /* a leaf on the stem between branches is built the same way as every other leaf: a small curl springs
@@ -1354,6 +1729,8 @@ function buildJunctionLeaf(pl,T,own,cid,skip){
     if(!ok||!selfClear(pl,LX,LY,Rd,0))continue;
     const m=commitPlan(pl,{order:9,kind:'leaf'},{X:LX,Y:LY,A:LX.map(()=>0),K:LX.map(()=>0)},{skip:0},true,null,'collar');
     m.delay=6;
+    hostExtras(pl,m,prof.extra,(u,v)=>{const f=(u0+u)/h,k=Math.max(0,Math.min(X.length-2,Math.floor(f))),t=clamp(f-k,0,1);
+      const aa=A[k],ab=aa+wrap(A[k+1]-aa),a=aa+(ab-aa)*t;return[X[k]+(X[k+1]-X[k])*t-Math.sin(a)*v*so,Y[k]+(Y[k+1]-Y[k])*t+Math.cos(a)*v*so]});
     return m;
   }
   return null;
@@ -1381,6 +1758,7 @@ function buildCollar(pl,T,own,cid,R){
       if(!ok||!selfClear(pl,X,Y,Rd,0))continue;
       const m=commitPlan(pl,{order:9,kind:'leaf'},{X,Y,A:X.map(()=>0),K:X.map(()=>0)},{skip:0},true,null,'collar');
       m.delay=10+Math.round(u0/STEP);
+      hostExtras(pl,m,loc.extra,(u,v)=>{const h=hostAt(T,u0+u);return[h.x-Math.sin(h.a)*v*so,h.y+Math.cos(h.a)*v*so]});
       return m;
     }
   }
@@ -1699,28 +2077,31 @@ function replay(pl){
 }
 
 /* ---------- drawing ---------- */
-function strokePts(a){
-  const n=a.length/2;if(n<2)return;ctx.moveTo(a[0],a[1]);
-  if(n===2){ctx.lineTo(a[2],a[3]);return}
-  for(let i=1;i<n-1;i++){const x=a[i*2],y=a[i*2+1];ctx.quadraticCurveTo(x,y,(x+a[i*2+2])/2,(y+a[i*2+3])/2)}
-  ctx.lineTo(a[2*n-2],a[2*n-1]);
+function strokePts(a,c){
+  c=c||ctx;
+  const n=a.length/2;if(n<2)return;c.moveTo(a[0],a[1]);
+  if(n===2){c.lineTo(a[2],a[3]);return}
+  for(let i=1;i<n-1;i++){const x=a[i*2],y=a[i*2+1];c.quadraticCurveTo(x,y,(x+a[i*2+2])/2,(y+a[i*2+3])/2)}
+  c.lineTo(a[2*n-2],a[2*n-1]);
 }
 function tPts(a,t){if(!t)return a;const o=new Array(a.length);for(let i=0;i<a.length;i+=2){const p=t.f(a[i],a[i+1]);o[i]=p[0];o[i+1]=p[1]}return o}
 function drawAll(){
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle=inkColor;ctx.lineWidth=P.width;
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);ctx.restore();
+  ctx.strokeStyle=inkColor;ctx.lineWidth=dw(P.width);
   if(frameShape&&P.frameLine==='drawn'){shapePath(ctx,frameShape);ctx.stroke()}
   if(P.voidLine==='drawn')for(const v of voids){shapePath(ctx,v);ctx.stroke()}
+  renderTextLayer();
   for(const pl of plants){
-    ctx.strokeStyle=col(pl.color);ctx.lineWidth=pl.width;ctx.beginPath();
+    ctx.strokeStyle=col(pl.color);ctx.lineWidth=dw(pl.width);ctx.beginPath();
     for(let k=0;k<pl.T.length;k++)for(const p of pl.paths)strokePts(k?tPts(p.pts,pl.T[k]):p.pts);
-    ctx.stroke();pl.fseg=[];
+    ctx.stroke();pl.fseg=[];pl.newFills=[];
+    fillLeaves(pl,pl.paths);
   }
 }
 function drawSegs(){
   for(const pl of plants){
-    const s=pl.fseg;if(!s.length)continue;
-    ctx.strokeStyle=col(pl.color);ctx.lineWidth=pl.width;ctx.beginPath();
+    const s=pl.fseg;if(!s.length)continue;segDirty=true;
+    ctx.strokeStyle=col(pl.color);ctx.lineWidth=dw(pl.width);ctx.beginPath();
     for(let k=0;k<pl.T.length;k++){
       const t=k?pl.T[k]:null;
       for(let i=0;i<s.length;i+=4){
@@ -1730,6 +2111,39 @@ function drawSegs(){
     }
     ctx.stroke();pl.fseg=[];
   }
+  /* leaves still being drawn get their growing fill; ones that finished this frame get their final fill */
+  if(P.leafFill==='filled')for(const pl of plants){
+    const list=pl.ms.filter(m=>m.path.fillFrom>=0&&m.cur>0).map(m=>m.path);
+    if(pl.newFills&&pl.newFills.length)list.push(...pl.newFills);
+    if(list.length){fillLeaves(pl,list);segDirty=true}
+    pl.newFills=[];
+  }else for(const pl of plants)pl.newFills=[];
+}
+/* leaves filled with their own stroke colour, once fully drawn */
+function leafPoly(p,t){
+  if(!(p.fillFrom>=0)||p.pts.length<p.planN)return null;
+  const a=p.pts.slice(p.fillFrom*2);if(a.length<8)return null;
+  return t?tPts(a,t):a;
+}
+/* the fill grows with the pen. A leaf's outline is planned in full before it is drawn: the back edge runs from the
+   base to the tip, then the front edge returns from the tip to the base. Once the pen rounds the tip, the fill
+   covers the part of the leaf between the front edge drawn so far and the matching stretch of the back edge, so the
+   leaf closes in behind the pen and is complete exactly when the outline is. */
+function leafPolyNow(p,t){
+  const ff=p.fillFrom;if(!(ff>=0)||!p.plan)return null;
+  const total=p.plan.length/2,drawn=p.pts.length/2;
+  if(drawn>=total)return leafPoly(p,t);
+  const tip=p.nMain&&p.nMain<total?p.nMain-1:ff+Math.floor((total-ff)/2);
+  if(drawn-1<=tip+1||tip<=ff)return null;
+  const u=(drawn-1-tip)/Math.max(1,total-1-tip),b0=Math.max(ff,Math.round(tip-u*(tip-ff)));
+  const a=p.plan.slice(b0*2,drawn*2);if(a.length<8)return null;
+  return t?tPts(a,t):a;
+}
+function fillLeaves(pl,list){
+  if(P.leafFill!=='filled')return;
+  ctx.fillStyle=col(pl.color);ctx.beginPath();
+  for(const p of list)for(let k=0;k<pl.T.length;k++){const a=leafPolyNow(p,k?pl.T[k]:null);if(!a)continue;ctx.moveTo(a[0],a[1]);for(let i=2;i<a.length;i+=2)ctx.lineTo(a[i],a[i+1]);ctx.closePath()}
+  ctx.fill();
 }
 const statsEl=$('#stats');let fc=0;
 function updateStats(){
@@ -1739,8 +2153,11 @@ function updateStats(){
   statsEl.textContent=plants.length?`${plants.length} stem${plants.length>1?'s':''} · ${shoots} shoots · ${m.toFixed(2)} m of line${growing?' · growing':''}`:'Empty sheet';
 }
 function frame(){
-  const subs=RM?400:P.speed;
+  const t0=performance.now(),inst=RM||P.grow==='instant';
+  const subs=inst?100000:P.speed;
   for(let s=0;s<subs;s++){
+    if(inst&&(s&7)===0&&performance.now()-t0>26)break;
+    if(inst&&plants.every(p=>!p.ms.length))break;
     for(const pl of plants){
       const ms=pl.ms;if(!ms.length)continue;
       const alive=[];
@@ -1748,6 +2165,7 @@ function frame(){
       pl.ms=alive;
     }
   }
+  for(let pass=0;pass<(inst?40:1)&&!(pass&&performance.now()-t0>26);pass++)
   if(!drawing&&plants.length&&plants.every(p=>!p.ms.length)){
     let busy=false;
     for(const p of plants)if(p.stemDone&&!p.filled){
@@ -1760,6 +2178,7 @@ function frame(){
     }
   }
   drawSegs();
+  if(segDirty&&textVoid&&P.textMode==='weave'&&fc%6===0){segDirty=false;renderTextLayer()}
   if(++fc%12===0)updateStats();
   requestAnimationFrame(frame);
 }
@@ -1767,17 +2186,19 @@ function frame(){
 /* ---------- input ---------- */
 let drawing=null,pen=null;const ROPE=10;
 const hint=$('#hint');
-function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/VS,y:(e.clientY-r.top)/VS}}
-let voidStart=null;
+function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left-OX)/VS,y:(e.clientY-r.top-OY)/VS}}
+let voidStart=null,panStart=null;
 cv.addEventListener('pointerdown',e=>{
   if(e.button>0)return;cv.setPointerCapture(e.pointerId);
+  if(P.tool==='pan'){panStart={x:e.clientX,y:e.clientY,ox:OX,oy:OY};return}
   const p=pt(e);
   if(P.tool!=='stem'){voidStart=p;dragVoid=null;return}
   if(frameShape&&!insideShape(frameShape,p.x,p.y)){hint.textContent='Start stems inside the frame';return}
-  if(voids.some(v=>insideShape(v,p.x,p.y))){hint.textContent='That spot is a void · start the stem outside it';return}
+  if(allVoids().some(v=>insideShape(v,p.x,p.y))){hint.textContent='That spot is a void · start the stem outside it';return}
   pen={x:p.x,y:p.y};drawing=newPlant(p.x,p.y);hint.textContent='';
 });
 cv.addEventListener('pointermove',e=>{
+  if(panStart){OX=panStart.ox+e.clientX-panStart.x;OY=panStart.oy+e.clientY-panStart.y;viewChanged();return}
   if(voidStart){
     const p=pt(e),rx=Math.abs(p.x-voidStart.x)/2,ry=Math.abs(p.y-voidStart.y)/2;
     dragVoid={type:P.tool==='oval'?'oval':'rect',cx:(p.x+voidStart.x)/2,cy:(p.y+voidStart.y)/2,rx:Math.max(1,rx),ry:Math.max(1,ry),rot:0,r:0};
@@ -1791,6 +2212,7 @@ cv.addEventListener('pointermove',e=>{
   }
 });
 function endDraw(){
+  if(panStart){panStart=null;return}
   if(voidStart){
     const d=dragVoid;voidStart=null;dragVoid=null;
     if(d&&d.rx>=8&&d.ry>=8){addVoid(d.type,d.cx,d.cy,d.rx,d.ry);hashRebuild();drawAll()}
@@ -1830,23 +2252,76 @@ function pathD(a){
   return d;
 }
 function buildSVG(){
-  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(W)}" height="${Math.round(H)}" viewBox="0 0 ${Math.round(W)} ${Math.round(H)}">\n`;
+  const pdm=paperDims();
+  let s=pdm?`<svg xmlns="http://www.w3.org/2000/svg" width="${W/U}mm" height="${H/U}mm" viewBox="0 0 ${W} ${H}">\n`:`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(W)}" height="${Math.round(H)}" viewBox="0 0 ${Math.round(W)} ${Math.round(H)}">\n`;
   const outl=sh=>{const p=outlinePts(sh,2);return'M'+p.map(q=>q[0].toFixed(2)+' '+q[1].toFixed(2)).join('L')+'Z'};
   const lay=[];
   if(frameShape&&P.frameLine==='drawn')lay.push(outl(frameShape));
   if(P.voidLine==='drawn')for(const v of voids)lay.push(outl(v));
   if(lay.length)s+=`<g fill="none" stroke="#1D2620" stroke-width="${P.width}" stroke-linejoin="round">\n${lay.map(d=>`<path d="${d}"/>`).join('\n')}\n</g>\n`;
+  /* filled leaves sit underneath the text, as on screen */
+  let overFills='';
+  if(P.leafFill==='filled'){
+    const upSet=new Set();
+    if(textVoid&&P.textStyle!=='guide'&&P.textMode==='weave')for(const L of wovenLines())if(L.spans.leafOver)upSet.add(L.p.id+':'+L.k);
+    if(textVoid&&P.textStyle!=='guide'&&P.textMode==='over')for(const pl of plants)for(const p of pl.paths)for(let k=0;k<pl.T.length;k++)upSet.add(p.id+':'+k);
+    for(const pl of plants){
+      const lo=[],hi=[];
+      for(const p of pl.paths)for(let k=0;k<pl.T.length;k++){const a=leafPoly(p,k?pl.T[k]:null);if(!a)continue;let d='M'+a[0].toFixed(2)+' '+a[1].toFixed(2);for(let i=2;i<a.length;i+=2)d+='L'+a[i].toFixed(2)+' '+a[i+1].toFixed(2);(upSet.has(p.id+':'+k)?hi:lo).push(d+'Z')}
+      const fc2=pl.color==='ink'?'#1D2620':pl.color;
+      if(lo.length)s+=`<path fill="${fc2}" stroke="none" d="${lo.join('')}"/>\n`;
+      if(hi.length)overFills+=`<path fill="${fc2}" stroke="none" d="${hi.join('')}"/>\n`;
+    }
+  }
+  /* lines and text are cut geometrically, so the SVG plots exactly what is on screen */
+  const tg=textGap(),showT=textVoid&&P.textStyle!=='guide';
+  const behind=showT&&P.textMode==='behind',over=showT&&P.textMode==='over',weave=showT&&P.textMode==='weave';
+  const WL=weave?wovenLines():null;
+  const P2=a=>a.map(q=>q[0].toFixed(2)+' '+q[1].toFixed(2)).join('L');
+  if(showT){
+    if(false){
+      /* outline text: the letter outlines are broken a gap around every line that crosses over them */
+      let nearLine=(x,y)=>{const r=tg+P.width*0.5,r2=r*r,ci=Math.floor(x/HC),cj=Math.floor(y/HC),n=Math.ceil(r/HC);
+        for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){const c=hash.get(hkey(ci+di,cj+dj));if(c)for(let q=0;q<c.length;q+=4)if(c[q+2]>0&&(c[q]-x)**2+(c[q+1]-y)**2<r2)return true}return false};
+      if(weave){
+        const g=new Map(),r=tg+P.width*0.5,r2=r*r;
+        for(const L of WL)for(const sp of L.spans)if(sp.over)for(let i=Math.max(0,sp.i0-2);i<=Math.min(L.a.length/2-1,sp.i1+2);i++){const x=L.a[2*i],y=L.a[2*i+1],k=Math.floor(x/8)*100003+Math.floor(y/8);(g.get(k)||g.set(k,[]).get(k)).push(x,y)}
+        nearLine=(x,y)=>{const ci=Math.floor(x/8),cj=Math.floor(y/8),n=Math.ceil(r/8);for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){const c=g.get((ci+di)*100003+cj+dj);if(c)for(let q=0;q<c.length;q+=2)if((c[q]-x)**2+(c[q+1]-y)**2<r2)return true}return false};
+      }
+      const segs=[];for(const L of textVoid.loops){const flat=[];for(const q of L)flat.push(q[0],q[1]);for(const r of runs(flat,(x,y)=>!nearLine(x,y),true))segs.push(r)}
+      s+=`<g fill="none" stroke="#1D2620" stroke-width="${P.width}" stroke-linecap="round" stroke-linejoin="round">\n${segs.map(a=>{const p=[];for(let i=0;i<a.length;i+=2)p.push([a[i],a[i+1]]);return`<path d="M${P2(p)}"/>`}).join('\n')}\n</g>\n`;
+    }else{
+      const d=textVoid.loops.map(L=>'M'+P2(L)+'Z').join('');
+      if(false){
+        /* filled text: a mask knocks a gap-wide channel out of the letters along every line (woven: over-crossings only) */
+        let m=`<defs><mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="${Math.round(W)}" height="${Math.round(H)}"><rect width="100%" height="100%" fill="#fff"/><g fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">`;
+        if(weave){for(const L of WL)for(const sp of L.spans)if(sp.over){const i0=Math.max(0,sp.i0-2),i1=Math.min(L.a.length/2-1,sp.i1+2);m+=`<path stroke-width="${(L.pl.width+tg*2).toFixed(2)}" d="${pathD(L.a.slice(i0*2,i1*2+2))}"/>`}}
+        else for(const pl of plants)for(let k=0;k<pl.T.length;k++)for(const p of pl.paths)if(p.pts.length>=4)m+=`<path stroke-width="${(pl.width+tg*2).toFixed(2)}" d="${pathD(k?tPts(p.pts,pl.T[k]):p.pts)}"/>`;
+        s+=m+`</g></mask></defs>\n<path d="${d}" fill="#1D2620" fill-rule="evenodd" mask="url(#cut)"/>\n`;
+      }else s+=P.textStyle==='filled'?`<path d="${d}" fill="#1D2620" fill-rule="evenodd"/>\n`:`<path d="${d}" fill="none" stroke="#1D2620" stroke-width="${P.width}" stroke-linejoin="round"/>\n`;
+    }
+  }
   for(const pl of plants){
     s+=`<g fill="none" stroke="${pl.color==='ink'?'#1D2620':pl.color}" stroke-width="${pl.width}" stroke-linecap="round" stroke-linejoin="round">\n`;
-    for(let k=0;k<pl.T.length;k++)for(const p of pl.paths){if(p.pts.length>=4)s+=`<path d="${pathD(k?tPts(p.pts,pl.T[k]):p.pts)}"/>\n`}
+    for(let k=0;k<pl.T.length;k++)for(const p of pl.paths){
+      if(p.pts.length<4)continue;const a=k?tPts(p.pts,pl.T[k]):p.pts;
+      /* behind: each line is cut where it would pass under a letter, a gap short of the outline */
+      if(behind)for(const r of runs(a,(x,y)=>!textHit(x,y,tg+pl.width*0.5),false))s+=`<path d="${pathD(r)}"/>\n`;
+      else if(weave){
+        /* woven: cut only the under-crossings */
+        const sp=lineSpans(a,weaveStart(p),p.fillFrom).filter(q=>!q.over);let j=0,idx=0;
+        for(const r of runs(a,()=>{const i=idx++;while(j<sp.length&&sp[j].i1<i)j++;return!(j<sp.length&&i>=sp[j].i0&&i<=sp[j].i1)},false))s+=`<path d="${pathD(r)}"/>\n`;
+      }
+      else s+=`<path d="${pathD(a)}"/>\n`;
+    }
     s+='</g>\n';
   }
-  return s+'</svg>';
+  return s+overFills+'</svg>';
 }
 const toast=$('#toast');let tt;
 function say(t){toast.textContent=t;toast.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove('on'),1600)}
 $('#copy').onclick=()=>{
-  if(!plants.length&&!frameShape&&!voids.length){say('Nothing to copy yet');return}
+  if(!plants.length&&!frameShape&&!voids.length&&!textVoid){say('Nothing to copy yet');return}
   const svg=buildSVG();
   const fallback=()=>{$('#svgOut').value=svg;$('#out').hidden=false;$('#svgOut').select()};
   try{navigator.clipboard.writeText(svg).then(()=>say('SVG copied · one path per shoot'),fallback)}catch(_){fallback()}
@@ -1859,9 +2334,178 @@ function setOpen(o){body.hidden=!o;tog.setAttribute('aria-expanded',o);tog.textC
 tog.onclick=()=>setOpen(body.hidden);
 
 /* ---------- theme ---------- */
-function themeChanged(){readInk();drawAll();drawGuides()}
+function themeChanged(){readInk();drawAll();drawGuides()}  /* drawAll repaints the text layer too */
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',themeChanged);
 new MutationObserver(themeChanged).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- centred text void ----------
+   The text is rasterised once in a serif, and its glyph outlines are traced from that mask (marching squares).
+   Collision uses the letterforms themselves: the traced outlines go into the collision field and the mask decides
+   inside/outside, so growth can wrap into the shape of the letters, never the text box. */
+let textVoid=null,textTimer=0;
+const TEXT_FONT='"Cormorant Garamond", "Cormorant", Georgia, "Times New Roman", serif';
+function allVoids(){return textVoid&&P.textMode==='avoid'?voids.concat([textVoid]):voids}
+function traceLoops(M,w,h){
+  const K=(x2,y2)=>x2*65536+y2,adj=new Map(),link=(a,b)=>{(adj.get(a)||adj.set(a,[]).get(a)).push(b);(adj.get(b)||adj.set(b,[]).get(b)).push(a)};
+  const v=(i,j)=>M[j*w+i];
+  for(let j=0;j<h-1;j++)for(let i=0;i<w-1;i++){
+    const c=v(i,j)*8+v(i+1,j)*4+v(i+1,j+1)*2+v(i,j+1);if(c===0||c===15)continue;
+    const T=K(2*i+1,2*j),R=K(2*i+2,2*j+1),B=K(2*i+1,2*j+2),L=K(2*i,2*j+1);
+    switch(c){
+      case 1:link(L,B);break;case 2:link(B,R);break;case 3:link(L,R);break;case 4:link(T,R);break;
+      case 5:link(T,R);link(L,B);break;case 6:link(T,B);break;case 7:link(T,L);break;case 8:link(T,L);break;
+      case 9:link(T,B);break;case 10:link(T,L);link(B,R);break;case 11:link(T,R);break;case 12:link(L,R);break;
+      case 13:link(R,B);break;case 14:link(L,B);break;
+    }
+  }
+  const seen=new Set(),loops=[];
+  for(const start of adj.keys()){
+    if(seen.has(start))continue;
+    const loop=[];let prev=-1,cur=start;
+    while(cur!==undefined&&!seen.has(cur)){
+      seen.add(cur);loop.push([Math.floor(cur/65536)/2,(cur%65536)/2]);
+      const nb=adj.get(cur);const nx=nb.find(n=>n!==prev&&!seen.has(n));prev=cur;cur=nx;
+    }
+    if(loop.length>6)loops.push(loop);
+  }
+  return loops;
+}
+function buildTextVoid(){
+  textVoid=null;
+  const str=(P.text||'').trim();if(!str)return;
+  const s=3,size=P.textSize,style=P.textFont==='italic'?'italic ':'';
+  const cvx=document.createElement('canvas'),c2=cvx.getContext('2d');
+  if(!c2||!c2.measureText)return;
+  let px=size*s,font=()=>`${style}600 ${px}px ${TEXT_FONT}`;
+  c2.font=font();let m=c2.measureText(str);
+  /* keep the word inside the frame: shrink to fit its width */
+  const fw=frameShape?frameShape.rx*2*(frameShape.type==='oval'||frameShape.type==='circle'?0.66:0.84):W*0.8;
+  if(m.width/s>fw){px*=fw/(m.width/s);c2.font=font();m=c2.measureText(str)}
+  const num=(v,d)=>typeof v==='number'&&isFinite(v)?v:d;   /* 0 is a real bound (ink starting at the origin) */
+  const asc=num(m.actualBoundingBoxAscent,px*0.7),desc=num(m.actualBoundingBoxDescent,px*0.2);
+  const left=num(m.actualBoundingBoxLeft,0),right=num(m.actualBoundingBoxRight,m.width);
+  const pad=Math.ceil(px*0.08)+4,w=Math.ceil(left+right)+pad*2,h=Math.ceil(asc+desc)+pad*2;
+  cvx.width=w;cvx.height=h;
+  c2.font=font();c2.fillStyle='#000';c2.textBaseline='alphabetic';c2.textAlign='left';
+  c2.fillText(str,pad+left,pad+asc);
+  const img=c2.getImageData(0,0,w,h).data,M=new Uint8Array(w*h);
+  for(let i=0;i<w*h;i++)M[i]=img[i*4+3]>110?1:0;
+  const[cx0,cy0]=symCenter(),cy=cy0+(frameShape?frameShape.ry*2:H)*P.textY;
+  const loopsPx=traceLoops(M,w,h);
+  /* light smoothing, then to sheet units centred on the axis */
+  const loops=loopsPx.map(L=>{
+    const n=L.length,o=[];
+    for(let i=0;i<n;i++){const a=L[(i-1+n)%n],b=L[i],c=L[(i+1)%n];o.push([(a[0]+2*b[0]+c[0])/4,(a[1]+2*b[1]+c[1])/4])}
+    return o.map(([x,y])=>[cx0+(x-w/2)/s,cy+(y-h/2)/s]);
+  });
+  const flat=[];for(const L of loops)for(let i=0;i<L.length;i+=2)flat.push(L[i]);
+  textVoid={type:'text',cx:cx0,cy,rx:w/2/s,ry:h/2/s,rot:0,r:0,s,w,h,mask:M,loops,flat};
+}
+function textPath(c,sh){c.beginPath();for(const L of sh.loops){L.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));c.closePath()}}
+function drawText(c){
+  if(!textVoid||P.textStyle==='guide')return;
+  textPath(c,textVoid);
+  if(P.textStyle==='filled'){c.fillStyle=inkColor;c.fill('evenodd')}else{c.strokeStyle=inkColor;c.lineWidth=dw(P.width);c.stroke()}
+}
+/* the gap kept between text and lines, in every mode */
+function textGap(){return P.gap+P.width*0.5}
+/* text layer. Behind: the text sits in front, and a paper-coloured halo (the letters grown by the gap) hides the
+   lines under it, so they stop a gap short of the outline. Over: the text sits underneath, and every line erases
+   a gap-wide channel through it. Avoid: plain text (nothing reaches it). */
+function renderTextLayer(){
+  tctx.save();tctx.setTransform(1,0,0,1,0,0);tctx.clearRect(0,0,tcv.width,tcv.height);tctx.restore();
+  tcv.classList.toggle('front',P.textMode!=='over');
+  const weave=P.textMode==='weave';
+  if(!textVoid||P.textStyle==='guide')return;
+  if(P.textMode==='behind'||weave){
+    const paper=getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()||'#EDF0E9';
+    textPath(tctx,textVoid);tctx.fillStyle=paper;tctx.fill('evenodd');
+    tctx.strokeStyle=paper;tctx.lineWidth=textGap()*2;tctx.lineJoin='round';tctx.stroke();
+  }
+  drawText(tctx);
+  if(weave){
+    /* the text sits in front with its halo; each over-crossing is drawn again on top of the letters, intact */
+    tctx.save();tctx.lineCap='round';tctx.lineJoin='round';
+    for(const L of wovenLines()){
+      tctx.strokeStyle=col(L.pl.color);tctx.lineWidth=dw(L.pl.width);tctx.beginPath();
+      for(const sp of L.spans)if(sp.over){const i0=Math.max(0,sp.i0-2),i1=Math.min(L.a.length/2-1,sp.i1+2);strokePts(L.a.slice(i0*2,i1*2+2),tctx)}
+      tctx.stroke();
+      if(P.leafFill==='filled'&&L.spans.leafOver){
+        const a=leafPolyNow(L.p,L.k?L.pl.T[L.k]:null);
+        if(a){tctx.fillStyle=col(L.pl.color);tctx.beginPath();tctx.moveTo(a[0],a[1]);for(let i=2;i<a.length;i+=2)tctx.lineTo(a[i],a[i+1]);tctx.closePath();tctx.fill()}
+      }
+    }
+    tctx.restore();
+  }
+  if(false){
+    tctx.save();tctx.globalCompositeOperation='destination-out';tctx.lineCap='round';tctx.lineJoin='round';
+    for(const pl of plants){
+      tctx.lineWidth=pl.width+textGap()*2;tctx.beginPath();
+      for(let k=0;k<pl.T.length;k++)for(const p of pl.paths)strokePts(k?tPts(p.pts,pl.T[k]):p.pts,tctx);
+      tctx.stroke();
+    }
+    tctx.restore();
+  }
+}
+/* geometry for export: is a point inside a letter, or within the gap of its outline? */
+function textHit(x,y,r){
+  const t=textVoid;if(!t)return false;
+  if(Math.abs(x-t.cx)>t.rx+r||Math.abs(y-t.cy)>t.ry+r)return false;
+  if(insideShape(t,x,y))return true;
+  if(!t.grid){t.grid=new Map();for(const p of t.flat){const k=Math.floor(p[0]/8)*100003+Math.floor(p[1]/8);(t.grid.get(k)||t.grid.set(k,[]).get(k)).push(p)}}
+  const ci=Math.floor(x/8),cj=Math.floor(y/8),n=Math.ceil(r/8),r2=r*r;
+  for(let dj=-n;dj<=n;dj++)for(let di=-n;di<=n;di++){const c=t.grid.get((ci+di)*100003+cj+dj);if(c)for(const p of c)if((p[0]-x)**2+(p[1]-y)**2<r2)return true}
+  return false;
+}
+/* woven: a line's passage through the text is split into crossings, one per letter stroke it enters. Crossings
+   alternate over and under along the line, like an interlace. Stems and the largest scrolls start over; finer
+   scrolls and leaves start under. A line that only grazes the gap around a letter, never entering it, is cut. */
+function weaveStart(p){return p.kind==='stem'||(p.kind==='shoot'&&(p.order||0)<=1)}
+function lineSpans(a,startOver,leafFrom){
+  if(!(leafFrom>=0))leafFrom=Infinity;
+  const r=textGap()+P.width*0.5,spans=[];let cur=null;
+  for(let i=0;i<a.length;i+=2){
+    const x=a[i],y=a[i+1];
+    if(textHit(x,y,r)){if(!cur)cur={i0:i>>1,i1:i>>1,ink:false};cur.i1=i>>1;if(!cur.ink&&insideShape(textVoid,x,y))cur.ink=true}
+    else if(cur){spans.push(cur);cur=null}
+  }
+  if(cur)spans.push(cur);
+  /* a leaf is one unit: its back edge on the scroll and its curled front take a single decision, made where the
+     alternation along the line first reaches the leaf inside a letter. Grazes on the leaf follow it too. */
+  let over=startOver,leafState=null;
+  for(const sp of spans){
+    if(sp.i1>=leafFrom){if(leafState===null&&sp.ink)leafState=over;continue}
+    if(!sp.ink){sp.over=false;continue}
+    sp.over=over;over=!over;
+  }
+  for(const sp of spans)if(sp.i1>=leafFrom)sp.over=leafState===true;
+  spans.leafOver=leafState===true;
+  return spans;
+}
+/* every drawn line on the sheet, with its woven spans (cached until the line grows) */
+function wovenLines(){
+  const out=[];
+  for(const pl of plants)for(let k=0;k<pl.T.length;k++)for(const p of pl.paths){
+    if(p.pts.length<4)continue;
+    const c=p.wv||(p.wv=[]);
+    if(!c[k]||c[k].n!==p.pts.length||c[k].tv!==textVoid){const a=k?tPts(p.pts,pl.T[k]):p.pts;c[k]={n:p.pts.length,tv:textVoid,a,spans:lineSpans(a,weaveStart(p),p.fillFrom)}}
+    out.push({pl,p,k,a:c[k].a,spans:c[k].spans});
+  }
+  return out;
+}
+/* split a point list into the runs that keep() accepts */
+function runs(a,keep,closed){
+  const out=[];let cur=[];
+  for(let i=0;i<a.length;i+=2){if(keep(a[i],a[i+1]))cur.push(a[i],a[i+1]);else{if(cur.length>=4)out.push(cur);cur=[]}}
+  if(cur.length>=4){if(closed&&out.length&&keep(a[0],a[1]))out[0]=cur.concat(out[0]);else out.push(cur)}
+  return out;
+}
+function textChanged(){
+  const go=()=>{buildTextVoid();hashRebuild();drawAll();drawGuides();
+    hint.textContent=textVoid?(plants.length?'Text placed · Regrow all to grow around it':'Text placed · drag to grow around it'):''};
+  try{if(document.fonts&&document.fonts.load){document.fonts.load(`${P.textFont==='italic'?'italic ':''}600 64px "Cormorant Garamond"`).then(go,go);return}}catch(_){}
+  go();
+}
 
 /* ---------- starting presets: classical ornament layouts ----------
    Each sets the frame, symmetry and voids, then draws its stems through the same pen path a hand would. */
@@ -1908,7 +2552,7 @@ function applyPreset(name){
   if(drawing)return;
   setCtl('sym',ps.sym);setCtl('frame',ps.frame);setCtl('margin',ps.margin);
   plants=[];voids=[];history=[];
-  computeFrame();
+  computeFrame();buildTextVoid();
   let f=frameShape;
   if(!f){const sr=stageRect();f={cx:(sr.x0+sr.x1)/2,cy:(sr.y0+sr.y1)/2,rx:(sr.x1-sr.x0)/2,ry:(sr.y1-sr.y0)/2}}
   const w=f.rx*2,h=f.ry*2,top=f.cy-f.ry,bot=f.cy+f.ry;
@@ -1925,8 +2569,298 @@ function demo(){
 
 readInk();resize();demo();updateStats();
 addEventListener('resize',resize);
+cv.addEventListener('wheel',e=>{
+  if(!paperDims())return;e.preventDefault();
+  const r=cv.getBoundingClientRect();
+  if(e.ctrlKey||e.metaKey)zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*0.01));
+  else{OX-=e.deltaX;OY-=e.deltaY;viewChanged()}
+},{passive:false});
+$('#zoomIn').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(r.width/2,r.height/2,1.5)};
+$('#zoomOut').onclick=()=>{const r=cv.getBoundingClientRect();zoomAt(r.width/2,r.height/2,1/1.5)};
+$('#zoomFit').onclick=()=>{fitView();viewChanged()};
+/* a new sheet size restarts the sheet: everything is measured in that sheet's units */
+function sheetChanged(){
+  if(drawing)return;
+  resize();
+  document.querySelectorAll('.panel input[type=range]').forEach(i=>{try{i.dispatchEvent(new Event('input'))}catch(_){}});
+  applyPreset(P.preset);
+  hint.textContent=paperDims()?`${P.sheet} ${P.orient} · ${SHEETS[P.sheet][0]} × ${SHEETS[P.sheet][1]} mm · ctrl/pinch-scroll to zoom`:'Screen sheet';
+}
 requestAnimationFrame(frame);
+/* ---------- glyph editor ----------
+   One overlay, three glyphs. Spine mode edits the spine's anchors in the glyph frame; Graphic mode edits the paths,
+   which are stored relative to the spine, so bending the spine carries the drawing with it. */
+const GE={k:'curl',mode:'graphic',view:'bent',sel:null,hist:[],z:300,ox:0,oy:0,tight:0.3,drag:null,pan:null};
+let ED=null;
+const geSvg=$('#geSvg'),geWrap=$('#geCanvas');
+const GNAMES={curl:'Curled leaf',stalk:'Stalked leaf',flower:'Flower'};
+function geG(){return ED[GE.k]}
+function gePush(){GE.hist.push(JSON.stringify(ED));if(GE.hist.length>80)GE.hist.shift()}
+function geUndo(){if(!GE.hist.length)return;ED=JSON.parse(GE.hist.pop());if(GE.sel&&!gePath(GE.sel.pi))geDefSel();else if(GE.sel)GE.sel.i=null;geRender()}
+/* the spine the graphic is drawn on, in the glyph frame */
+function geSpine(){
+  const g=geG();
+  if(GE.k==='curl'){
+    /* a stand-in for the end of a scroll: arc length 1, turning `span` of a circle and tightening toward the eye */
+    const turn=g.span*2*Math.PI,ratio=1+4*GE.tight,b=Math.log(ratio),k0=b<1e-6?turn:turn*b/(Math.exp(b)-1);
+    const pts=[[0,0]];let x=0,y=0,a=0;const n=120;
+    for(let i=0;i<n;i++){const s=(i+0.5)/n;a+=k0*Math.exp(b*s)/n;x+=Math.cos(a)/n;y+=Math.sin(a)/n;pts.push([x,y])}
+    const pre=[];x=0;y=0;a=0;
+    for(let i=0;i<70;i++){a+=k0*0.7/n;x-=Math.cos(a)/n;y+=Math.sin(a)/n;pre.push([x,y])}
+    const kEnd=k0*ratio,sc=Math.min(0.38,0.34/kEnd*gCurlK(g))/0.38;
+    return{pts,pre:pre.reverse(),sc};
+  }
+  return{pts:gSample(g.spine,160),pre:null,sc:1};
+}
+/* glyph frame -> screen, with the frame turned so a flower stands upright */
+function geRot(){return GE.k==='flower'?Math.PI/2:0}
+function toS(x,y){const r=geRot(),c=Math.cos(r),s=Math.sin(r);return[GE.ox+(x*c-y*s)*GE.z,GE.oy-(x*s+y*c)*GE.z]}
+function fromS(X,Y){const r=geRot(),c=Math.cos(r),s=Math.sin(r),x=(X-GE.ox)/GE.z,y=-(Y-GE.oy)/GE.z;return[x*c+y*s,-x*s+y*c]}
+function geCtx(){
+  const sp=geSpine(),M=gMapper(sp.pts);
+  const bent=GE.mode==='spine'||GE.view==='bent';
+  const sc=sp.sc;
+  /* unrolled, the curled leaf is shown at its design proportions (the curl squeezes it to fit) */
+  const uv2f=bent?(u,v)=>M.map(u,v,sc):(u,v)=>[u*M.L,v];
+  const f2uv=bent?(x,y)=>M.inv(x,y,sc):(x,y)=>[x/M.L,y];
+  return{sp,M,bent,uv2f,f2uv};
+}
+function geFit(){
+  const C=geCtx(),r=geWrap.getBoundingClientRect();let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  const add=(x,y)=>{const r2=geRot(),c=Math.cos(r2),s=Math.sin(r2),X=x*c-y*s,Y=x*s+y*c;x0=Math.min(x0,X);x1=Math.max(x1,X);y0=Math.min(y0,Y);y1=Math.max(y1,Y)};
+  C.sp.pts.forEach(q=>add(q[0],q[1]));
+  for(const p of geG().paths)for(const [u,v] of gSample(p,30)){const q=C.uv2f(u,v);add(q[0],q[1])}
+  const w=Math.max(0.2,x1-x0),h=Math.max(0.2,y1-y0),W=Math.max(200,r.width),H=Math.max(200,r.height);
+  GE.z=Math.min(W/(w*1.35),H/(h*1.35));
+  GE.ox=W/2-(x0+x1)/2*GE.z;GE.oy=H/2+(y0+y1)/2*GE.z;
+}
+/* anchors of what is being edited, as {path index, list}; the spine is path -1 */
+function geLists(){const g=geG();if(GE.mode==='spine')return GE.k==='curl'?[]:[{pi:-1,path:g.spine}];return g.paths.map((p,pi)=>({pi,path:p}))}
+function gePath(pi){return pi<0?geG().spine:geG().paths[pi]}
+function gePinned(pi,i){
+  const p=gePath(pi);if(p.closed)return false;
+  if(pi<0)return i===0||i===p.pts.length-1;
+  return GE.k==='curl'&&pi===0&&(i===0||i===p.pts.length-1);
+}
+const esc=v=>Math.round(v*10)/10;
+function poly(pts,attrs){return`<polyline points="${pts.map(q=>esc(q[0])+','+esc(q[1])).join(' ')}" ${attrs}/>`}
+function geRender(){
+  if(!ED)return;
+  const g=geG(),C=geCtx(),S=q=>toS(q[0],q[1]),o=[];
+  const tf=GE.mode==='graphic'?(u,v)=>S(C.uv2f(u,v)):(x,y)=>S([x,y]);
+  /* construction: the spine, a ribbon either side of it and ticks along it */
+  if(C.bent){
+    if(C.sp.pre)o.push(poly(C.sp.pre.map(S),'class="ge-host"'));
+    if(GE.k==='stalk'){const a=Math.atan2(C.sp.pts[3][1],C.sp.pts[3][0]);o.push(poly([[-0.35*Math.cos(a),-0.35*Math.sin(a)],[0,0]].map(S),'class="ge-host"'))}
+    if(GE.k==='flower')o.push(poly([[-0.35,0],[0,0]].map(S),'class="ge-host"'));
+    for(const v of [-0.3,-0.15,0.15,0.3]){const r=[];for(let u=0;u<=1.0001;u+=0.02)r.push(S(C.uv2f(u,v)));o.push(poly(r,'class="ge-rib"'))}
+    for(let u=0;u<=1.0001;u+=0.1)o.push(poly([S(C.uv2f(u,-0.3)),S(C.uv2f(u,0.3))],'class="ge-rib"'));
+    const sd=GE.k==='curl'||g.spineDraw!=='none';
+    o.push(poly(C.sp.pts.map(S),`class="ge-spine${sd?'':' dim'}"`));
+  }else{
+    for(const v of [-0.3,-0.15,0,0.15,0.3])o.push(poly([S(C.uv2f(0,v)),S(C.uv2f(1,v))],`class="${v?'ge-rib':'ge-spine'}"`));
+    for(let u=0;u<=1.0001;u+=0.1)o.push(poly([S(C.uv2f(u,-0.3)),S(C.uv2f(u,0.3))],'class="ge-rib"'));
+  }
+  /* the graphic */
+  g.paths.forEach((p,pi)=>{
+    const s=gSample(p,120).map(([u,v])=>S(C.uv2f(u,v)));
+    const selP=GE.sel&&GE.sel.pi===pi&&GE.mode==='graphic';
+    if(p.fill){
+      let f=s;
+      if(!p.closed&&GE.k==='curl'&&pi===0){const back=[];for(let u=1;u>=0;u-=0.02)back.push(S(C.uv2f(u,0)));f=s.concat(back)}
+      if(p.closed||(GE.k==='curl'&&pi===0))o.push(`<polygon points="${f.map(q=>esc(q[0])+','+esc(q[1])).join(' ')}" class="ge-fill"/>`);
+    }
+    o.push(poly(p.closed?s.concat([s[0]]):s,`class="ge-path${selP?' sel':''}" data-pi="${pi}"`));
+  });
+  if(GE.mode==='spine'&&GE.k!=='curl')o.push(poly(C.sp.pts.map(S),'class="ge-path sel"'));
+  if(GE.mode==='graphic')g.paths.forEach((p,pi)=>{const s=gSample(p,80).map(([u,v])=>S(C.uv2f(u,v)));o.push(poly(p.closed?s.concat([s[0]]):s,`class="ge-hit" data-pi="${pi}"`))});
+  /* anchors, handles, arc bulge knobs */
+  for(const {pi,path} of geLists()){
+    if(GE.mode==='graphic'&&GE.sel&&GE.sel.pi!==pi)continue;
+    const P=path.pts,n=P.length,showH=GE.sel&&GE.sel.pi===pi;
+    const tp=GE.mode==='graphic'?q=>tf(q[0],q[1]):q=>S(q);
+    P.forEach((a,i)=>{
+      const A=tp([a.x,a.y]),prev=path.closed?P[(i-1+n)%n]:P[i-1];
+      if(showH){
+        if(a.ho&&a.seg==='bez'&&(path.closed||i<n-1)){const H=tp(a.ho);o.push(`<line x1="${esc(A[0])}" y1="${esc(A[1])}" x2="${esc(H[0])}" y2="${esc(H[1])}" class="ge-hl"/><circle cx="${esc(H[0])}" cy="${esc(H[1])}" r="4.5" class="ge-h" data-h="ho" data-pi="${pi}" data-i="${i}"/>`)}
+        if(a.hi&&prev&&prev.seg==='bez'&&(path.closed||i>0)){const H=tp(a.hi);o.push(`<line x1="${esc(A[0])}" y1="${esc(A[1])}" x2="${esc(H[0])}" y2="${esc(H[1])}" class="ge-hl"/><circle cx="${esc(H[0])}" cy="${esc(H[1])}" r="4.5" class="ge-h" data-h="hi" data-pi="${pi}" data-i="${i}"/>`)}
+        if(a.seg==='arc'&&(path.closed||i<n-1)){const b=P[(i+1)%n],K=tp(geBulgePt(a,b));o.push(`<rect x="${esc(K[0]-4.5)}" y="${esc(K[1]-4.5)}" width="9" height="9" transform="rotate(45 ${esc(K[0])} ${esc(K[1])})" class="ge-h" data-h="bulge" data-pi="${pi}" data-i="${i}"/>`)}
+      }
+      const isSel=GE.sel&&GE.sel.pi===pi&&GE.sel.i===i,pin=gePinned(pi,i);
+      o.push(a.smooth
+        ?`<circle cx="${esc(A[0])}" cy="${esc(A[1])}" r="${isSel?6.5:5.5}" class="ge-a${isSel?' sel':''}${pin?' pin':''}" data-pi="${pi}" data-i="${i}"/>`
+        :`<rect x="${esc(A[0]-5)}" y="${esc(A[1]-5)}" width="10" height="10" class="ge-a${isSel?' sel':''}${pin?' pin':''}" data-pi="${pi}" data-i="${i}"/>`);
+    });
+  }
+  geSvg.innerHTML=o.join('');
+  geSyncUI();
+}
+function geBulgePt(a,b){const dx=b.x-a.x,dy=b.y-a.y,c=Math.hypot(dx,dy)||1;return[(a.x+b.x)/2-dy/c*(a.bulge||0)*c,(a.y+b.y)/2+dx/c*(a.bulge||0)*c]}
+/* panel state follows the selection */
+function geSyncUI(){
+  const g=geG(),sp=GE.mode==='spine';
+  document.querySelectorAll('#geKinds button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===GE.k));
+  document.querySelectorAll('#geModes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===GE.mode));
+  document.querySelectorAll('#geViews button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===GE.view);b.disabled=sp});
+  $('#geCurlRow').hidden=GE.k!=='curl';
+  $('#geSpan').value=GE.k==='curl'?g.span:0.39;$('#geSpanO').textContent=GE.k==='curl'?`${Math.round(g.span*360)}°`:'';
+  $('#geTight').value=GE.tight;
+  $('#geSpineDrawRow').hidden=GE.k==='curl';
+  if(GE.k!=='curl'){const sel=$('#geSpineDraw');sel.innerHTML=(GE.k==='stalk'?[['stalk','Stalk only'],['full','Stalk and midrib']]:[['none','Hidden'],['full','Drawn']]).map(([v,l])=>`<option value="${v}">${l}</option>`).join('');sel.value=g.spineDraw}
+  const p=GE.sel?gePath(GE.sel.pi):null,a=p&&GE.sel.i!=null?p.pts[GE.sel.i]:null;
+  $('#gePointTools').classList.toggle('off',!a);
+  document.querySelectorAll('#geSegs button').forEach(b=>b.setAttribute('aria-pressed',!!a&&a.seg===b.dataset.v));
+  $('#geSmooth').textContent=a&&a.smooth?'Make corner':'Make smooth';
+  $('#gePathTools').hidden=sp;
+  const pOK=!!p&&GE.sel.pi>=0;
+  $('#geClosed').setAttribute('aria-pressed',pOK&&p.closed);$('#geFillB').setAttribute('aria-pressed',pOK&&p.fill);
+  ['#geClosed','#geFillB','#geMirror','#geDelPath'].forEach(s=>$(s).disabled=!pOK);
+  if(pOK&&GE.k==='curl'&&GE.sel.pi===0){$('#geClosed').disabled=true;$('#geDelPath').disabled=true}
+  if(pOK&&GE.k==='stalk'&&GE.sel.pi===0)$('#geDelPath').disabled=true;
+  $('#geTitle').textContent=GNAMES[GE.k];
+  $('#geHelp').textContent=sp?(GE.k==='curl'?'The curled leaf rides on the scroll’s own end, so its spine is the scroll. Set how much of the last turn it covers; tightness only changes this preview.':'Drag anchors and handles to bend the spine. Its two ends are pinned; the graphic follows.')
+    :'Drag anchors and handles. Double-click a line to add a point, double-click a point to toggle smooth/corner, Delete removes it. Drag empty space to pan, scroll to zoom.';
+  $('#geUndo').disabled=!GE.hist.length;
+}
+/* hit testing on the rendered SVG */
+function geEvtPt(e){const r=geSvg.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]}
+function geNearestSeg(X,Y){
+  const C=geCtx();let best=null,bd=12;
+  for(const {pi,path} of geLists()){
+    const s=gSample(path,200,true);
+    s.forEach(q=>{const F=GE.mode==='graphic'?C.uv2f(q.p[0],q.p[1]):q.p,P=toS(F[0],F[1]),d=Math.hypot(P[0]-X,P[1]-Y);if(d<bd){bd=d;best={pi,seg:q.seg,t:q.t}}});
+  }
+  return best;
+}
+function geToFrame(X,Y){const C=geCtx(),f=fromS(X,Y);return GE.mode==='graphic'?C.f2uv(f[0],f[1]):f}
+geSvg.addEventListener('pointerdown',e=>{
+  const t=e.target,[X,Y]=geEvtPt(e);geSvg.setPointerCapture(e.pointerId);
+  if(t.dataset&&t.dataset.i!==undefined){
+    const pi=+t.dataset.pi,i=+t.dataset.i;gePush();
+    GE.sel={pi,i};GE.drag={pi,i,h:t.dataset.h||null};geRender();return;
+  }
+  if(t.dataset&&t.dataset.pi!==undefined&&GE.mode==='graphic'){GE.sel={pi:+t.dataset.pi,i:null};geRender();return}
+  if(GE.mode==='graphic')GE.sel=null;else if(GE.sel)GE.sel.i=null;
+  GE.pan={X,Y,ox:GE.ox,oy:GE.oy};geRender();
+});
+geSvg.addEventListener('pointermove',e=>{
+  const [X,Y]=geEvtPt(e);
+  if(GE.pan){GE.ox=GE.pan.ox+X-GE.pan.X;GE.oy=GE.pan.oy+Y-GE.pan.Y;geRender();return}
+  const d=GE.drag;if(!d)return;
+  const p=gePath(d.pi),a=p.pts[d.i],q=geToFrame(X,Y);
+  if(d.h==='bulge'){
+    const n=p.pts.length,b=p.pts[(d.i+1)%n],dx=b.x-a.x,dy=b.y-a.y,c=Math.hypot(dx,dy)||1;
+    a.bulge=clamp(((q[0]-(a.x+b.x)/2)*(-dy/c)+(q[1]-(a.y+b.y)/2)*(dx/c))/c,-0.5,0.5);
+  }else if(d.h){
+    a[d.h]=[q[0],q[1]];
+    if(a.smooth){const o=d.h==='hi'?'ho':'hi';if(a[o]){const L=Math.hypot(a[o][0]-a.x,a[o][1]-a.y),vx=a.x-q[0],vy=a.y-q[1],l=Math.hypot(vx,vy)||1;a[o]=[a.x+vx/l*L,a.y+vy/l*L]}}
+  }else if(!gePinned(d.pi,d.i)){
+    const dx=q[0]-a.x,dy=q[1]-a.y;a.x=q[0];a.y=q[1];
+    if(a.hi){a.hi[0]+=dx;a.hi[1]+=dy}if(a.ho){a.ho[0]+=dx;a.ho[1]+=dy}
+  }
+  geRender();
+});
+const geUp=()=>{if(GE.drag&&GE.hist.length&&GE.hist[GE.hist.length-1]===JSON.stringify(ED))GE.hist.pop();GE.drag=null;GE.pan=null;geSyncUI()};
+geSvg.addEventListener('pointerup',geUp);geSvg.addEventListener('pointercancel',geUp);
+geSvg.addEventListener('dblclick',e=>{
+  const t=e.target,[X,Y]=geEvtPt(e);
+  if(t.dataset&&t.dataset.i!==undefined&&!t.dataset.h){geToggleSmooth(+t.dataset.pi,+t.dataset.i);return}
+  const h=geNearestSeg(X,Y);if(h)geInsert(h.pi,h.seg,h.t);
+});
+geSvg.addEventListener('wheel',e=>{e.preventDefault();const [X,Y]=geEvtPt(e),f=Math.exp(-e.deltaY*0.0015);GE.ox=X-(X-GE.ox)*f;GE.oy=Y-(Y-GE.oy)*f;GE.z*=f;geRender()},{passive:false});
+/* point operations */
+function geToggleSmooth(pi,i){
+  gePush();const a=gePath(pi).pts[i];a.smooth=!a.smooth;
+  if(a.smooth&&a.hi&&a.ho){const vx=a.ho[0]-a.hi[0],vy=a.ho[1]-a.hi[1],l=Math.hypot(vx,vy)||1,L1=Math.hypot(a.hi[0]-a.x,a.hi[1]-a.y),L2=Math.hypot(a.ho[0]-a.x,a.ho[1]-a.y);
+    a.hi=[a.x-vx/l*L1,a.y-vy/l*L1];a.ho=[a.x+vx/l*L2,a.y+vy/l*L2]}
+  GE.sel={pi,i};geRender();
+}
+function geInsert(pi,si,t){
+  gePush();const p=gePath(pi),P=p.pts,a=P[si],b=P[(si+1)%P.length];let na;
+  if(a.seg==='bez'){
+    const A=[a.x,a.y],B=[b.x,b.y],p1=a.ho||A,p2=b.hi||B,L=(u,v,s)=>[u[0]+(v[0]-u[0])*s,u[1]+(v[1]-u[1])*s];
+    const q0=L(A,p1,t),q1=L(p1,p2,t),q2=L(p2,B,t),r0=L(q0,q1,t),r1=L(q1,q2,t),m=L(r0,r1,t);
+    a.ho=q0;b.hi=q2;na=gA(m[0],m[1],{hi:r0,ho:r1,smooth:true});
+  }else if(a.seg==='line'){
+    na=gA(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,{seg:'line'});
+  }else{
+    const pts=gArc([a.x,a.y],[b.x,b.y],(a.bulge||0)*Math.hypot(b.x-a.x,b.y-a.y),60),k=Math.round(t*(pts.length-1)),m=pts[k];
+    const sag=(p0,p1,mid)=>{const dx=p1[0]-p0[0],dy=p1[1]-p0[1],c=Math.hypot(dx,dy)||1;return((mid[0]-(p0[0]+p1[0])/2)*(-dy/c)+(mid[1]-(p0[1]+p1[1])/2)*(dx/c))/c};
+    a.bulge=sag([a.x,a.y],m,pts[Math.round(k/2)]);na=gA(m[0],m[1],{seg:'arc',smooth:true});na.bulge=sag(m,[b.x,b.y],pts[Math.round((k+pts.length-1)/2)]);
+  }
+  P.splice(si+1,0,na);GE.sel={pi,i:si+1};geRender();
+}
+function geDelete(){
+  if(!GE.sel||GE.sel.i==null)return;const p=gePath(GE.sel.pi),{i}=GE.sel;
+  if(gePinned(GE.sel.pi,i)||p.pts.length<=(p.closed?3:2))return say('That point is needed');
+  gePush();p.pts.splice(i,1);GE.sel.i=null;geRender();
+}
+function geSetSeg(v){
+  if(!GE.sel||GE.sel.i==null)return;const p=gePath(GE.sel.pi),P=p.pts,a=P[GE.sel.i],b=P[(GE.sel.i+1)%P.length];
+  if(!b||(!p.closed&&GE.sel.i===P.length-1))return say('Pick the point at the start of a segment');
+  gePush();a.seg=v;
+  if(v==='bez'){if(!a.ho)a.ho=[a.x+(b.x-a.x)/3,a.y+(b.y-a.y)/3];if(!b.hi)b.hi=[b.x-(b.x-a.x)/3,b.y-(b.y-a.y)/3]}
+  if(v==='arc'&&!a.bulge)a.bulge=0.15;
+  geRender();
+}
+function geCurveAt(x,y,x2,y2){
+  const a=gA(x,y,{smooth:false}),m=gA((x+x2)/2,(y+y2)/2+0.12,{smooth:true}),b=gA(x2,y2,{smooth:false});
+  a.ho=[x+(m.x-x)/2,y+0.08];m.hi=[m.x-(x2-x)/4,m.y];m.ho=[m.x+(x2-x)/4,m.y];b.hi=[x2-(x2-m.x)/2,y2+0.08];
+  return{pts:[a,m,b],closed:false,fill:false};
+}
+/* the editor's own controls */
+function geDefSel(){GE.sel=GE.mode==='spine'?(GE.k==='curl'?null:{pi:-1,i:null}):{pi:0,i:null}}
+function geOpen(){
+  getGlyph('curl');ED=gClone(GLY);GE.hist=[];geDefSel();
+  $('#ge').hidden=false;requestAnimationFrame(()=>{geFit();geRender()});
+}
+function geClose(){$('#ge').hidden=true;ED=null}
+$('#geKinds').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;GE.k=b.dataset.v;geDefSel();geFit();geRender()});
+$('#geModes').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;GE.mode=b.dataset.v;geDefSel();geFit();geRender()});
+$('#geViews').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;GE.view=b.dataset.v;geFit();geRender()});
+$('#geSegs').addEventListener('click',e=>{const b=e.target.closest('button');if(b)geSetSeg(b.dataset.v)});
+$('#geSpan').oninput=e=>{if(GE.k!=='curl')return;ED.curl.span=+e.target.value;geRender()};
+$('#geSpan').onpointerdown=()=>gePush();
+$('#geTight').oninput=e=>{GE.tight=+e.target.value;geRender()};
+$('#geSpineDraw').onchange=e=>{gePush();geG().spineDraw=e.target.value;geRender()};
+$('#geSmooth').onclick=()=>GE.sel&&GE.sel.i!=null&&geToggleSmooth(GE.sel.pi,GE.sel.i);
+$('#geAddPt').onclick=()=>{if(!GE.sel||GE.sel.i==null)return;const p=gePath(GE.sel.pi);if(!p.closed&&GE.sel.i===p.pts.length-1)return say('Pick the point at the start of a segment');geInsert(GE.sel.pi,GE.sel.i,0.5)};
+$('#geDelPt').onclick=geDelete;
+$('#geNewPath').onclick=()=>{gePush();geG().paths.push(geCurveAt(0.3,0.05,0.7,0.05));GE.sel={pi:geG().paths.length-1,i:1};geRender()};
+$('#geDelPath').onclick=()=>{if(!GE.sel||GE.sel.pi<0)return;const g=geG();if(g.paths.length<2)return say('A glyph needs one path');gePush();g.paths.splice(GE.sel.pi,1);geDefSel();geRender()};
+$('#geClosed').onclick=()=>{if(!GE.sel||GE.sel.pi<0)return;gePush();const p=geG().paths[GE.sel.pi];p.closed=!p.closed;const l=p.pts[p.pts.length-1],f=p.pts[0];
+  if(p.closed&&l.seg==='bez'){if(!l.ho)l.ho=[l.x+(f.x-l.x)/3,l.y+(f.y-l.y)/3];if(!f.hi)f.hi=[f.x-(f.x-l.x)/3,f.y-(f.y-l.y)/3]}geRender()};
+$('#geFillB').onclick=()=>{if(!GE.sel||GE.sel.pi<0)return;gePush();const p=geG().paths[GE.sel.pi];p.fill=!p.fill;geRender()};
+$('#geMirror').onclick=()=>{if(!GE.sel||GE.sel.pi<0)return;gePush();const g=geG(),q=gClone(g.paths[GE.sel.pi]);
+  q.pts.forEach(a=>{a.y=-a.y;if(a.hi)a.hi[1]=-a.hi[1];if(a.ho)a.ho[1]=-a.ho[1];a.bulge=-(a.bulge||0)});g.paths.push(q);GE.sel={pi:g.paths.length-1,i:0};geRender()};
+$('#geUndo').onclick=geUndo;
+$('#geFit').onclick=()=>{geFit();geRender()};
+$('#geReset').onclick=()=>{gePush();ED[GE.k]=gDefaults()[GE.k];geDefSel();geFit();geRender();say(`${GNAMES[GE.k]} reset`)};
+$('#geCancel').onclick=geClose;
+$('#geApply').onclick=()=>{
+  GLY=gClone(ED);saveGlyphs();geClose();
+  if(plants.length&&!drawing){resetField();ctx.clearRect(0,0,W,H);for(const pl of plants)replay(pl);drawAll()}
+  say('Glyphs applied');
+};
+$('#geExport').onclick=async()=>{
+  const txt=JSON.stringify(ED);
+  try{await navigator.clipboard.writeText(txt);say('Glyph JSON copied')}catch(_){$('#geIO').hidden=false;$('#geIOText').value=txt;$('#geIOText').select();$('#geIOMsg').textContent='Copy this glyph set.'}
+};
+$('#geImport').onclick=()=>{$('#geIO').hidden=false;$('#geIOText').value='';$('#geIOMsg').textContent='Paste a glyph set and press Load.';$('#geIOText').focus()};
+$('#geIOLoad').onclick=()=>{
+  let G=null;try{G=JSON.parse($('#geIOText').value)}catch(_){}
+  if(!gValid(G))return say('That isn’t a glyph set');
+  gePush();ED=G;$('#geIO').hidden=true;geDefSel();geFit();geRender();say('Glyphs loaded');
+};
+$('#geIOClose').onclick=()=>{$('#geIO').hidden=true};
+$('#editGlyphs').onclick=geOpen;
+addEventListener('keydown',e=>{
+  if($('#ge').hidden||e.target.matches('textarea,input,select'))return;
+  if((e.key==='Delete'||e.key==='Backspace')&&GE.sel&&GE.sel.i!=null){e.preventDefault();e.stopImmediatePropagation();geDelete()}
+  else if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.stopImmediatePropagation();geUndo()}
+  else if(e.key==='Escape'){e.stopImmediatePropagation();if(!$('#geIO').hidden)$('#geIO').hidden=true;else geClose()}
+},true);
+addEventListener('resize',()=>{if(!$('#ge').hidden){geFit();geRender()}});
+
 })();
 </script>
-
-</body></html>
