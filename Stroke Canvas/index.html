@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Stroke Canvas</title>
+<style>
+:root{
+  --ui:rgba(30,30,32,.86);--ui2:#1e1e20;--fg:#f3f3f1;--mut:#8e8e93;--line:rgba(255,255,255,.09);
+  --hi:rgba(255,255,255,.13);--acc:#fff;--st:env(safe-area-inset-top,0px);--sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px)
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#2a2a2c;color:var(--fg);
+  font:13px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
+  touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+#c{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none}
+#ov{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:1}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+svg{display:block}
+.panel{position:fixed;background:var(--ui);-webkit-backdrop-filter:blur(24px) saturate(1.4);backdrop-filter:blur(24px) saturate(1.4);
+  border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 .5px rgba(255,255,255,.06) inset;z-index:5}
+.top{top:calc(10px + var(--st));right:calc(10px + var(--sr));display:flex;gap:2px;padding:4px}
+.btn{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--fg);opacity:.72;transition:background .15s,opacity .15s}
+.btn.on{opacity:1;background:var(--hi)}
+.btn:active{background:var(--hi)}
+.dot{width:24px;height:24px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 0 0 3px rgba(0,0,0,.25);position:relative}
+.dot.mul::after{content:'';position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;border-radius:50%;background:rgba(80,170,255,.75);box-shadow:-5px -3px 0 rgba(255,210,60,.75),0 0 0 1.5px #1e1e20}
+#colBtn{opacity:1}
+.side{left:calc(8px + var(--sl));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 6px}
+.vs{width:28px;height:150px;border-radius:14px;background:rgba(255,255,255,.07);position:relative;touch-action:none;overflow:hidden}
+.vs .f{position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.16)}
+.vs .k{position:absolute;left:3px;right:3px;height:4px;border-radius:2px;background:#fff;margin-bottom:-2px}
+.sm{width:32px;height:32px}
+.bubble{position:fixed;z-index:9;pointer-events:none;background:var(--ui2);padding:5px 9px;border-radius:8px;font-size:12px;font-variant-numeric:tabular-nums;opacity:0;transition:opacity .15s}
+.bubble.on{opacity:1}
+.ring{position:fixed;z-index:4;pointer-events:none;border-radius:50%;border:1px solid rgba(255,255,255,.9);mix-blend-mode:difference;display:none;transform:translate(-50%,-50%)}
+.pick{position:fixed;z-index:6;pointer-events:none;width:64px;height:64px;border-radius:50%;border:6px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 4px 18px rgba(0,0,0,.3);display:none;transform:translate(-50%,-110%)}
+.pop{top:calc(62px + var(--st));right:calc(10px + var(--sr));width:min(372px,calc(100vw - 20px));max-height:calc(100vh - 76px - var(--st));
+  overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;display:none;padding:6px 0 10px;background:var(--ui2)}
+.pop.on{display:block}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 6px;font-weight:600;font-size:14px}
+.ph .t{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px}
+.link{color:var(--mut);font-weight:500;font-size:13px;padding:6px 2px}
+.link:active{color:#fff}
+.grp{padding:12px 14px 4px;color:var(--mut);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.bi{margin:2px 8px;padding:7px 8px 4px;border-radius:10px;display:block}
+.bi.sel{background:var(--hi)}
+.bi .bn{display:flex;justify-content:space-between;font-size:13px;opacity:.9}
+.bi .tn{color:var(--mut);font-size:12px;display:none}
+.bi.sel .tn{display:inline}
+.bi canvas{display:block;width:100%;height:44px}
+.pv{display:block;width:calc(100% - 24px);height:104px;margin:4px 12px 8px;border-radius:10px;background:#141415;touch-action:none}
+.tabs{display:flex;gap:2px;margin:0 10px 6px;padding:3px;background:rgba(255,255,255,.06);border-radius:9px}
+.tabs button{flex:1;padding:6px 0;border-radius:7px;font-size:12px;color:var(--mut)}
+.tabs button.on{background:var(--hi);color:#fff}
+.row{padding:7px 14px 8px;touch-action:pan-y}
+.row .l{display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px}
+.row .v{color:var(--mut);font-variant-numeric:tabular-nums}
+.row .tr{height:4px;border-radius:2px;background:rgba(255,255,255,.1);position:relative}
+.row .tf{position:absolute;top:0;bottom:0;background:#fff;border-radius:2px}
+.row .tz{position:absolute;top:-3px;width:1px;height:10px;background:rgba(255,255,255,.25);left:50%}
+.tg{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;font-size:13px}
+.sw{width:38px;height:22px;border-radius:11px;background:rgba(255,255,255,.14);position:relative;transition:background .15s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
+.sw.on{background:#34c759}.sw.on::after{transform:translateX(16px)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:6px 14px 8px}
+.chip{padding:5px 10px;border-radius:14px;background:rgba(255,255,255,.07);font-size:12px;color:var(--mut)}
+.chip.on{background:#fff;color:#111}
+.cv{display:block;width:calc(100% - 28px);height:150px;margin:4px 14px 6px;border-radius:8px;background:#141415;touch-action:none}
+.hint{color:var(--mut);font-size:11.5px;padding:2px 14px 8px;line-height:1.45}
+.mi{display:flex;justify-content:space-between;align-items:center;width:100%;padding:11px 16px;font-size:14px;text-align:left}
+.mi:active{background:var(--hi)}
+.mi .s{color:var(--mut);font-size:12px}
+.mi.dz{color:#ff6961}
+.sep{height:1px;background:var(--line);margin:6px 0}
+.stat{padding:8px 16px 2px;color:var(--mut);font-size:11.5px;line-height:1.5;font-variant-numeric:tabular-nums}
+#sv{display:block;width:calc(100% - 28px);height:190px;margin:8px 14px;border-radius:10px;touch-action:none}
+#hue{display:block;width:calc(100% - 28px);height:24px;margin:4px 14px 10px;border-radius:12px;touch-action:none}
+.sws{display:flex;flex-wrap:wrap;gap:8px;padding:2px 14px 8px}
+.sws i{width:26px;height:26px;border-radius:50%;display:block;box-shadow:0 0 0 1px rgba(255,255,255,.15) inset}
+.hexr{display:flex;align-items:center;gap:8px;padding:4px 14px}
+.hexr input{flex:1;background:rgba(255,255,255,.07);border:0;border-radius:8px;color:#fff;font:13px ui-monospace,Menlo,monospace;padding:8px 10px;-webkit-user-select:text;user-select:text;outline:none}
+.toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ui2);padding:9px 14px;border-radius:10px;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none;font-size:13px}
+.toast.on{opacity:1}
+.xbar{left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:none;gap:2px;padding:4px;max-width:calc(100vw - 16px);overflow-x:auto}
+.xbar.on{display:flex}
+@media (max-width:430px){.xbar button{padding:8px 7px;font-size:12px}}
+.xbar button{padding:9px 10px;border-radius:9px;font-size:12.5px;white-space:nowrap;color:var(--fg)}
+.xbar button:active{background:var(--hi)}
+.xbar .pri{background:#fff;color:#111;font-weight:600}
+.ly{display:flex;align-items:center;gap:8px;margin:2px 8px;padding:6px 8px;border-radius:10px}
+.ly.on{background:var(--hi)}
+.ly .eye{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--fg);opacity:.85}
+.ly .eye.off{opacity:.3}
+.ly .nm{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;color:#fff;font-family:inherit;padding:4px 2px;outline:none;-webkit-user-select:text;user-select:text}
+.ly .ct{color:var(--mut);font-size:11.5px;font-variant-numeric:tabular-nums}
+.lyx{margin:0 8px 6px;padding:2px 0 6px;border-radius:0 0 10px 10px}
+.acts{display:flex;flex-wrap:wrap;gap:6px;padding:2px 14px 4px}
+.acts button{padding:6px 10px;border-radius:14px;background:rgba(255,255,255,.07);font-size:12px;color:var(--fg)}
+.acts button:disabled{opacity:.3}
+.acts button.dz{color:#ff6961}
+.sect{padding:12px 14px 2px;color:var(--mut);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.err{position:fixed;inset:0;display:grid;place-items:center;padding:30px;text-align:center;color:#ddd;z-index:30;background:#2a2a2c}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="ov"></canvas>
+<div class="ring" id="ring"></div>
+<div class="pick" id="pick"></div>
+
+<div class="panel top" id="top">
+  <button class="btn" id="menuBtn" aria-label="Menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+  <button class="btn" id="selBtn" aria-label="Select"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5c4.7 0 8.5 2.3 8.5 5.2s-3.8 5.2-8.5 5.2S3.5 12.6 3.5 9.7 7.3 4.5 12 4.5z" stroke-dasharray="2.6 2.4"/><path d="M6.6 13.6c-1.4 1.6-1 3.9.8 4.5 1.5.5 2.9-.6 2.5-2"/></svg></button>
+  <button class="btn on" id="brushBtn" aria-label="Brush"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5l5 5L10 19a3.5 3.5 0 0 1-5-5z"/><path d="M5 14c-1.6 1.6-1.6 4-3 5.5 2.6.4 5.4-.2 8-2.5"/></svg></button>
+  <button class="btn" id="eraseBtn" aria-label="Eraser"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20h12"/><path d="M4.6 14.6l9-9a2 2 0 0 1 2.8 0l2.9 2.9a2 2 0 0 1 0 2.8L12 18.6 8.6 20 4.6 16a1 1 0 0 1 0-1.4z"/><path d="M9.5 9.7l5.6 5.6"/></svg></button>
+  <button class="btn" id="layBtn" aria-label="Layers"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M12 4l8.5 4.3L12 12.6 3.5 8.3z"/><path d="M3.5 12.2L12 16.5l8.5-4.3"/><path d="M3.5 16L12 20.3l8.5-4.3"/></svg></button>
+  <button class="btn" id="colBtn" aria-label="Colour"><span class="dot" id="colDot"></span></button>
+</div>
+
+<div class="panel side" id="side">
+  <div class="vs" id="sizeS"><div class="f"></div><div class="k"></div></div>
+  <div class="vs" id="opS"><div class="f"></div><div class="k"></div></div>
+  <button class="btn sm" id="undoBtn" aria-label="Undo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  <button class="btn sm" id="redoBtn" aria-label="Redo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+</div>
+<div class="bubble" id="bub"></div>
+<div class="panel pop" id="pop"></div>
+<div class="panel xbar" id="xbar">
+  <button id="xFlipH">Flip H</button><button id="xFlipV">Flip V</button><button id="xDup">Copy</button><button id="xDel">Delete</button><button id="xCancel">Cancel</button><button id="xDone" class="pri">Done</button>
+</div>
+<div class="toast" id="toast"></div>
+<input type="file" id="file" multiple style="display:none">
+<input type="file" id="imgFile" accept="image/*" style="display:none">
+
+<script>
+'use strict';
+/* =====================================================================
+   Stroke Canvas — Procreate-style brush engine whose real job is
+   capturing clean stroke data (x, y, pressure, altitude, azimuth, t).
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2, HALF_PI = Math.PI / 2;
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function curveEval(pts, x) {
+  if (!pts || pts.length < 2) return x;
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) {
+    const a = pts[i - 1], b = pts[i]; return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 1 : (x - a[0]) / (b[0] - a[0]));
+  }
+  return pts[pts.length - 1][1];
+}
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+let toastT; function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200); }
+
+/* ---------------------------------------------------------------- params */
+const DEF = {
+  size: 1, opacity: 1, // size in millimetres
+  spacing: .05, streamline: .2, stabilize: 0, motionFilter: 0, jitter: 0, flow: 1, buildup: 0,
+  tip: 'orig', grain: 'orig',
+  angle: 0, rotation: 0, azimuth: 0, scatter: 0, randomize: 0, roundness: 1, tiltRound: 0, tipInvert: 0,
+  grainDepth: 0, grainScale: .5, grainMove: 0, grainInvert: 0,
+  taperStart: 0, taperEnd: 0, taperSize: .8, taperOpacity: 0,
+  pSize: .6, pOpacity: 0, minSize: 0, pCurve: [[0, 0], [1, 1]],
+  tSize: 0, tOpacity: 0, sSize: 0, sOpacity: 0, jSize: 0, jOpacity: 0
+};
+const STROKE_KEYS = Object.keys(DEF).filter(k => k !== 'size' && k !== 'opacity');
+
+/* ------------------------------------------------- procedural textures */
+const texCache = new Map();
+function makeCanvas(n) { const c = document.createElement('canvas'); c.width = c.height = n; return c; }
+function fromField(n, f) {
+  const c = makeCanvas(n), x = c.getContext('2d'), im = x.createImageData(n, n), d = im.data;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const v = clamp(f(i, j), 0, 1) * 255, o = (j * n + i) * 4; d[o] = d[o + 1] = d[o + 2] = v; d[o + 3] = 255; }
+  x.putImageData(im, 0, 0); return c;
+}
+function periodicNoise(seed, period) { // tileable value noise
+  const r = mulberry32(seed), g = new Float32Array(period * period); for (let i = 0; i < g.length; i++) g[i] = r();
+  return (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, sx = xf * xf * (3 - 2 * xf), sy = yf * yf * (3 - 2 * yf);
+    const P = period, a = g[((yi % P + P) % P) * P + ((xi % P + P) % P)], b = g[((yi % P + P) % P) * P + (((xi + 1) % P + P) % P)],
+      c = g[(((yi + 1) % P + P) % P) * P + ((xi % P + P) % P)], d = g[(((yi + 1) % P + P) % P) * P + (((xi + 1) % P + P) % P)];
+    return lerp(lerp(a, b, sx), lerp(c, d, sx), sy); };
+}
+function fbm(n, seed, base, oct, gain) {
+  const ns = []; for (let o = 0; o < oct; o++) ns.push(periodicNoise(seed + o * 97, base << o));
+  return (i, j) => { let v = 0, a = 1, s = 0; for (let o = 0; o < oct; o++) { const P = base << o; v += ns[o](i / n * P, j / n * P) * a; s += a; a *= gain; } return v / s; };
+}
+const PROC_TIPS = {
+  hard: n => fromField(n, (i, j) => { const r = Math.hypot(i + .5 - n / 2, j + .5 - n / 2), R = n / 2 - 4; return clamp(R - r + .5, 0, 1); }),
+  medium: n => fromField(n, (i, j) => { const r = Math.hypot(i + .5 - n / 2, j + .5 - n / 2) / (n / 2 - 4); return 1 - clamp((r - .72) / .28, 0, 1) ** 1.4; }),
+  soft: n => fromField(n, (i, j) => { const r = Math.hypot(i + .5 - n / 2, j + .5 - n / 2) / (n / 2 - 2); return r >= 1 ? 0 : Math.exp(-r * r * 4.2) * (1 - r * r); }),
+  oval: n => fromField(n, (i, j) => { const x = (i + .5 - n / 2) / (n / 2 - 4), y = (j + .5 - n / 2) / ((n / 2 - 4) * .55); return clamp((1 - Math.hypot(x, y)) * n / 3, 0, 1); }),
+  slim: n => fromField(n, (i, j) => { const x = (i + .5 - n / 2) / (n / 2 - 4), y = (j + .5 - n / 2) / ((n / 2 - 4) * .28); return clamp((1 - Math.hypot(x, y)) * n / 5, 0, 1); }),
+  pencil: n => { const f = fbm(n, 11, 8, 4, .6), r2 = mulberry32(5); return fromField(n, (i, j) => { const r = Math.hypot(i + .5 - n / 2, j + .5 - n / 2) / (n / 2 - 4); if (r >= 1) return 0; return clamp((1 - r) * 3, 0, 1) * clamp(f(i, j) * 1.7 - .25 + (r2() - .5) * .35, 0, 1); }); },
+  bristle: n => { const f = fbm(n, 21, 4, 5, .55), g = periodicNoise(33, 64); return fromField(n, (i, j) => { const x = (i + .5 - n / 2) / (n / 2 - 4), y = (j + .5 - n / 2) / (n / 2 - 4), r = Math.hypot(x, y); if (r >= 1) return 0; const streak = g(i / n * 64, j / n * 2.5); return clamp((1 - r) * 2.2, 0, 1) * clamp(f(i, j) * 1.4 + streak * .6 - .45, 0, 1); }); },
+  square: n => fromField(n, (i, j) => (i > 6 && j > 6 && i < n - 7 && j < n - 7) ? 1 : 0)
+};
+const PROC_GRAINS = {
+  paper: n => { const f = fbm(n, 7, 16, 5, .55), r = mulberry32(3); return fromField(n, (i, j) => clamp((f(i, j) - .5) * 2.4 + .55 + (r() - .5) * .35, 0, 1)); },
+  canvas: n => { const f = fbm(n, 9, 32, 3, .5); return fromField(n, (i, j) => { const w = Math.abs(Math.sin(i / n * TAU * 40)) * .5 + Math.abs(Math.sin(j / n * TAU * 40)) * .5; return clamp(.35 + w * .45 + (f(i, j) - .5) * .9, 0, 1); }); },
+  wood: n => { const f = fbm(n, 13, 4, 4, .5), g = periodicNoise(17, 128); return fromField(n, (i, j) => { const v = Math.sin((j / n * 24 + f(i, j) * 3) * TAU) * .5 + .5; return clamp(.25 + v * .6 + (g(i / n * 4, j / n * 128) - .5) * .5, 0, 1); }); },
+  noise: n => { const r = mulberry32(42); return fromField(n, () => r() * r() * 1.6); },
+  charcoal: n => { const f = fbm(n, 5, 8, 6, .62), g = periodicNoise(51, 256); return fromField(n, (i, j) => clamp((f(i, j) - .45) * 3 + (g(i / n * 256, j / n * 256) - .5) * .9 + .2, 0, 1)); }
+};
+function procTip(id) { const k = 'tip:' + id; if (!texCache.has(k)) texCache.set(k, (PROC_TIPS[id] || PROC_TIPS.medium)(256)); return texCache.get(k); }
+function procGrain(id) { const k = 'grain:' + id; if (!texCache.has(k)) texCache.set(k, (PROC_GRAINS[id] || PROC_GRAINS.paper)(512)); return texCache.get(k); }
+function guessTip(name) {
+  const s = (name || '').toLowerCase();
+  if (s.includes('slim')) return 'slim'; if (s.includes('oval')) return 'oval';
+  if (/soft|air|blur|glow/.test(s)) return 'soft'; if (s.includes('medium')) return 'medium';
+  if (/stamp|acrylic|bristle|oil|gouache|brush-art|charcoal|chalk/.test(s)) return 'bristle';
+  if (/pencil|graphite|sketch/.test(s)) return 'pencil';
+  if (/hard|point|round|preset/.test(s)) return 'hard';
+  return 'medium';
+}
+function guessGrain(name) {
+  if (!name) return null; const s = name.toLowerCase();
+  if (s.includes('blank')) return null; if (s.includes('canvas')) return 'canvas'; if (s.includes('wood')) return 'wood';
+  if (/charcoal|chalk|pastel/.test(s)) return 'charcoal'; if (/noise|spray|spatter/.test(s)) return 'noise';
+  return 'paper';
+}
+
+/* ---------------------------------------------------------- zip reader */
+async function inflateRaw(u8) {
+  if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot unzip brush files');
+  const s = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+function readZip(buf) {
+  const dv = new DataView(buf), N = buf.byteLength; let e = -1;
+  for (let i = N - 22; i >= Math.max(0, N - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+  if (e < 0) throw new Error('Not a zip file');
+  const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true); const out = [], td = new TextDecoder();
+  for (let k = 0; k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), cs = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lho = dv.getUint32(p + 42, true);
+    const name = td.decode(new Uint8Array(buf, p + 46, nl)); p += 46 + nl + el + cl;
+    const ln = dv.getUint16(lho + 26, true), le = dv.getUint16(lho + 28, true), st = lho + 30 + ln + le;
+    if (!name.endsWith('/')) out.push({ name, method, data: new Uint8Array(buf, st, cs) });
+  }
+  return out;
+}
+async function zipData(ent) { return ent.method === 0 ? ent.data : await inflateRaw(ent.data); }
+
+/* ------------------------------------- binary plist + NSKeyedArchiver */
+function parseBplist(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  if (String.fromCharCode(...u8.subarray(0, 6)) !== 'bplist') throw new Error('Not a binary plist');
+  const T = u8.length - 32, os = u8[T + 6], rs = u8[T + 7];
+  const rd = (o, n) => { let v = 0; for (let i = 0; i < n; i++) v = v * 256 + u8[o + i]; return v; };
+  const nObj = rd(T + 8, 8), top = rd(T + 16, 8), ot = rd(T + 24, 8);
+  const offs = new Array(nObj); for (let i = 0; i < nObj; i++) offs[i] = rd(ot + i * os, os);
+  const cache = new Map();
+  const len = (o, info) => { if (info !== 15) return [info, o + 1]; const m = u8[o + 1], n = 1 << (m & 15); return [rd(o + 2, n), o + 2 + n]; };
+  function obj(i) {
+    if (cache.has(i)) return cache.get(i);
+    const o = offs[i], m = u8[o], t = m >> 4, info = m & 15; let v = null;
+    switch (t) {
+      case 0: v = info === 8 ? false : info === 9 ? true : null; break;
+      case 1: { const n = 1 << info; v = n === 8 ? Number(dv.getBigInt64(o + 1)) : rd(o + 1, n); break; }
+      case 2: v = info === 2 ? dv.getFloat32(o + 1) : dv.getFloat64(o + 1); break;
+      case 3: v = { date: dv.getFloat64(o + 1) }; break;
+      case 4: { const [n, s] = len(o, info); v = u8.subarray(s, s + n); break; }
+      case 5: { const [n, s] = len(o, info); let str = ''; for (let k = 0; k < n; k++) str += String.fromCharCode(u8[s + k]); v = str; break; }
+      case 6: { const [n, s] = len(o, info); let str = ''; for (let k = 0; k < n; k++) str += String.fromCharCode(dv.getUint16(s + k * 2)); v = str; break; }
+      case 8: v = { UID: rd(o + 1, info + 1) }; break;
+      case 10: { const [n, s] = len(o, info); v = []; cache.set(i, v); for (let k = 0; k < n; k++) v.push(obj(rd(s + k * rs, rs))); return v; }
+      case 13: { const [n, s] = len(o, info); v = {}; cache.set(i, v); for (let k = 0; k < n; k++) v[obj(rd(s + k * rs, rs))] = obj(rd(s + (n + k) * rs, rs)); return v; }
+    }
+    cache.set(i, v); return v;
+  }
+  return obj(top);
+}
+function unarchive(pl) {
+  const objs = pl.$objects, memo = new Map();
+  const isUID = v => v && typeof v === 'object' && !(v instanceof Uint8Array) && !Array.isArray(v) && 'UID' in v && Object.keys(v).length === 1;
+  function r(v) {
+    if (Array.isArray(v)) return v.map(r);
+    if (!isUID(v)) return v;
+    const idx = v.UID; if (memo.has(idx)) return memo.get(idx);
+    const o = objs[idx]; if (o === '$null') { memo.set(idx, null); return null; }
+    if (!o || typeof o !== 'object' || o instanceof Uint8Array || Array.isArray(o)) { memo.set(idx, o); return o; }
+    let out;
+    if ('NS.keys' in o) { out = {}; memo.set(idx, out); o['NS.keys'].forEach((k, i) => { out[r(k)] = r(o['NS.objects'][i]); }); }
+    else if ('NS.objects' in o) { out = []; memo.set(idx, out); for (const x of o['NS.objects']) out.push(r(x)); }
+    else if ('NS.string' in o) out = o['NS.string'];
+    else if ('NS.bytes' in o) out = o['NS.bytes'];
+    else { out = {}; memo.set(idx, out); for (const k in o) if (k !== '$class') out[k] = r(o[k]); }
+    memo.set(idx, out); return out;
+  }
+  return r(pl.$top.root);
+}
+
+/* ------------------------------------------ Procreate → engine mapping */
+function num(o, k, d) { const v = o[k]; return typeof v === 'number' && isFinite(v) ? v : typeof v === 'boolean' ? +v : d; }
+function parseCurve(c) {
+  try { const pts = (c && c.points || []).map(s => String(s).replace(/[{}]/g, '').split(',').map(Number)).filter(p => p.length === 2 && p.every(isFinite));
+    if (pts.length >= 2) return pts.sort((a, b) => a[0] - b[0]); } catch (e) {}
+  return [[0, 0], [1, 1]];
+}
+function mapProcreate(a) {
+  const P = JSON.parse(JSON.stringify(DEF));
+  const paintSize = num(a, 'paintSize', .3), maxS = num(a, 'maxSize', 1), minS = num(a, 'minSize', 0);
+  P.size = Math.round(clamp((minS + (maxS - minS) * paintSize) * 3.4, .2, 40) * 100) / 100; // mm
+  P.opacity = clamp(num(a, 'paintOpacity', 1), .02, 1);
+  P.spacing = clamp(Math.sqrt(Math.max(0, num(a, 'plotSpacing', .0025))), 0, 1);
+  P.streamline = clamp(num(a, 'plotSmoothing', 0), 0, 1);
+  P.jitter = clamp(num(a, 'plotJitter', 0), 0, 1);
+  P.flow = clamp(num(a, 'dynamicsGlazedFlow', 1), .01, 1);
+  P.buildup = a.renderingMaxTransfer ? 1 : 0;
+  P.rotation = clamp(num(a, 'shapeRotation', 0), -1, 1);
+  P.azimuth = a.shapeAzimuth ? 1 : 0;
+  P.scatter = clamp(num(a, 'shapeScatter', 0), 0, 1);
+  P.randomize = a.shapeRandomise ? 1 : 0;
+  P.roundness = clamp(num(a, 'shapeRoundness', 1), .05, 1);
+  P.tiltRound = clamp(1 - num(a, 'dynamicsTiltShapeRoundnessMinimum', 1), 0, 1);
+  P.tipInvert = a.shapeInverted ? 1 : 0;
+  P.grainDepth = clamp(num(a, 'grainDepth', 1), 0, 1);
+  P.grainScale = clamp(num(a, 'textureScale', .5), 0, 1);
+  P.grainMove = num(a, 'textureApplication', 0) === 1 ? 0 : clamp(num(a, 'textureMovement', 0), 0, 1);
+  P.grainInvert = a.textureInverted ? 1 : 0;
+  // Pencil taper is what applies to Apple Pencil strokes.
+  const pts = num(a, 'pencilTaperStartLength', 0), pte = num(a, 'pencilTaperEndLength', 0);
+  P.taperStart = clamp(pts * .55, 0, 1); P.taperEnd = clamp(pte * .55, 0, 1);
+  P.taperSize = clamp(num(a, 'pencilTaperSize', num(a, 'taperSize', .8)), 0, 1);
+  P.taperOpacity = clamp(num(a, 'pencilTaperOpacity', 0), 0, 1);
+  P.pSize = clamp(num(a, 'dynamicsPressureSize', 0), 0, 1);
+  P.pOpacity = clamp(num(a, 'dynamicsPressureOpacity', 0), 0, 1);
+  P.pCurve = parseCurve(a.dynamicsPressureSizeCurve);
+  P.tSize = clamp(num(a, 'dynamicsTiltSize', 0), 0, 1);
+  P.tOpacity = clamp(num(a, 'dynamicsTiltOpacity', 0), 0, 1);
+  P.sSize = clamp(num(a, 'dynamicsSpeedSize', 0), -1, 1);
+  P.sOpacity = clamp(num(a, 'dynamicsSpeedOpacity', 0), -1, 1);
+  P.jSize = clamp(num(a, 'dynamicsJitterSize', 0), 0, 1);
+  P.jOpacity = clamp(num(a, 'dynamicsJitterOpacity', 0), 0, 1);
+  return P;
+}
+async function imageToTex(u8, n, isTip) {
+  const bmp = await createImageBitmap(new Blob([u8]));
+  const c = makeCanvas(n), x = c.getContext('2d');
+  x.fillStyle = '#000'; x.fillRect(0, 0, n, n);
+  const m = isTip ? 4 : 0, s = Math.min((n - m * 2) / bmp.width, (n - m * 2) / bmp.height);
+  const w = bmp.width * s, hgt = bmp.height * s;
+  x.drawImage(bmp, (n - w) / 2, (n - hgt) / 2, w, hgt);
+  // decide luminance vs alpha
+  const t = makeCanvas(n), tx = t.getContext('2d'); tx.drawImage(bmp, (n - w) / 2, (n - hgt) / 2, w, hgt);
+  const A = tx.getImageData(0, 0, n, n).data, im = x.getImageData(0, 0, n, n), D = im.data;
+  // only judge transparency inside the drawn image (the margin is always empty)
+  let transp = 0, tot = 0; const x0 = Math.ceil((n - w) / 2) + 1, x1 = Math.floor((n + w) / 2) - 1, y0 = Math.ceil((n - hgt) / 2) + 1, y1 = Math.floor((n + hgt) / 2) - 1;
+  for (let j = y0; j < y1; j += 2) for (let i = x0; i < x1; i += 2) { tot++; if (A[(j * n + i) * 4 + 3] < 250) transp++; }
+  const useAlpha = transp > tot * .05;
+  for (let i = 0; i < D.length; i += 4) {
+    const v = useAlpha ? A[i + 3] : (A[i] * .299 + A[i + 1] * .587 + A[i + 2] * .114) * (A[i + 3] / 255);
+    D[i] = D[i + 1] = D[i + 2] = v; D[i + 3] = 255;
+  }
+  x.putImageData(im, 0, 0); bmp.close && bmp.close();
+  return c;
+}
+async function parseBrushArchives(buf, depth = 0) {
+  const ents = readZip(buf), found = [];
+  for (const e of ents) if (/\.(brush|brushset|zip)$/i.test(e.name) && depth < 2) {
+    try { const d = await zipData(e); found.push(...await parseBrushArchives(d.slice().buffer, depth + 1)); } catch (err) { console.warn(err); }
+  }
+  const dirs = new Map();
+  for (const e of ents) { const m = e.name.match(/^(.*?)Brush\.archive$/); if (m && !/(^|\/)Reset\/$/.test(m[1]) && !m[1].includes('__MACOSX')) dirs.set(m[1], e); }
+  for (const [dir, arch] of dirs) {
+    try {
+      const a = unarchive(parseBplist(await zipData(arch)));
+      const P = mapProcreate(a);
+      const inDir = n => ents.find(e => e.name.toLowerCase() === (dir + n).toLowerCase());
+      const shapeE = inDir('Shape.png') || inDir('Shape.jpg'), grainE = inDir('Grain.png') || inDir('Grain.jpg');
+      const b = { name: (a.name || dir.replace(/\/$/, '').split('/').pop().replace(/\.brush$/i, '') || 'Brush').trim(), P, tip: null, grain: null, author: a.authorName || '' };
+      if (shapeE) b.tip = { canvas: await imageToTex(await zipData(shapeE), 256, true) };
+      else b.tip = { proc: guessTip(a.bundledShapePath) };
+      if (grainE) b.grain = { canvas: await imageToTex(await zipData(grainE), 512, false) };
+      else { const g = guessGrain(a.bundledGrainPath); b.grain = g ? { proc: g } : null; }
+      if (!b.grain) P.grainDepth = 0;
+      found.push(b);
+    } catch (err) { console.warn('brush parse failed', dir, err); }
+  }
+  return found;
+}
+
+/* ------------------------------------------------------- brush library */
+const CORE = [
+  ['Fineliner', 'hard', null, { size: .4, spacing: .03, streamline: .3, motionFilter: .15, pSize: .25, flow: 1, buildup: 1, taperStart: .12, taperEnd: .14, taperSize: .7 }],
+  ['Ink', 'hard', null, { size: 1.2, spacing: .03, streamline: .22, pSize: .92, pCurve: [[0, 0], [.35, .22], [1, 1]], taperStart: .2, taperEnd: .28, taperSize: 1, sSize: .25, buildup: 1 }],
+  ['Monoline', 'hard', null, { size: .35, spacing: .03, streamline: .45, stabilize: .25, motionFilter: .2, pSize: 0, buildup: 1 }],
+  ['Pencil', 'pencil', 'paper', { size: .5, spacing: .07, streamline: .08, flow: .55, pSize: .35, pOpacity: .85, pCurve: [[0, 0], [.5, .38], [1, 1]], tSize: .9, tOpacity: .35, tiltRound: .55, azimuth: 1, grainDepth: .9, grainScale: .32, grainMove: 0, scatter: .5 }],
+  ['Marker', 'oval', null, { size: 2, spacing: .03, streamline: .15, pSize: .15, flow: .9, opacity: .8, buildup: 1, roundness: .55, rotation: 0, azimuth: 1 }],
+  ['Charcoal', 'bristle', 'charcoal', { size: 2.5, spacing: .09, streamline: .05, flow: .55, pSize: .35, pOpacity: .75, jSize: .15, scatter: 1, grainDepth: .85, grainScale: .45, tSize: .4 }],
+  ['Soft Airbrush', 'soft', null, { size: 8, spacing: .08, streamline: .1, flow: .07, pSize: .15, pOpacity: 1 }]
+];
+const Brushes = { list: [], byId: {} };
+function addBrush(b) { if (Brushes.byId[b.id]) { Object.assign(Brushes.byId[b.id], b); return Brushes.byId[b.id]; } Brushes.list.push(b); Brushes.byId[b.id] = b; return b; }
+function coreBrushes() {
+  for (const [name, tip, grain, o] of CORE) {
+    const base = Object.assign(JSON.parse(JSON.stringify(DEF)), o);
+    addBrush({ id: 'core:' + name.toLowerCase().replace(/\W+/g, '-'), name, group: 'Core', origTip: { proc: tip }, origGrain: grain ? { proc: grain } : null, base, p: JSON.parse(JSON.stringify(base)) });
+  }
+}
+function canvasFromDataURL(url) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => { const c = makeCanvas(im.width); const x = c.getContext('2d'); x.drawImage(im, 0, 0); res(c); }; im.onerror = rej; im.src = url; }); }
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'brush'; }
+
+/* ============================================================ WebGL engine */
+const canvas = $('#c');
+const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false, desynchronized: true, powerPreference: 'high-performance' });
+if (!gl) document.body.insertAdjacentHTML('beforeend', '<div class="err">This needs WebGL2 (Safari 15+ on iPad, or any current desktop browser).</div>');
+const VS_QUAD = `#version 300 es
+layout(location=0) in vec2 c; out vec2 vUV; void main(){ vUV=c*.5+.5; gl_Position=vec4(c,0,1);} `;
+const VS_STAMP = `#version 300 es
+layout(location=0) in vec2 c; layout(location=1) in vec4 iA; layout(location=2) in vec4 iB;
+uniform vec2 uDoc; out vec2 vUV; out float vFlow; out vec2 vDoc; out vec2 vCen;
+void main(){ float cs=cos(iA.w), sn=sin(iA.w); vec2 l=c*vec2(.5*iA.z,.5*iA.z*iB.x);
+ vec2 p=iA.xy+vec2(cs*l.x-sn*l.y, sn*l.x+cs*l.y); vUV=c*.5+.5; vFlow=iB.y; vDoc=p; vCen=iA.xy;
+ gl_Position=vec4(p/uDoc*2.-1.,0,1);} `;
+const FS_STAMP = `#version 300 es
+precision highp float; in vec2 vUV; in float vFlow; in vec2 vDoc; in vec2 vCen; out vec4 o;
+uniform sampler2D uTip, uGrain; uniform float uTipInv, uGD, uGS, uGM, uGI;
+void main(){ float t=texture(uTip,vUV).r; t=mix(t,1.-t,uTipInv); float a=t*vFlow;
+ if(uGD>0.){ float g=texture(uGrain,(vDoc-uGM*vCen)/uGS).r; g=mix(g,1.-g,uGI); a*=mix(1.,g,uGD);} o=vec4(a);} `;
+const FS_COMPOSE = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uS,uD; uniform vec3 uC; uniform float uO; uniform int uE,uM;
+void main(){ float a=clamp(texture(uS,vUV).a,0.,1.)*uO;
+ if(uM==1){ vec4 D=texture(uD,vUV); vec3 s=uC*a; o=vec4(s*(1.-D.a)+D.rgb*(1.-a)+s*D.rgb, a+D.a-a*D.a); return; } // multiply, like layered ink
+ o = uE==1 ? vec4(a) : vec4(uC*a,a);} `;
+const FS_SCREEN = `#version 300 es
+precision highp float; out vec4 o;
+uniform sampler2D uB,uA,uU,uS,uF; uniform int uLive,uE,uHasF,uMul; uniform vec3 uC,uPaper,uBg; uniform float uO,uH,uAO; uniform mat3 uInv,uFM; uniform vec2 uDoc;
+void main(){ vec2 dp=vec2(gl_FragCoord.x,uH-gl_FragCoord.y); vec2 d=(uInv*vec3(dp,1.)).xy;
+ if(d.x<0.||d.y<0.||d.x>uDoc.x||d.y>uDoc.y){ o=vec4(uBg,1.); return; }
+ vec2 uv=d/uDoc; vec4 C=texture(uB,uv), A=texture(uA,uv);
+ if(uLive==1){ float a=clamp(texture(uS,uv).a,0.,1.)*uO; vec3 s=uC*a; A = uE==1 ? A*(1.-a) : uMul==1 ? vec4(s*(1.-A.a)+A.rgb*(1.-a)+s*A.rgb, a+A.a-a*A.a) : vec4(s,a)+A*(1.-a); }
+ if(uHasF==1){ vec2 f=(uFM*vec3(d,1.)).xy; if(f.x>=0.&&f.y>=0.&&f.x<=uDoc.x&&f.y<=uDoc.y){ vec4 F=texture(uF,f/uDoc); A=F+A*(1.-F.a);} }
+ A*=uAO; C=A+C*(1.-A.a); vec4 U=texture(uU,uv); C=U+C*(1.-U.a);
+ o=vec4(uPaper*(1.-C.a)+C.rgb,1.);} `;
+const VS_IMG = `#version 300 es
+layout(location=0) in vec2 c; uniform mat3 uM; uniform vec2 uSz, uDoc; out vec2 vUV;
+void main(){ vUV=c*.5+.5; vec2 d=(uM*vec3(vUV*uSz,1.)).xy; gl_Position=vec4(d/uDoc*2.-1.,0,1);} `;
+const FS_IMG = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uI; void main(){ o=texture(uI,vUV); } `;
+const FS_LAYER = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uL; uniform float uO; void main(){ o=texture(uL,vUV)*uO; } `;
+const FS_FLAT = `#version 300 es
+precision highp float; in vec2 vUV; out vec4 o; uniform sampler2D uL; uniform vec3 uPaper; uniform int uMode;
+void main(){ vec4 L=texture(uL,vUV); o = uMode==1 ? vec4(vec3(clamp(L.a,0.,1.)),1.) : vec4(uPaper*(1.-L.a)+L.rgb,1.);} `;
+function prog(vs, fs) {
+  const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+  const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+  return { p, u };
+}
+const E = {};
+function initGL() {
+  E.stamp = prog(VS_STAMP, FS_STAMP); E.comp = prog(VS_QUAD, FS_COMPOSE); E.screen = prog(VS_QUAD, FS_SCREEN); E.flat = prog(VS_QUAD, FS_FLAT); E.lay = prog(VS_QUAD, FS_LAYER); E.img = prog(VS_IMG, FS_IMG);
+  E.quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, E.quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  E.vaoQ = gl.createVertexArray(); gl.bindVertexArray(E.vaoQ); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  E.inst = gl.createBuffer(); E.instCap = 0;
+  E.vaoS = gl.createVertexArray(); gl.bindVertexArray(E.vaoS);
+  gl.bindBuffer(gl.ARRAY_BUFFER, E.quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, E.inst);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 0); gl.vertexAttribDivisor(1, 1);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 32, 16); gl.vertexAttribDivisor(2, 1);
+  gl.bindVertexArray(null);
+  E.half = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  E.white = texFromCanvas(fromField(4, () => 1), false);
+}
+function target(w, h, float) {
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  let ok = false; const fbo = gl.createFramebuffer();
+  const tryFmt = (ifmt, type) => { gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, gl.RGBA, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    return gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; };
+  if (float && E.half) ok = tryFmt(gl.RGBA16F, gl.HALF_FLOAT);
+  if (!ok) tryFmt(gl.RGBA8, gl.UNSIGNED_BYTE);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  return { tex, fbo, w, h };
+}
+function freeTarget(t) { if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); } }
+function texFromCanvas(c, repeat) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const w = repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, w); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, w);
+  return t;
+}
+const gpuTex = new Map();
+function brushTextures(brushId, P) {
+  const b = Brushes.byId[brushId];
+  let tipKey, tipC, grainKey = null, grainC = null;
+  if (P.tip && P.tip !== 'orig') { tipKey = 'p:' + P.tip; tipC = () => procTip(P.tip); }
+  else if (b && b.origTip && b.origTip.canvas) { tipKey = 'b:' + brushId + ':tip'; tipC = () => b.origTip.canvas; }
+  else { const id = b && b.origTip && b.origTip.proc || 'hard'; tipKey = 'p:' + id; tipC = () => procTip(id); }
+  if (P.grain && P.grain !== 'orig') { if (P.grain !== 'none') { grainKey = 'g:' + P.grain; grainC = () => procGrain(P.grain); } }
+  else if (b && b.origGrain) { if (b.origGrain.canvas) { grainKey = 'b:' + brushId + ':grain'; grainC = () => b.origGrain.canvas; } else { grainKey = 'g:' + b.origGrain.proc; grainC = () => procGrain(b.origGrain.proc); } }
+  if (!gpuTex.has(tipKey)) gpuTex.set(tipKey, texFromCanvas(tipC(), false));
+  if (grainKey && !gpuTex.has(grainKey)) gpuTex.set(grainKey, texFromCanvas(grainC(), true));
+  return { tip: gpuTex.get(tipKey), grain: grainKey ? gpuTex.get(grainKey) : null };
+}
+// draw stamps (Float32Array, 8 floats each) into target t
+function drawStamps(t, inst, res, P, size, ppm) {
+  const kk = (ppm || 10) / 10;
+  const n = inst.length / 8; if (!n) return null;
+  gl.bindBuffer(gl.ARRAY_BUFFER, E.inst);
+  if (inst.byteLength > E.instCap) { E.instCap = Math.max(inst.byteLength, E.instCap * 2, 1 << 16); gl.bufferData(gl.ARRAY_BUFFER, E.instCap, gl.DYNAMIC_DRAW); }
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, inst);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo); gl.viewport(0, 0, t.w, t.h);
+  gl.useProgram(E.stamp.p); const u = E.stamp.u;
+  gl.uniform2f(u.uDoc, t.w, t.h);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, res.tip); gl.uniform1i(u.uTip, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, res.grain || E.white); gl.uniform1i(u.uGrain, 1);
+  gl.uniform1f(u.uTipInv, P.tipInvert ? 1 : 0);
+  const gd = res.grain ? P.grainDepth : 0; gl.uniform1f(u.uGD, gd);
+  // grain scale in doc px; moving grain scales with brush size
+  const gsTex = lerp(90, 1400, P.grainScale * P.grainScale) * kk, gsMov = Math.max(4, size * lerp(.6, 6, P.grainScale));
+  gl.uniform1f(u.uGS, lerp(gsTex, gsMov, P.grainMove));
+  gl.uniform1f(u.uGM, P.grainMove); gl.uniform1f(u.uGI, P.grainInvert ? 1 : 0);
+  gl.enable(gl.BLEND);
+  if (P.buildup) { gl.blendEquation(gl.MAX); gl.blendFunc(gl.ONE, gl.ONE); }
+  else { gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
+  gl.bindVertexArray(E.vaoS); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n); gl.bindVertexArray(null);
+  gl.blendEquation(gl.FUNC_ADD); gl.disable(gl.BLEND);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = 0; i < inst.length; i += 8) { const r = inst[i + 2] * .75 + 2; if (inst[i] - r < x0) x0 = inst[i] - r; if (inst[i] + r > x1) x1 = inst[i] + r; if (inst[i + 1] - r < y0) y0 = inst[i + 1] - r; if (inst[i + 1] + r > y1) y1 = inst[i + 1] + r; }
+  return [x0, y0, x1, y1];
+}
+function unionBox(a, b) { if (!a) return b; if (!b) return a; return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]; }
+function scissor(t, bb) {
+  if (!bb) { gl.disable(gl.SCISSOR_TEST); return; }
+  const x0 = clamp(Math.floor(bb[0]) - 2, 0, t.w), y0 = clamp(Math.floor(bb[1]) - 2, 0, t.h), x1 = clamp(Math.ceil(bb[2]) + 2, 0, t.w), y1 = clamp(Math.ceil(bb[3]) + 2, 0, t.h);
+  gl.enable(gl.SCISSOR_TEST); gl.scissor(x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0));
+}
+function clearTarget(t, bb) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo); gl.viewport(0, 0, t.w, t.h); scissor(t, bb); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.SCISSOR_TEST); }
+let scratchT = null;
+function composeInto(dst, src, color, op, erase, bb, mul) {
+  mul = mul && !erase;
+  if (mul) { // multiply needs to read what is already there: copy that patch out first
+    if (!scratchT || scratchT.w !== dst.w || scratchT.h !== dst.h) { freeTarget(scratchT); scratchT = target(dst.w, dst.h, false); }
+    const x0 = bb ? clamp(Math.floor(bb[0]) - 2, 0, dst.w) : 0, y0 = bb ? clamp(Math.floor(bb[1]) - 2, 0, dst.h) : 0, x1 = bb ? clamp(Math.ceil(bb[2]) + 2, 0, dst.w) : dst.w, y1 = bb ? clamp(Math.ceil(bb[3]) + 2, 0, dst.h) : dst.h;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, dst.fbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, scratchT.fbo);
+    gl.blitFramebuffer(x0, y0, x1, y1, x0, y0, x1, y1, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo); gl.viewport(0, 0, dst.w, dst.h); scissor(dst, bb);
+  gl.useProgram(E.comp.p); const u = E.comp.u;
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src.tex); gl.uniform1i(u.uS, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mul ? scratchT.tex : src.tex); gl.uniform1i(u.uD, 1);
+  gl.uniform3f(u.uC, color[0], color[1], color[2]); gl.uniform1f(u.uO, op); gl.uniform1i(u.uE, erase ? 1 : 0); gl.uniform1i(u.uM, mul ? 1 : 0);
+  if (mul) gl.disable(gl.BLEND);
+  else { gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); if (erase) gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA); else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
+  gl.bindVertexArray(E.vaoQ); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null);
+  gl.disable(gl.BLEND); gl.disable(gl.SCISSOR_TEST);
+}
+function blit(src, dst) {
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src.fbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, dst.fbo);
+  gl.blitFramebuffer(0, 0, src.w, src.h, 0, 0, dst.w, dst.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+}
+
+/* ======================================================= stroke builder */
+function cr(p0, p1, p2, p3, t) {
+  const k = (a, b) => Math.max(Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])), 1e-3);
+  const t1 = k(p0, p1), t2 = t1 + k(p1, p2), t3 = t2 + k(p2, p3), u = t1 + (t2 - t1) * t;
+  const L = (a, b, ta, tb) => { const f = (u - ta) / (tb - ta); return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; };
+  const A1 = L(p0, p1, 0, t1), A2 = L(p1, p2, t1, t2), A3 = L(p2, p3, t2, t3);
+  const B1 = L(A1, A2, 0, t2), B2 = L(A2, A3, t1, t3); return L(B1, B2, t1, t2);
+}
+const ease = t => 1 - (1 - t) * (1 - t);
+class StrokeBuilder {
+  constructor(P, size, seed, ppm) { this.P = P; this.size = size; this.k = (ppm || 10) / 10; this.seed = seed >>> 0; this.rng = mulberry32(this.seed); this.rot0 = this.rng() * TAU;
+    this.S = []; this.sx = null; this.spd = 0; this.seg = 0; this.toNext = 0; this.dist = 0; this.total = null; this.started = false; this.gap = 1; }
+  /* Stabilisation pipeline, like Procreate's Brush Studio:
+     raw → Motion filtering (removes hand/finger jitter) → Stabilisation (speed-aware, smooths slow
+     movement) → StreamLine (the line chases the pen with a time lag; when the pen pauses it catches up).
+     Pauses between samples are replayed as virtual ticks, so a redraw from the raw data matches live. */
+  add(x, y, p, alt, az, t) {
+    this.alt = alt; this.az = az; this.pp = this.pp === undefined ? p : this.pp + (p - this.pp) * .6;
+    if (this.ex === undefined) {
+      this.win = [[x, y]]; this.fx = this.ex = x; this.fy = this.ey = y; this.dvx = this.dvy = 0; this.lt = t; this.rx = x; this.ry = y;
+      this.S.push([x, y, p, alt, az, t, 0]); return;
+    }
+    this.tick(t - 8);
+    this.step(x, y, t); this.rx = x; this.ry = y;
+  }
+  tick(t) { let moved = false; while (t - this.lt > 16) { this.step(this.rx, this.ry, this.lt + 16); moved = true; } return moved; }
+  step(x, y, t) {
+    const P = this.P, dt = Math.max((t - this.lt) / 1000, 1 / 480); this.lt = t;
+    const mf = Math.round(clamp(P.motionFilter || 0, 0, 1) * 12);
+    if (mf > 0) { this.win.push([x, y]); while (this.win.length > mf + 1) this.win.shift(); let sx = 0, sy = 0, sw = 0; this.win.forEach((q, i) => { const w = i + 1; sx += q[0] * w; sy += q[1] * w; sw += w; }); x = sx / sw; y = sy / sw; }
+    const st = clamp(P.stabilize || 0, 0, 1);
+    if (st > 0) {
+      const al = c => 1 / (1 + 1 / (TAU * c * dt)), ad = al(1.2);
+      this.dvx += ((x - this.fx) / dt - this.dvx) * ad; this.dvy += ((y - this.fy) / dt - this.dvy) * ad;
+      const a = al(lerp(10, .3, Math.pow(st, .6)) + (.05 * Math.pow(1 - st, 2) + .0012) * Math.hypot(this.dvx, this.dvy) / this.k);
+      this.fx += (x - this.fx) * a; this.fy += (y - this.fy) * a;
+    } else { this.fx = x; this.fy = y; }
+    const sl = clamp(P.streamline, 0, 1);
+    if (sl > 0) { const tau = .42 * Math.pow(sl, 1.7); const a = 1 - Math.exp(-dt / tau); this.ex += (this.fx - this.ex) * a; this.ey += (this.fy - this.ey) * a; }
+    else { this.ex = this.fx; this.ey = this.fy; }
+    const last = this.S[this.S.length - 1], md = Math.hypot(this.ex - last[0], this.ey - last[1]);
+    if (md < .12) { last[2] = this.pp; last[3] = this.alt; last[4] = this.az; return; }
+    const v = md / Math.max(t - last[5], 1); this.spd = this.spd * .82 + v * .18;
+    this.S.push([this.ex, this.ey, this.pp, this.alt, this.az, t, this.spd]);
+  }
+  // when the pen lifts, the line glides on into the lift point instead of jumping there
+  catchUp() {
+    if (this.ex === undefined) return;
+    for (let k = 0; k < 60 && Math.hypot(this.rx - this.ex, this.ry - this.ey) > .4; k++) this.step(this.rx, this.ry, this.lt + 16);
+    const last = this.S[this.S.length - 1]; if (Math.hypot(this.rx - last[0], this.ry - last[1]) > .12) this.S.push([this.rx, this.ry, last[2], last[3], last[4], last[5] + 16, last[6]]);
+  }
+  pieces(i) { const S = this.S, n = S.length, a = S[i], b = S[i + 1], a0 = S[Math.max(i - 1, 0)], b1 = S[Math.min(i + 2, n - 1)];
+    const K = clamp(Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 1.5), 1, 48), out = [a[0], a[1]];
+    for (let k = 1; k <= K; k++) { const q = cr(a0, a, b, b1, k / K); out.push(q[0], q[1]); } return out; }
+  length() { let L = 0; for (let i = 0; i < this.S.length - 1; i++) { const q = this.pieces(i); for (let k = 2; k < q.length; k += 2) L += Math.hypot(q[k] - q[k - 2], q[k + 1] - q[k - 1]); } return L; }
+  stamp(out, x, y, A, B, f, dir) {
+    const P = this.P, r = this.rng;
+    const p = lerp(A[2], B[2], f), alt = lerp(A[3], B[3], f), az = f < .5 ? A[4] : B[4], spd = lerp(A[6], B[6], f);
+    const pr = curveEval(P.pCurve, clamp(p, 0, 1)), ta = clamp(1 - alt / HALF_PI, 0, 1), sp = clamp(spd / this.k / 4, 0, 1);
+    let sz = 1 - P.pSize * (1 - pr);
+    sz *= 1 + P.tSize * ta * 2;
+    sz *= Math.max(.04, 1 - P.sSize * sp * .85);
+    if (P.jSize) sz *= 1 - P.jSize * r();
+    let fl = P.flow * (1 - P.pOpacity * (1 - pr)) * (1 - P.tOpacity * ta) * clamp(1 - P.sOpacity * sp * .85, 0, 1);
+    if (P.jOpacity) fl *= 1 - P.jOpacity * r();
+    const tl = v => Math.pow(v, 1.5) * 320 * this.k;
+    if (P.taperStart > 0 || (P.taperEnd > 0 && this.total !== null)) {
+      let tf = 1;
+      if (P.taperStart > 0) { const L = Math.min(tl(P.taperStart), this.total !== null ? this.total * .45 : 1e9); tf = Math.min(tf, ease(clamp(this.dist / L, 0, 1))); }
+      if (P.taperEnd > 0 && this.total !== null) { const L = Math.min(tl(P.taperEnd), this.total * .45); tf = Math.min(tf, ease(clamp((this.total - this.dist) / L, 0, 1))); }
+      sz *= 1 - P.taperSize * (1 - tf); fl *= 1 - P.taperOpacity * (1 - tf);
+    }
+    sz = Math.max(sz, P.minSize);
+    let d = this.size * sz;
+    this.gap = Math.max(Math.max(P.spacing, .012) * d, .25);
+    if (d < 1) { fl *= Math.max(d, 0); d = 1; }
+    let ang = (P.azimuth ? az : P.rotation * dir) + (P.angle || 0) * Math.PI / 180;
+    if (P.randomize) ang += this.rot0;
+    if (P.scatter) ang += (r() - .5) * TAU * P.scatter;
+    if (P.jitter) { x += (r() - .5) * 2 * P.jitter * d * 1.5; y += (r() - .5) * 2 * P.jitter * d * 1.5; }
+    const rnd = Math.max(.05, P.roundness * (1 - P.tiltRound * ta));
+    out.push(x, y, d, ang, rnd, clamp(fl, 0, 1), 0, 0);
+  }
+  emit(final) {
+    const S = this.S, n = S.length, out = [];
+    if (!n) return out;
+    if (!this.started) {
+      if (n < 2 && !final) return out;
+      this.started = true; const dir = n > 1 ? Math.atan2(S[1][1] - S[0][1], S[1][0] - S[0][0]) : 0;
+      this.stamp(out, S[0][0], S[0][1], S[0], S[0], 0, dir); this.toNext = this.gap;
+    }
+    const lastSeg = final ? n - 1 : n - 2;
+    for (; this.seg < lastSeg; this.seg++) {
+      const i = this.seg, A = S[i], B = S[i + 1], q = this.pieces(i), K = q.length / 2 - 1;
+      for (let k = 1; k <= K; k++) {
+        const px = q[k * 2 - 2], py = q[k * 2 - 1], qx = q[k * 2], qy = q[k * 2 + 1], l = Math.hypot(qx - px, qy - py);
+        if (l < 1e-6) continue;
+        const dir = Math.atan2(qy - py, qx - px); let pos = 0;
+        while (this.toNext <= l - pos) {
+          pos += this.toNext; this.dist += this.toNext; const f = pos / l;
+          this.stamp(out, px + (qx - px) * f, py + (qy - py) * f, A, B, (k - 1 + f) / K, dir);
+          this.toNext = this.gap;
+        }
+        const rem = l - pos; this.toNext -= rem; this.dist += rem;
+      }
+    }
+    return out;
+  }
+  // the smoothed path (after Motion filtering, Stabilisation and StreamLine), as drawn
+  static smoothed(P, size, seed, pts, ppm) {
+    const b = new StrokeBuilder(P, size, seed, ppm), n = pts.length / 6;
+    for (let i = 0; i < n; i++) b.add(pts[i * 6], pts[i * 6 + 1], pts[i * 6 + 2], pts[i * 6 + 3], pts[i * 6 + 4], pts[i * 6 + 5]);
+    b.catchUp(); return b.S;
+  }
+  static build(P, size, seed, pts, live, ppm) {
+    const b = new StrokeBuilder(P, size, seed, ppm), n = pts.length / 6;
+    for (let i = 0; i < n; i++) b.add(pts[i * 6], pts[i * 6 + 1], pts[i * 6 + 2], pts[i * 6 + 3], pts[i * 6 + 4], pts[i * 6 + 5]);
+    if (!live) b.catchUp();
+    if (!live) b.total = b.length();
+    return new Float32Array(b.emit(true));
+  }
+}
+
+/* ================================================================ state */
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+const PAPERS = [['A6', 105, 148], ['A5', 148, 210], ['A4', 210, 297], ['A3', 297, 420], ['A2', 420, 594], ['Letter', 215.9, 279.4], ['4×6 in', 101.6, 152.4], ['Square', 200, 200], ['Custom', 0, 0]];
+function makePaper(name, wmm, hmm) { const ppm = Math.min(8, 3200 / Math.max(wmm, hmm)); return { name, wmm, hmm, ppm }; }
+const MAX_LAYERS = 8;
+const GUIDE_DEF = { kind: 'none', spacing: 10, sym: 'off', segments: 6 };
+const st = {
+  doc: { w: 0, h: 0, strokes: [], params: {}, paper: makePaper('A4', 297, 210), layers: [] },
+  active: null,
+  history: [], redo: [],
+  mode: 'paint', tool: 'draw', blend: 'normal', brushId: 'core:ink', color: [.12, .12, .13], recent: [],
+  guides: Object.assign({}, GUIDE_DEF),
+  view: { s: 1, r: 0, tx: 0, ty: 0 },
+  penSeen: false, cur: null, dirty: true, ovDirty: true, lastStats: null,
+  lasso: null, sel: null,
+  paper: [.965, .957, .937], bg: [.165, .165, .173]
+};
+let strokeT, belowT, aboveT, floatT = null; const layerTex = new Map();
+let layerSeq = 1;
+const newLayerId = () => 'L' + Date.now().toString(36) + (layerSeq++);
+const activeBrush = () => Brushes.byId[st.brushId] || Brushes.list[0];
+const layerIndex = id => st.doc.layers.findIndex(l => l.id === id);
+const activeLayer = () => st.doc.layers[layerIndex(st.active)] || st.doc.layers[st.doc.layers.length - 1];
+function ensureLayerTex(id) { if (!layerTex.has(id)) layerTex.set(id, target(st.doc.w, st.doc.h, false)); return layerTex.get(id); }
+
+function paramsKey(brushId, P) {
+  const snap = {}; for (const k of STROKE_KEYS) snap[k] = P[k];
+  const key = brushId + '|' + hashStr(JSON.stringify(snap));
+  if (!st.doc.params[key]) st.doc.params[key] = { brush: brushId, P: snap };
+  return key;
+}
+function strokeParams(s) { const e = st.doc.params[s.k]; return e ? e.P : DEF; }
+function renderStrokeTo(dst, s) {
+  const P = strokeParams(s), brushId = st.doc.params[s.k] ? st.doc.params[s.k].brush : 'core:ink';
+  const ppm = st.doc.paper.ppm, inst = StrokeBuilder.build(P, s.size, s.seed, s.pts, false, ppm);
+  const bb = drawStamps(strokeT, inst, brushTextures(brushId, P), P, s.size, ppm);
+  if (bb) { composeInto(dst, strokeT, s.color, s.op, s.erase, bb, s.mul); clearTarget(strokeT, bb); }
+}
+/* ------------------------------------------------------------ images */
+const IMG_MAX = 4096, imgCache = new Map(); // key -> { tex, w, h }
+// placement: centre (doc px), scale (doc px per image px, sign = flip), rotation
+const imgMatrix = im => { const c = Math.cos(im.rot), s = Math.sin(im.rot), a = c * im.sx, b = s * im.sx, cc = -s * im.sy, d = c * im.sy; return [a, b, cc, d, im.cx - a * im.w / 2 - cc * im.h / 2, im.cy - b * im.w / 2 - d * im.h / 2]; };
+async function loadImageTex(key, blob) {
+  if (imgCache.has(key)) return imgCache.get(key);
+  const bmp = await createImageBitmap(blob);
+  const max = Math.min(IMG_MAX, gl.getParameter(gl.MAX_TEXTURE_SIZE)), k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  let src = bmp, w = bmp.width, hh = bmp.height;
+  if (k < 1) { w = Math.round(w * k); hh = Math.round(hh * k); const c = document.createElement('canvas'); c.width = w; c.height = hh; c.getContext('2d').drawImage(bmp, 0, 0, w, hh); src = c; }
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  bmp.close && bmp.close();
+  const e = { tex, w, h: hh }; imgCache.set(key, e); return e;
+}
+function drawImageTo(dst, im, M) {
+  const e = imgCache.get(im.key); if (!e) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo); gl.viewport(0, 0, dst.w, dst.h);
+  gl.useProgram(E.img.p); const u = E.img.u;
+  gl.uniformMatrix3fv(u.uM, false, glM(M || imgMatrix(im))); gl.uniform2f(u.uSz, im.w, im.h); gl.uniform2f(u.uDoc, dst.w, dst.h);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, e.tex); gl.uniform1i(u.uI, 0);
+  gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.bindVertexArray(E.vaoQ); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null); gl.disable(gl.BLEND);
+}
+const editingImage = id => st.sel && st.sel.kind === 'image' && st.sel.layer === id;
+function paintLayerBase(id, t) { const l = st.doc.layers[layerIndex(id)]; if (l && l.image && !editingImage(id)) drawImageTo(t, l.image); }
+function rebuildLayer(id) {
+  const t = ensureLayerTex(id); clearTarget(t); paintLayerBase(id, t);
+  for (const s of st.doc.strokes) if (s.layer === id) renderStrokeTo(t, s);
+  if (id !== st.active) recomposite(); st.dirty = true;
+}
+function compositeLayers(dst, list) {
+  clearTarget(dst); gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo); gl.viewport(0, 0, dst.w, dst.h);
+  gl.useProgram(E.lay.p); gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.bindVertexArray(E.vaoQ);
+  for (const l of list) { if (!l.visible) continue;
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ensureLayerTex(l.id).tex); gl.uniform1i(E.lay.u.uL, 0); gl.uniform1f(E.lay.u.uO, l.opacity);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+  gl.bindVertexArray(null); gl.disable(gl.BLEND);
+}
+// layers under / over the active one are pre-merged, so the screen only blends three textures
+function recomposite() {
+  const L = st.doc.layers, ai = Math.max(0, layerIndex(st.active));
+  compositeLayers(belowT, L.slice(0, ai)); compositeLayers(aboveT, L.slice(ai + 1)); st.dirty = true;
+}
+function rebuildAll() {
+  for (const [id, t] of [...layerTex]) if (layerIndex(id) < 0) { freeTarget(t); layerTex.delete(id); }
+  for (const l of st.doc.layers) { const t = ensureLayerTex(l.id); clearTarget(t); paintLayerBase(l.id, t); }
+  for (const s of st.doc.strokes) { const t = layerTex.get(s.layer); if (t) renderStrokeTo(t, s); }
+  recomposite();
+}
+function setupDoc(paper, layers, active) {
+  st.doc.paper = paper; const w = Math.round(paper.wmm * paper.ppm), h = Math.round(paper.hmm * paper.ppm);
+  st.doc.w = w; st.doc.h = h;
+  for (const t of layerTex.values()) freeTarget(t); layerTex.clear();
+  freeTarget(strokeT); freeTarget(belowT); freeTarget(aboveT); freeTarget(floatT); floatT = null;
+  strokeT = target(w, h, true); belowT = target(w, h, false); aboveT = target(w, h, false);
+  st.doc.layers = layers && layers.length ? layers : [{ id: newLayerId(), name: 'Layer 1', visible: true, opacity: 1 }];
+  st.active = active && st.doc.layers.some(l => l.id === active) ? active : st.doc.layers[st.doc.layers.length - 1].id;
+  st.sel = null; st.lasso = null;
+}
+
+/* ---------------------------------------------------------- history */
+const snapshot = () => ({ strokes: st.sel ? [...st.sel.before.strokes, ...st.sel.copies] : st.doc.strokes.slice(), layers: st.doc.layers.map(l => ({ ...l })), active: st.active });
+function commitSnap(before) { st.history.push({ t: 'snap', before, after: snapshot() }); st.redo.length = 0; scheduleSave(); refreshLayers(); }
+function applySnap(sn) {
+  const same = sn.strokes.length === st.doc.strokes.length && sn.strokes.every((s, i) => s === st.doc.strokes[i]);
+  st.doc.strokes = sn.strokes.slice(); st.doc.layers = sn.layers.map(l => ({ ...l }));
+  st.active = sn.layers.some(l => l.id === sn.active) ? sn.active : st.doc.layers[st.doc.layers.length - 1].id;
+  if (same) { for (const [id, t] of [...layerTex]) if (layerIndex(id) < 0) { freeTarget(t); layerTex.delete(id); } recomposite(); }
+  else rebuildAll();
+}
+function undo() {
+  if (st.sel) { cancelSel(); return; }
+  const a = st.history.pop(); if (!a) return;
+  if (a.t === 'add') { const set = new Set(a.list); st.doc.strokes = st.doc.strokes.filter(s => !set.has(s)); for (const id of new Set(a.list.map(s => s.layer))) rebuildLayer(id); }
+  else applySnap(a.before);
+  st.redo.push(a); st.dirty = st.ovDirty = true; scheduleSave(); refreshLayers();
+}
+function redo() {
+  if (st.sel) return; const a = st.redo.pop(); if (!a) return;
+  if (a.t === 'add') { for (const s of a.list) { st.doc.strokes.push(s); renderStrokeTo(ensureLayerTex(s.layer), s); if (s.layer !== st.active) recomposite(); } }
+  else applySnap(a.after);
+  st.history.push(a); st.dirty = st.ovDirty = true; scheduleSave(); refreshLayers();
+}
+function clearCanvas() { if (!st.doc.strokes.length) return; commitSel(); const before = snapshot(); st.doc.strokes = []; rebuildAll(); commitSnap(before); }
+
+/* ------------------------------------------------------ 2D affine helpers  [a,b,c,d,e,f]: x' = a x + c y + e, y' = b x + d y + f */
+const xfP = (M, x, y) => [M[0] * x + M[2] * y + M[4], M[1] * x + M[3] * y + M[5]];
+const xfAz = (M, az) => { const dx = Math.cos(az), dy = Math.sin(az); const a = Math.atan2(M[1] * dx + M[3] * dy, M[0] * dx + M[2] * dy); return (a % TAU + TAU) % TAU; };
+function xfPts(M, pts) { const o = Float32Array.from(pts); for (let i = 0; i < o.length; i += 6) { const [x, y] = xfP(M, pts[i], pts[i + 1]); o[i] = x; o[i + 1] = y; o[i + 4] = xfAz(M, pts[i + 4]); } return o; }
+const mulM = (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5]];
+function invM(M) { const [a, b, c, d, e, f] = M, det = a * d - b * c || 1e-9, ia = d / det, ib = -b / det, ic = -c / det, id = a / det; return [ia, ib, ic, id, -(ia * e + ic * f), -(ib * e + id * f)]; }
+function symMatrices() {
+  const g = st.guides, cx = st.doc.w / 2, cy = st.doc.h / 2, out = [];
+  const refl = (sx, sy) => [sx, 0, 0, sy, cx - sx * cx, cy - sy * cy];
+  if (g.sym === 'vertical') out.push(refl(-1, 1));
+  else if (g.sym === 'horizontal') out.push(refl(1, -1));
+  else if (g.sym === 'quadrant') out.push(refl(-1, 1), refl(1, -1), refl(-1, -1));
+  else if (g.sym === 'radial') for (let k = 1; k < g.segments; k++) { const a = TAU * k / g.segments, c = Math.cos(a), s = Math.sin(a); out.push([c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy]); }
+  return out;
+}
+
+/* ================================================================= view */
+function resize() {
+  canvas.width = Math.round(innerWidth * dpr); canvas.height = Math.round(innerHeight * dpr);
+  const ov = $('#ov'); ov.width = canvas.width; ov.height = canvas.height;
+  st.dirty = st.ovDirty = true;
+}
+function fitView() {
+  const s = Math.min(innerWidth / st.doc.w, innerHeight / st.doc.h);
+  st.view = { s, r: 0, tx: (innerWidth - st.doc.w * s) / 2, ty: (innerHeight - st.doc.h * s) / 2 }; st.dirty = true;
+}
+function toDoc(cx, cy) { const v = st.view, x = cx - v.tx, y = cy - v.ty, c = Math.cos(-v.r), s = Math.sin(-v.r); return [(c * x - s * y) / v.s, (s * x + c * y) / v.s]; }
+function toScreen(dx, dy) { const v = st.view, c = Math.cos(v.r), s = Math.sin(v.r); return [v.tx + (c * dx - s * dy) * v.s, v.ty + (s * dx + c * dy) * v.s]; }
+const glM = M => [M[0], M[1], 0, M[2], M[3], 0, M[4], M[5], 1];
+
+function drawScreen() {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(E.screen.p); const u = E.screen.u, v = st.view;
+  const c = Math.cos(-v.r), s = Math.sin(-v.r), k = 1 / (v.s * dpr);
+  gl.uniformMatrix3fv(u.uInv, false, [c * k, s * k, 0, -s * k, c * k, 0, -(c * v.tx - s * v.ty) / v.s, -(s * v.tx + c * v.ty) / v.s, 1]);
+  gl.uniform2f(u.uDoc, st.doc.w, st.doc.h); gl.uniform1f(u.uH, canvas.height);
+  gl.uniform3fv(u.uPaper, st.paper); gl.uniform3fv(u.uBg, st.bg);
+  const AL = activeLayer();
+  const bind = (unit, tex, name) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(u[name], unit); };
+  bind(0, belowT.tex, 'uB'); bind(1, ensureLayerTex(AL.id).tex, 'uA'); bind(2, aboveT.tex, 'uU'); bind(3, strokeT.tex, 'uS'); bind(4, (floatT || strokeT).tex, 'uF');
+  gl.uniform1f(u.uAO, AL.visible ? AL.opacity : 0);
+  const cur = st.cur; gl.uniform1i(u.uLive, cur ? 1 : 0);
+  gl.uniform1i(u.uMul, cur && cur.mul ? 1 : 0);
+  if (cur) { gl.uniform3fv(u.uC, cur.color); gl.uniform1f(u.uO, cur.op); gl.uniform1i(u.uE, cur.erase ? 1 : 0); }
+  gl.uniform1i(u.uHasF, st.sel && floatT ? 1 : 0);
+  if (st.sel && floatT) gl.uniformMatrix3fv(u.uFM, false, glM(mulM(st.sel.renderM, invM(selMatrix()))));
+  gl.bindVertexArray(E.vaoQ); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null);
+}
+let ovSig = '';
+function frame() {
+  requestAnimationFrame(frame);
+  const cur = st.cur;
+  if (cur) {
+    const now = performance.now() - cur.t0 - 8;
+    for (const pt of cur.parts) {
+      if (pt.raw.length && pt.builder.tick(now)) st.dirty = true;
+      const inst = pt.builder.emit(false);
+      if (inst.length) { const bb = drawStamps(strokeT, new Float32Array(inst), cur.res, cur.P, cur.size, st.doc.paper.ppm); cur.bb = unionBox(cur.bb, bb); st.dirty = true; }
+    }
+  }
+  if (st.dirty) { st.dirty = false; drawScreen(); }
+  const sig = st.view.s + ',' + st.view.r + ',' + st.view.tx + ',' + st.view.ty;
+  if (st.ovDirty || sig !== ovSig) { ovSig = sig; st.ovDirty = false; drawOverlay(); }
+}
+
+/* ============================================================ overlay */
+function drawOverlay() {
+  const ov = $('#ov'), x = ov.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, innerWidth, innerHeight);
+  const W = st.doc.w, H = st.doc.h, g = st.guides, ppm = st.doc.paper.ppm, sp = Math.max(1, g.spacing * ppm);
+  const ln = (x0, y0, x1, y1) => { const a = toScreen(x0, y0), b = toScreen(x1, y1); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); };
+  x.lineWidth = 1; x.setLineDash([]);
+  if (g.kind !== 'none') {
+    const blue = 'rgba(40,110,255,.34)';
+    x.strokeStyle = blue; x.fillStyle = 'rgba(40,110,255,.5)'; x.beginPath();
+    if (g.kind === 'grid') { for (let X = sp; X < W - .5; X += sp) ln(X, 0, X, H); for (let Y = sp; Y < H - .5; Y += sp) ln(0, Y, W, Y); }
+    else if (g.kind === 'ruled') { for (let Y = sp; Y < H - .5; Y += sp) ln(0, Y, W, Y); }
+    else if (g.kind === 'thirds') { ln(W / 3, 0, W / 3, H); ln(W * 2 / 3, 0, W * 2 / 3, H); ln(0, H / 3, W, H / 3); ln(0, H * 2 / 3, W, H * 2 / 3); }
+    else if (g.kind === 'dots' && (W / sp) * (H / sp) < 60000) { const r = 1.1; for (let X = sp; X < W; X += sp) for (let Y = sp; Y < H; Y += sp) { const p = toScreen(X, Y); x.rect(p[0] - r, p[1] - r, r * 2, r * 2); } x.fill(); }
+    else if (g.kind === 'writing') {
+      const pitch = sp * 1.75;
+      for (let b = pitch; b < H - .5; b += pitch) ln(0, b, W, b); x.stroke();
+      x.beginPath(); x.strokeStyle = 'rgba(40,110,255,.18)'; for (let b = pitch; b < H - .5; b += pitch) ln(0, b - sp, W, b - sp); x.stroke();
+      x.beginPath(); x.setLineDash([4, 4]); x.strokeStyle = blue; for (let b = pitch; b < H - .5; b += pitch) ln(0, b - sp * .5, W, b - sp * .5);
+    }
+    x.stroke(); x.setLineDash([]);
+    if (g.kind === 'ruled' && W > 60 * ppm) { x.beginPath(); x.strokeStyle = 'rgba(225,70,70,.4)'; ln(25 * ppm, 0, 25 * ppm, H); x.stroke(); }
+  }
+  if (g.sym !== 'off') {
+    const cx = W / 2, cy = H / 2, L = Math.hypot(W, H);
+    x.strokeStyle = 'rgba(232,60,150,.8)'; x.setLineDash([7, 5]); x.beginPath();
+    if (g.sym === 'vertical' || g.sym === 'quadrant') ln(cx, 0, cx, H);
+    if (g.sym === 'horizontal' || g.sym === 'quadrant') ln(0, cy, W, cy);
+    if (g.sym === 'radial') for (let k = 0; k < g.segments; k++) { const a = -HALF_PI + k * TAU / g.segments; ln(cx, cy, cx + Math.cos(a) * L, cy + Math.sin(a) * L); }
+    x.stroke(); x.setLineDash([]);
+    const c = toScreen(cx, cy); x.fillStyle = 'rgba(232,60,150,.9)'; x.beginPath(); x.arc(c[0], c[1], 3, 0, TAU); x.fill();
+  }
+  if (st.lasso && st.lasso.pts.length > 2) {
+    const P = st.lasso.pts; x.beginPath();
+    for (let i = 0; i < P.length; i += 2) { const p = toScreen(P[i], P[i + 1]); i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1]); }
+    x.closePath(); x.fillStyle = 'rgba(47,123,255,.08)'; x.fill();
+    x.lineWidth = 3; x.strokeStyle = 'rgba(255,255,255,.9)'; x.stroke(); x.lineWidth = 1.2; x.setLineDash([5, 4]); x.strokeStyle = '#2f7bff'; x.stroke(); x.setLineDash([]);
+  }
+  if (st.sel) {
+    const H2 = selHandles(), cs = H2.filter(q => q.kind === 'corner');
+    x.beginPath(); cs.forEach((q, i) => i ? x.lineTo(q.s[0], q.s[1]) : x.moveTo(q.s[0], q.s[1])); x.closePath();
+    x.lineWidth = 1.4; x.strokeStyle = '#2f7bff'; x.stroke();
+    const rot = H2.find(q => q.kind === 'rot'), top = H2.find(q => q.kind === 'side' && q.id === 't');
+    x.beginPath(); x.moveTo(top.s[0], top.s[1]); x.lineTo(rot.s[0], rot.s[1]); x.stroke();
+    for (const q of H2) { x.beginPath(); x.arc(q.s[0], q.s[1], q.kind === 'corner' ? 7 : q.kind === 'rot' ? 8 : 5.5, 0, TAU); x.fillStyle = q.kind === 'rot' ? '#2f7bff' : '#fff'; x.fill(); x.lineWidth = 1.5; x.strokeStyle = q.kind === 'rot' ? '#fff' : '#2f7bff'; x.stroke(); }
+  }
+}
+
+/* ===================================================== lasso + transform */
+function selMatrix() {
+  const S = st.sel, c = Math.cos(S.rot), s = Math.sin(S.rot), [cx, cy] = S.C, a = c * S.sx, b = s * S.sx, cc = -s * S.sy, d = c * S.sy;
+  return [a, b, cc, d, cx + S.t[0] - a * cx - cc * cy, cy + S.t[1] - b * cx - d * cy];
+}
+function selHandles() {
+  const S = st.sel, M = selMatrix(), [x0, y0, x1, y1] = S.box, mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+  const pts = [['corner', 'tl', x0, y0], ['corner', 'tr', x1, y0], ['corner', 'br', x1, y1], ['corner', 'bl', x0, y1],
+    ['side', 't', mx, y0], ['side', 'r', x1, my], ['side', 'b', mx, y1], ['side', 'l', x0, my]];
+  const out = pts.map(([kind, id, px, py]) => { const d = xfP(M, px, py); return { kind, id, local: [px - S.C[0], py - S.C[1]], s: toScreen(d[0], d[1]) }; });
+  const top = out[4].s, cen = toScreen(...xfP(M, mx, my)); let dx = top[0] - cen[0], dy = top[1] - cen[1], L = Math.hypot(dx, dy);
+  if (L < 1) { dx = 0; dy = -1; L = 1; }
+  out.push({ kind: 'rot', id: 'rot', s: [top[0] + dx / L * 30, top[1] + dy / L * 30] });
+  return out;
+}
+function selDown(e) {
+  const p = toDoc(e.clientX, e.clientY);
+  if (st.sel) {
+    let hit = null, bd = 26; for (const q of selHandles()) { const d = Math.hypot(q.s[0] - e.clientX, q.s[1] - e.clientY); if (d < bd) { bd = d; hit = q; } }
+    const S = st.sel; S.drag = { pid: e.pointerId, h: hit, start: p, t0: S.t.slice(), sx0: S.sx, sy0: S.sy, rot0: S.rot, a0: Math.atan2(p[1] - (S.C[1] + S.t[1]), p[0] - (S.C[0] + S.t[0])) };
+    return;
+  }
+  st.lasso = { pid: e.pointerId, pts: [p[0], p[1]] }; st.ovDirty = true;
+}
+function selMove(e) {
+  if (st.lasso && st.lasso.pid === e.pointerId) {
+    let list = e.getCoalescedEvents ? e.getCoalescedEvents() : null; if (!list || !list.length) list = [e];
+    for (const ev of list) { const p = toDoc(ev.clientX, ev.clientY), P = st.lasso.pts; if (Math.hypot(p[0] - P[P.length - 2], p[1] - P[P.length - 1]) > 2 / st.view.s) P.push(p[0], p[1]); }
+    st.ovDirty = true; return;
+  }
+  const S = st.sel; if (!S || !S.drag || S.drag.pid !== e.pointerId) return;
+  const D = S.drag, p = toDoc(e.clientX, e.clientY), h = D.h;
+  const cx = S.C[0] + D.t0[0], cy = S.C[1] + D.t0[1], c = Math.cos(-D.rot0), s = Math.sin(-D.rot0);
+  const q = [c * (p[0] - cx) - s * (p[1] - cy), s * (p[0] - cx) + c * (p[1] - cy)];
+  if (!h) { S.t = [D.t0[0] + p[0] - D.start[0], D.t0[1] + p[1] - D.start[1]]; }
+  else if (h.kind === 'rot') {
+    let r = D.rot0 + Math.atan2(p[1] - cy, p[0] - cx) - D.a0; const sn = Math.round(r / (Math.PI / 4)) * Math.PI / 4; if (Math.abs(r - sn) < .05) r = sn; S.rot = r;
+  } else if (h.kind === 'corner') {
+    const dl = [D.sx0 * h.local[0], D.sy0 * h.local[1]], k = Math.max(.02, (q[0] * dl[0] + q[1] * dl[1]) / (dl[0] * dl[0] + dl[1] * dl[1] || 1));
+    S.sx = D.sx0 * k; S.sy = D.sy0 * k;
+  } else if (h.id === 'l' || h.id === 'r') { const k = q[0] / (D.sx0 * h.local[0] || 1); S.sx = D.sx0 * (Math.abs(k) < .02 ? .02 * Math.sign(k || 1) : k); }
+  else { const k = q[1] / (D.sy0 * h.local[1] || 1); S.sy = D.sy0 * (Math.abs(k) < .02 ? .02 * Math.sign(k || 1) : k); }
+  st.dirty = st.ovDirty = true;
+}
+function selUp(e) {
+  if (st.lasso && st.lasso.pid === e.pointerId) { finishLasso(); return; }
+  if (st.sel && st.sel.drag && st.sel.drag.pid === e.pointerId) { st.sel.drag = null; rerenderFloat(); }
+}
+function rerenderFloat() {
+  const S = st.sel; if (!S || !floatT) return; const M = selMatrix();
+  if (M.every((v, i) => Math.abs(v - S.renderM[i]) < 1e-9)) return;
+  clearTarget(floatT);
+  if (S.kind === 'image') drawImageTo(floatT, S.img, mulM(M, S.B)); else for (const s of transformedSel()) renderStrokeTo(floatT, s);
+  S.renderM = M; st.dirty = true;
+}
+// the image is edited in an unrotated, unscaled-sign frame B, so handles stay aligned with the picture
+function placedImage() { const S = st.sel, im = S.img, M = selMatrix(), [cx, cy] = xfP(M, S.C[0], S.C[1]); return { ...im, cx, cy, sx: S.sx * S.bs[0], sy: S.sy * S.bs[1], rot: S.rot }; }
+function startImageEdit(layerId) {
+  const l = st.doc.layers[layerIndex(layerId)]; if (!l || !l.image) return;
+  if (st.sel) commitSel();
+  setTool('select'); closePop();
+  const im = l.image, bx = Math.abs(im.sx), by = Math.abs(im.sy), w = im.w * bx, hh = im.h * by;
+  const box = [im.cx - w / 2, im.cy - hh / 2, im.cx + w / 2, im.cy + hh / 2];
+  const B = [bx, 0, 0, by, box[0], box[1]]; // image px -> unrotated box
+  st.sel = { kind: 'image', img: im, B, bs: [bx, by], before: snapshot(), copies: [], strokes: [], box, C: [im.cx, im.cy], t: [0, 0], sx: Math.sign(im.sx) || 1, sy: Math.sign(im.sy) || 1, rot: im.rot, layer: layerId, drag: null, renderM: [1, 0, 0, 1, 0, 0] };
+  if (!floatT) floatT = target(st.doc.w, st.doc.h, false);
+  st.sel.renderM = [NaN]; rerenderFloat(); rebuildLayer(layerId);
+  $('#xbar').classList.add('on'); $('#xDup').style.display = 'none'; st.dirty = st.ovDirty = true;
+}
+function finishLasso() {
+  const L = st.lasso; st.lasso = null; st.ovDirty = true;
+  if (!L || L.pts.length < 8) return;
+  const P = L.pts, n = P.length / 2;
+  const inside = (x, y) => { let c = false; for (let i = 0, j = n - 1; i < n; j = i++) { const xi = P[i * 2], yi = P[i * 2 + 1], xj = P[j * 2], yj = P[j * 2 + 1]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+  const id = st.active, pick = [], keep = [];
+  for (const s of st.doc.strokes) {
+    if (s.layer !== id) { keep.push(s); continue; }
+    const m = s.pts.length / 6, step = Math.max(1, Math.floor(m / 120)); let a = 0, b = 0;
+    for (let i = 0; i < m; i += step) { b++; if (inside(s.pts[i * 6], s.pts[i * 6 + 1])) a++; }
+    (a / b >= .5 ? pick : keep).push(s);
+  }
+  if (!pick.length) { toast('Nothing selected on this layer'); return; }
+  const before = snapshot();
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const s of pick) { const r = s.size / 2 + 2; for (let i = 0; i < s.pts.length; i += 6) { const x = s.pts[i], y = s.pts[i + 1]; if (x - r < x0) x0 = x - r; if (x + r > x1) x1 = x + r; if (y - r < y0) y0 = y - r; if (y + r > y1) y1 = y + r; } }
+  st.doc.strokes = keep; rebuildLayer(id);
+  if (!floatT) floatT = target(st.doc.w, st.doc.h, false);
+  clearTarget(floatT); for (const s of pick) renderStrokeTo(floatT, s);
+  st.sel = { renderM: [1, 0, 0, 1, 0, 0], strokes: pick, before, copies: [], box: [x0, y0, x1, y1], C: [(x0 + x1) / 2, (y0 + y1) / 2], t: [0, 0], sx: 1, sy: 1, rot: 0, layer: id, drag: null };
+  $('#xbar').classList.add('on'); st.dirty = st.ovDirty = true;
+}
+function transformedSel() {
+  const S = st.sel, M = selMatrix();
+  // line width is a physical pen width, so it stays the same however the selection is scaled
+  return S.strokes.map(s => ({ ...s, pts: xfPts(M, s.pts) }));
+}
+function endSel() { st.sel = null; freeTarget(floatT); floatT = null; $('#xbar').classList.remove('on'); $('#xDup').style.display = ''; st.dirty = st.ovDirty = true; }
+function commitSel() {
+  const S = st.sel; if (!S) return;
+  if (S.kind === 'image') { const l = st.doc.layers[layerIndex(S.layer)], before = S.before; if (l) l.image = placedImage(); endSel(); rebuildLayer(S.layer); commitSnap(before); return; }
+  const moved = S.t[0] || S.t[1] || S.sx !== 1 || S.sy !== 1 || S.rot;
+  const before = { ...S.before, strokes: [...S.before.strokes, ...S.copies] };
+  if (!moved) { st.doc.strokes = before.strokes; rebuildLayer(S.layer); endSel(); return; }
+  const out = transformedSel(), t = ensureLayerTex(S.layer);
+  for (const s of out) { st.doc.strokes.push(s); renderStrokeTo(t, s); }
+  if (S.layer !== st.active) recomposite();
+  endSel(); commitSnap(before);
+}
+function cancelSel() { const S = st.sel; if (!S) return; if (S.kind === 'image') { endSel(); rebuildLayer(S.layer); return; } st.doc.strokes = [...S.before.strokes, ...S.copies]; rebuildLayer(S.layer); endSel(); }
+function deleteSel() { const S = st.sel; if (!S) return; if (S.kind === 'image') { const l = st.doc.layers[layerIndex(S.layer)], before = S.before; if (l) l.image = null; endSel(); rebuildLayer(S.layer); commitSnap(before); return; } const before = { ...S.before, strokes: [...S.before.strokes, ...S.copies] }; endSel(); rebuildLayer(S.layer); commitSnap(before); }
+function duplicateSel() {
+  const S = st.sel; if (!S || S.kind === 'image') return;
+  const prev = { ...S.before, strokes: [...S.before.strokes, ...S.copies] };
+  const copies = transformedSel().map(s => ({ ...s, seed: (s.seed * 7 + 13) >>> 0 })), t = ensureLayerTex(S.layer);
+  for (const s of copies) { st.doc.strokes.push(s); renderStrokeTo(t, s); }
+  S.copies.push(...copies);
+  st.history.push({ t: 'snap', before: prev, after: { ...prev, strokes: [...S.before.strokes, ...S.copies] } }); st.redo.length = 0;
+  S.t = [S.t[0] + 6 * st.doc.paper.ppm, S.t[1] + 6 * st.doc.paper.ppm];
+  st.dirty = st.ovDirty = true; scheduleSave(); toast('Copy left in place, selection moved');
+}
+function flipSel(hz) { const S = st.sel; if (!S) return; if (hz) S.sx = -S.sx; else S.sy = -S.sy; rerenderFloat(); st.dirty = st.ovDirty = true; }
+
+/* ================================================================ input */
+function sampleOf(e, t0) {
+  const [x, y] = toDoc(e.clientX, e.clientY);
+  let p = e.pointerType === 'pen' ? e.pressure : 1;
+  if (e.pointerType === 'pen' && !(p > 0)) p = 0.0001;
+  let alt = e.altitudeAngle, az = e.azimuthAngle;
+  if (typeof alt !== 'number' || (e.pointerType !== 'pen' && !e.tiltX && !e.tiltY)) {
+    const tx = (e.tiltX || 0) * Math.PI / 180, ty = (e.tiltY || 0) * Math.PI / 180;
+    if (!tx && !ty) { alt = HALF_PI; az = 0; }
+    else { const X = Math.tan(tx), Y = Math.tan(ty); az = Math.atan2(Y, X); alt = Math.atan(1 / Math.hypot(X, Y)); }
+  }
+  if (e.pointerType !== 'pen') { alt = HALF_PI; az = 0; }
+  az = ((az - st.view.r) % TAU + TAU) % TAU; // azimuth in document space
+  return [x, y, clamp(p, 0, 1), alt, az, e.timeStamp - t0];
+}
+function beginStroke(e) {
+  const AL = activeLayer(); if (!AL.visible) { toast('This layer is hidden'); return false; }
+  const b = activeBrush(), P = {}; for (const k of STROKE_KEYS) P[k] = b.p[k];
+  const key = paramsKey(b.id, P), ppm = st.doc.paper.ppm, sizePx = b.p.size * ppm;
+  const part = M => { const seed = (Math.random() * 4294967296) >>> 0; return { M, seed, raw: [], builder: new StrokeBuilder(P, sizePx, seed, ppm) }; };
+  const parts = [part(null), ...symMatrices().map(part)];
+  st.cur = { pid: e.pointerId, inp: e.pointerType, k: key, P, brushId: b.id, size: sizePx, op: b.p.opacity, layer: AL.id,
+    color: st.color.slice(), erase: st.mode === 'erase', mul: st.blend === 'multiply' && st.mode !== 'erase', parts, raw: parts[0].raw, t0: e.timeStamp, wall: Date.now(), bb: null, res: brushTextures(b.id, P) };
+  clearTarget(strokeT);
+  addEvents(e); return true;
+}
+function addEvents(e) {
+  const cur = st.cur; if (!cur) return;
+  let list = e.getCoalescedEvents ? e.getCoalescedEvents() : null; if (!list || !list.length) list = [e];
+  cur.evN = (cur.evN || 0) + 1; cur.coN = (cur.coN || 0) + list.length;
+  for (const ev of list) {
+    const s = sampleOf(ev, cur.t0), r = cur.raw, n = r.length;
+    if (n && s[5] <= r[n - 1] && s[0] === r[n - 6] && s[1] === r[n - 5]) continue; // exact duplicate
+    for (const pt of cur.parts) {
+      let q = s; if (pt.M) { const [x, y] = xfP(pt.M, s[0], s[1]); q = [x, y, s[2], s[3], xfAz(pt.M, s[4]), s[5]]; }
+      pt.raw.push(...q); pt.builder.add(q[0], q[1], q[2], q[3], q[4], q[5]);
+    }
+  }
+  st.dirty = true;
+}
+let e0HasCo = typeof PointerEvent !== 'undefined' && 'getCoalescedEvents' in PointerEvent.prototype;
+function endStroke(cancel) {
+  const cur = st.cur; if (!cur) return; st.cur = null;
+  clearTarget(strokeT);
+  if (cancel || !cur.raw.length) { st.dirty = true; return; }
+  const t = ensureLayerTex(cur.layer), list = [];
+  for (const pt of cur.parts) {
+    const s = { k: cur.k, size: cur.size, op: cur.op, color: cur.color, erase: cur.erase, mul: cur.mul, seed: pt.seed, inp: cur.inp, wall: cur.wall, layer: cur.layer, pts: new Float32Array(pt.raw) };
+    renderStrokeTo(t, s); st.doc.strokes.push(s); list.push(s);
+  }
+  st.history.push({ t: 'add', list }); st.redo.length = 0;
+  // rate from the median gap between samples (pauses with the pen held still don't count)
+  const s0 = list[0], n = s0.pts.length / 6, gaps = [];
+  for (let i = 1; i < n; i++) { const d = s0.pts[i * 6 + 5] - s0.pts[i * 6 - 1]; if (d > 0) gaps.push(d); }
+  gaps.sort((a, b) => a - b); const med = gaps.length ? gaps[gaps.length >> 1] : 0;
+  st.lastStats = { n, hz: med ? Math.round(1000 / med) : 0, per: cur.evN ? (cur.coN / cur.evN).toFixed(1) : '1.0', api: !!(e0HasCo), inp: cur.inp };
+  if (!cur.erase) pushRecent(cur.color);
+  st.dirty = true; scheduleSave();
+}
+// one pointer at a time draws or selects, whatever kind of pointer it is
+let primaryId = null;
+function primaryDown(e) { primaryId = e.pointerId; if (st.tool === 'select') selDown(e); else if (!beginStroke(e)) primaryId = null; }
+function primaryMove(e) { if (st.tool === 'select') selMove(e); else if (st.cur && st.cur.pid === e.pointerId) addEvents(e); }
+function primaryUp(e, cancel) { if (st.tool === 'select') { if (cancel) { st.lasso = null; st.ovDirty = true; if (st.sel) st.sel.drag = null; } else selUp(e); } else if (st.cur && st.cur.pid === e.pointerId) endStroke(cancel); primaryId = null; }
+function primaryCancel() { if (st.cur) endStroke(true); if (st.lasso) { st.lasso = null; st.ovDirty = true; } if (st.sel) st.sel.drag = null; primaryId = null; }
+
+// --- touch gestures
+const touches = new Map(); let gest = null, holdT = null, fingerStroke = false;
+function gState() { const a = [...touches.values()]; const c = a.reduce((m, t) => [m[0] + t.x / a.length, m[1] + t.y / a.length], [0, 0]);
+  let d = 1, ang = 0; if (a.length >= 2) { d = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y) || 1; ang = Math.atan2(a[1].y - a[0].y, a[1].x - a[0].x); } return { c, d, ang, n: a.length }; }
+function touchDown(e) {
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  if (!gest) gest = { t0: performance.now(), maxN: 0, moved: false, prev: null, picking: false };
+  gest.maxN = Math.max(gest.maxN, touches.size);
+  if (touches.size === 1 && !st.penSeen && primaryId === null) { fingerStroke = true; primaryDown(e); if (primaryId !== null) return; fingerStroke = false; }
+  if (touches.size > 1 && fingerStroke) { primaryCancel(); fingerStroke = false; }
+  if (touches.size === 1 && st.penSeen && st.tool === 'draw') { clearTimeout(holdT); holdT = setTimeout(() => { if (gest && !gest.moved && touches.size === 1) { gest.picking = true; const t = [...touches.values()][0]; pickAt(t.x, t.y); } }, 380); }
+  if (touches.size > 1) clearTimeout(holdT);
+  gest.prev = gState();
+}
+function touchMove(e) {
+  const t = touches.get(e.pointerId); if (!t) return;
+  t.x = e.clientX; t.y = e.clientY;
+  if (fingerStroke && e.pointerId === primaryId) { primaryMove(e); return; }
+  if (Math.hypot(t.x - t.x0, t.y - t.y0) > 9) { gest.moved = true; if (!gest.picking) clearTimeout(holdT); }
+  if (gest.picking) { pickAt(t.x, t.y); return; }
+  if (!gest.moved) return;
+  const g = gState(), p = gest.prev; if (!p || p.n !== g.n) { gest.prev = g; return; }
+  const v = st.view, docPt = toDoc(p.c[0], p.c[1]);
+  if (g.n >= 2) { v.s = clamp(v.s * g.d / p.d, .05, 60); v.r += g.ang - p.ang; }
+  const sp = toScreen(docPt[0], docPt[1]); v.tx += g.c[0] - sp[0]; v.ty += g.c[1] - sp[1];
+  gest.prev = g; st.dirty = true; hideRing();
+}
+function touchUp(e) {
+  touches.delete(e.pointerId);
+  if (fingerStroke && e.pointerId === primaryId) { primaryUp(e, e.type === 'pointercancel'); fingerStroke = false; }
+  if (touches.size) { gest.prev = gState(); return; }
+  clearTimeout(holdT);
+  if (gest) {
+    const dt = performance.now() - gest.t0;
+    if (gest.picking) { $('#pick').style.display = 'none'; pushRecent(st.color); }
+    else if (!gest.moved && dt < 320 && gest.maxN >= 2) { gest.maxN === 2 ? undo() : redo(); }
+    else if (gest.moved) settleView();
+  }
+  gest = null;
+}
+function settleView() {
+  const v = st.view, fit = Math.min(innerWidth / st.doc.w, innerHeight / st.doc.h);
+  if (v.s < fit * 1.0) { fitView(); return; }
+  const q = Math.round(v.r / HALF_PI) * HALF_PI;
+  if (Math.abs(v.r - q) < .09) { const c = toDoc(innerWidth / 2, innerHeight / 2); v.r = q; const sp = toScreen(c[0], c[1]); v.tx += innerWidth / 2 - sp[0]; v.ty += innerHeight / 2 - sp[1]; }
+  st.dirty = true;
+}
+function pickAt(cx, cy) {
+  const [x, y] = toDoc(cx, cy); if (x < 0 || y < 0 || x >= st.doc.w || y >= st.doc.h) return;
+  let C = [0, 0, 0], A = 0; const px = new Uint8Array(4);
+  for (const l of st.doc.layers) { if (!l.visible) continue; gl.bindFramebuffer(gl.FRAMEBUFFER, ensureLayerTex(l.id).fbo); gl.readPixels(Math.floor(x), Math.floor(y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const a = px[3] / 255 * l.opacity; C = C.map((v, i) => px[i] / 255 * l.opacity + v * (1 - a)); A = a + A * (1 - a); }
+  const c = C.map((v, i) => v + st.paper[i] * (1 - A));
+  setColor(c);
+  const pk = $('#pick'); pk.style.display = 'block'; pk.style.left = cx + 'px'; pk.style.top = cy + 'px'; pk.style.background = cssColor(c);
+}
+const ring = $('#ring');
+function showRing(cx, cy) { if (st.tool !== 'draw') { hideRing(); return; } const d = activeBrush().p.size * st.doc.paper.ppm * st.view.s; if (d < 3) { hideRing(); return; } ring.style.display = 'block'; ring.style.width = ring.style.height = d + 'px'; ring.style.left = cx + 'px'; ring.style.top = cy + 'px'; }
+function hideRing() { ring.style.display = 'none'; }
+
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (popKind) { closePop(); return; } // a tap that dismisses a panel never paints
+  if (e.pointerType === 'touch') { touchDown(e); return; }
+  if (e.pointerType === 'pen') { st.penSeen = true; if (fingerStroke) { primaryCancel(); fingerStroke = false; } }
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (primaryId !== null) return;
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  hideRing(); primaryDown(e);
+}, { passive: false });
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch') { touchMove(e); return; }
+  if (e.pointerId === primaryId) { primaryMove(e); return; }
+  if (primaryId === null && e.buttons === 0) showRing(e.clientX, e.clientY);
+});
+const up = e => { if (e.pointerType === 'touch') { touchUp(e); return; } if (e.pointerId === primaryId) primaryUp(e, e.type === 'pointercancel'); };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch' && primaryId === null) hideRing(); });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault(); const v = st.view;
+  if (e.ctrlKey || e.metaKey) { const d = toDoc(e.clientX, e.clientY); v.s = clamp(v.s * Math.exp(-e.deltaY * .01), .05, 60); const sp = toScreen(d[0], d[1]); v.tx += e.clientX - sp[0]; v.ty += e.clientY - sp[1]; }
+  else { v.tx -= e.deltaX; v.ty -= e.deltaY; }
+  st.dirty = true;
+}, { passive: false });
+['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+['touchstart', 'touchmove'].forEach(ev => document.addEventListener(ev, e => { if (e.target === canvas || (e.target.closest && e.target.closest('.side'))) e.preventDefault(); }, { passive: false }));
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const m = e.metaKey || e.ctrlKey;
+  if (m && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (st.sel && e.key === 'Enter') commitSel();
+  else if (st.sel && e.key === 'Escape') cancelSel();
+  else if (st.sel && (e.key === 'Backspace' || e.key === 'Delete')) deleteSel();
+  else if (e.key === 'e') setMode(st.mode === 'erase' && st.tool === 'draw' ? 'paint' : 'erase');
+  else if (e.key === 'b') setMode('paint');
+  else if (e.key === 's') setTool('select');
+  else if (e.key === '[' || e.key === ']') { const b = activeBrush(); b.p.size = clamp(b.p.size * (e.key === ']' ? 1.15 : 1 / 1.15), SIZE_MIN, SIZE_MAX); syncSliders(); scheduleBrushSave(); }
+  else if (e.key === '0' && m) { e.preventDefault(); fitView(); }
+});
+
+/* =================================================================== UI */
+const cssColor = c => `rgb(${c.map(v => Math.round(clamp(v, 0, 1) * 255)).join(',')})`;
+const toHex = c => '#' + c.map(v => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('');
+const fromHex = h => { const m = h.replace('#', '').match(/^([0-9a-f]{6}|[0-9a-f]{3})$/i); if (!m) return null; let s = m[1]; if (s.length === 3) s = s.split('').map(x => x + x).join(''); return [0, 2, 4].map(i => parseInt(s.slice(i, i + 2), 16) / 255); };
+function syncBlend() { $('#colDot').classList.toggle('mul', st.blend === 'multiply'); }
+function setColor(c) { st.color = c; $('#colDot').style.background = cssColor(c); if (st.mode === 'erase') setMode('paint'); scheduleUISave(); }
+function pushRecent(c) { const h = toHex(c); st.recent = [h, ...st.recent.filter(x => x !== h)].slice(0, 14); scheduleUISave(); }
+function syncTools() { const d = st.tool === 'draw'; $('#brushBtn').classList.toggle('on', d && st.mode === 'paint'); $('#eraseBtn').classList.toggle('on', d && st.mode === 'erase'); $('#selBtn').classList.toggle('on', !d); st.ovDirty = true; }
+function setMode(m) { if (st.sel) commitSel(); st.mode = m; st.tool = 'draw'; syncTools(); }
+function setTool(t) { if (t !== 'select' && st.sel) commitSel(); st.tool = t; hideRing(); syncTools(); }
+
+// vertical sliders
+const SIZE_MIN = .05, SIZE_MAX = 60; // mm
+const sizeToU = s => Math.log(s / SIZE_MIN) / Math.log(SIZE_MAX / SIZE_MIN), uToSize = u => SIZE_MIN * Math.pow(SIZE_MAX / SIZE_MIN, u);
+function syncSliders() {
+  const b = activeBrush();
+  const set = (el, u) => { el.querySelector('.f').style.height = (u * 100) + '%'; el.querySelector('.k').style.bottom = `calc(${u * 100}% )`; };
+  set($('#sizeS'), sizeToU(b.p.size)); set($('#opS'), b.p.opacity);
+}
+function bubble(el, text) { const r = el.getBoundingClientRect(), bb = $('#bub'); bb.textContent = text; bb.style.left = (r.right + 10) + 'px'; bb.style.top = (r.top + r.height / 2 - 13) + 'px'; bb.classList.add('on'); }
+function vslider(el, get, set, fmt) {
+  let id = null, sy = 0, su = 0;
+  el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); closePop(); id = e.pointerId; el.setPointerCapture(id); sy = e.clientY; su = get(); bubble(el, fmt()); });
+  el.addEventListener('pointermove', e => { if (e.pointerId !== id) return; const h = el.clientHeight; set(clamp(su - (e.clientY - sy) / h, 0, 1)); syncSliders(); bubble(el, fmt()); if (el.id === 'sizeS') showRing(innerWidth / 2, innerHeight / 2); });
+  const end = e => { if (e.pointerId !== id) return; id = null; $('#bub').classList.remove('on'); hideRing(); scheduleBrushSave(); };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+vslider($('#sizeS'), () => sizeToU(activeBrush().p.size), u => { activeBrush().p.size = Math.round(uToSize(u) * 100) / 100; }, () => fmtMm(activeBrush().p.size));
+vslider($('#opS'), () => activeBrush().p.opacity, u => { activeBrush().p.opacity = Math.max(.01, u); }, () => Math.round(activeBrush().p.opacity * 100) + '%');
+$('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo;
+
+// popover
+const pop = $('#pop'); let popKind = null;
+function closePop() { if (!popKind) return; pop.classList.remove('on'); pop.innerHTML = ''; popKind = null; }
+function openPop(kind, build) { if (popKind === kind) { closePop(); return; } pop.innerHTML = ''; popKind = kind; build(pop); pop.classList.add('on'); }
+$('#brushBtn').onclick = () => { if (st.mode !== 'paint' || st.tool !== 'draw') { setMode('paint'); closePop(); return; } openPop('lib', buildLibrary); };
+$('#eraseBtn').onclick = () => { if (st.mode !== 'erase' || st.tool !== 'draw') { setMode('erase'); closePop(); return; } openPop('lib', buildLibrary); };
+$('#selBtn').onclick = () => { closePop(); if (st.tool === 'select') { if (st.sel) commitSel(); else setMode(st.mode); } else setTool('select'); };
+$('#layBtn').onclick = () => { if (st.sel) commitSel(); openPop('layers', buildLayers); };
+$('#xFlipH').onclick = () => flipSel(true); $('#xFlipV').onclick = () => flipSel(false);
+$('#xDup').onclick = duplicateSel; $('#xDel').onclick = deleteSel; $('#xCancel').onclick = cancelSel; $('#xDone').onclick = commitSel;
+$('#colBtn').onclick = () => openPop('col', buildColor);
+$('#menuBtn').onclick = () => { if (st.sel) commitSel(); openPop('menu', buildMenu); };
+const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+
+// --- previews (rendered by the real engine)
+const prevTargets = new Map();
+function prevTarget(w, h, kind) { const k = kind + w + 'x' + h; if (!prevTargets.has(k)) prevTargets.set(k, target(w, h, kind === 's')); return prevTargets.get(k); }
+function previewPts(w, h, size) {
+  const pts = [], n = 160, m = Math.min(size * .6, h * .3) + 10;
+  for (let i = 0; i <= n; i++) { const t = i / n, x = m + t * (w - 2 * m), y = h / 2 + Math.sin(t * TAU) * (h / 2 - m) * .55;
+    const p = Math.pow(Math.sin(Math.PI * t), .7) * .95 + .05; pts.push(x, y, p, 1.05, .9, i * 6); }
+  return new Float32Array(pts);
+}
+function renderPreview(cv, b, P, fixedSize) {
+  const w = Math.round(cv.clientWidth * dpr) || 600, hh = Math.round(cv.clientHeight * dpr) || 90;
+  if (cv.width !== w || cv.height !== hh) { cv.width = w; cv.height = hh; }
+  const size = fixedSize || clamp(P.size * 10 * dpr * .5, 5, hh * .42);
+  const sT = prevTarget(w, hh, 's'), oT = prevTarget(w, hh, 'o');
+  clearTarget(sT); clearTarget(oT);
+  const inst = StrokeBuilder.build(P, size, 12345, previewPts(w, hh, size));
+  drawStamps(sT, inst, brushTextures(b.id, P), P, size);
+  composeInto(oT, sT, [1, 1, 1], P.opacity, false, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, oT.fbo);
+  const px = new Uint8Array(w * hh * 4); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  const x = cv.getContext('2d'), im = x.createImageData(w, hh);
+  for (let i = 0; i < px.length; i += 4) { const a = px[i + 3]; im.data[i] = im.data[i + 1] = im.data[i + 2] = 255; im.data[i + 3] = a; }
+  x.putImageData(im, 0, 0); st.dirty = true;
+}
+function buildLibrary(el) {
+  const head = h('div', 'ph', '<span>Brushes</span>'); const imp = h('button', 'link', 'Import'); imp.onclick = () => $('#file').click(); head.appendChild(imp); el.appendChild(head);
+  const groups = ['Core', 'Library', 'Imported'];
+  const queue = [];
+  for (const g of groups) {
+    const items = Brushes.list.filter(b => b.group === g); if (!items.length) continue;
+    el.appendChild(h('div', 'grp', g));
+    for (const b of items) {
+      const it = h('div', 'bi' + (b.id === st.brushId ? ' sel' : ''));
+      it.innerHTML = `<div class="bn"><span>${b.name.replace(/</g, '&lt;')}</span><span class="tn">Tune ›</span></div><canvas></canvas>`;
+      it.onclick = () => { if (st.brushId === b.id) { openTune(b); return; } st.brushId = b.id; el.querySelectorAll('.bi').forEach(x => x.classList.remove('sel')); it.classList.add('sel'); syncSliders(); scheduleUISave(); };
+      el.appendChild(it); queue.push([it.querySelector('canvas'), b]);
+    }
+  }
+  el.appendChild(h('div', 'hint', 'Tap the selected brush to tune it. Import accepts Procreate .brush and .brushset files.'));
+  let i = 0; const step = () => { if (popKind !== 'lib' || i >= queue.length) return; const [cv, b] = queue[i++]; renderPreview(cv, b, b.p); requestAnimationFrame(step); }; requestAnimationFrame(step);
+}
+
+// --- brush tuning
+const SPEC = {
+  Stroke: [['spacing', 'Spacing'], ['streamline', 'StreamLine'], ['stabilize', 'Stabilisation'], ['motionFilter', 'Motion filtering'], ['jitter', 'Jitter'], ['flow', 'Flow'], ['buildup', 'Max blending', 't']],
+  Shape: [['@tip'], ['@tipview'], ['angle', 'Angle', -180, 180, 'deg'], ['rotation', 'Follow stroke', -1, 1], ['azimuth', 'Follow pencil angle', 't'], ['scatter', 'Scatter'], ['randomize', 'Random start angle', 't'], ['roundness', 'Roundness', .05, 1], ['tiltRound', 'Flatten with tilt'], ['tipInvert', 'Invert shape', 't']],
+  Grain: [['@grain'], ['grainDepth', 'Depth'], ['grainScale', 'Scale'], ['grainMove', 'Movement'], ['grainInvert', 'Invert grain', 't']],
+  Taper: [['taperStart', 'Start length'], ['taperEnd', 'End length'], ['taperSize', 'Size'], ['taperOpacity', 'Opacity']],
+  Pressure: [['@curve'], ['pSize', 'Size'], ['pOpacity', 'Opacity'], ['minSize', 'Minimum size']],
+  Motion: [['tSize', 'Tilt → size'], ['tOpacity', 'Tilt → opacity'], ['sSize', 'Speed → size', -1, 1], ['sOpacity', 'Speed → opacity', -1, 1], ['jSize', 'Size jitter'], ['jOpacity', 'Opacity jitter']]
+};
+let tuneTab = 'Stroke', tipViews = [];
+function tipView(b) {
+  const box = h('div'), cv = h('canvas'); cv.style.cssText = 'display:block;width:84px;height:84px;margin:2px auto 4px;border-radius:10px;background:#141415';
+  box.appendChild(cv);
+  const draw = () => {
+    const n = cv.width = cv.height = Math.round(84 * dpr), x = cv.getContext('2d'), P = b.p;
+    const src = P.tip && P.tip !== 'orig' ? procTip(P.tip) : b.origTip && b.origTip.canvas ? b.origTip.canvas : procTip(b.origTip && b.origTip.proc || 'hard');
+    x.fillStyle = '#141415'; x.fillRect(0, 0, n, n); x.save(); x.translate(n / 2, n / 2); x.rotate((P.angle || 0) * Math.PI / 180); x.scale(1, Math.max(.05, P.roundness));
+    x.globalCompositeOperation = 'lighter'; const d = n * .82; x.drawImage(src, -d / 2, -d / 2, d, d); x.restore();
+    // arrow = stroke direction (left to right)
+    x.strokeStyle = 'rgba(255,255,255,.25)'; x.lineWidth = dpr; x.beginPath(); x.moveTo(6 * dpr, n - 7 * dpr); x.lineTo(n - 6 * dpr, n - 7 * dpr); x.lineTo(n - 10 * dpr, n - 10 * dpr); x.stroke();
+  };
+  tipViews.push(draw); requestAnimationFrame(draw); return box;
+}
+function openTune(b) {
+  pop.innerHTML = ''; popKind = 'tune';
+  const head = h('div', 'ph'); const back = h('button', 'link', '‹ Brushes'); back.onclick = () => { popKind = null; openPop('lib', buildLibrary); };
+  const rst = h('button', 'link', 'Reset'); rst.onclick = () => { const sz = b.p.size, op = b.p.opacity; b.p = JSON.parse(JSON.stringify(b.base)); b.p.size = sz; b.p.opacity = op; draw(); scheduleBrushSave(); };
+  head.append(back, h('span', 't', b.name.replace(/</g, '&lt;')), rst); pop.appendChild(head);
+  const pv = h('canvas', 'pv'); pop.appendChild(pv);
+  const tabs = h('div', 'tabs'); const body = h('div');
+  for (const t of Object.keys(SPEC)) { const bt = h('button', t === tuneTab ? 'on' : '', t); bt.onclick = () => { tuneTab = t; tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === bt)); draw(); }; tabs.appendChild(bt); }
+  pop.append(tabs, body);
+  let pvQ = false; const refresh = () => { tipViews.forEach(f => f()); if (pvQ) return; pvQ = true; requestAnimationFrame(() => { pvQ = false; if (popKind === 'tune') renderPreview(pv, b, b.p); }); };
+  function draw() {
+    body.innerHTML = ''; tipViews = [];
+    for (const sp of SPEC[tuneTab]) {
+      const [k, label, lo = 0, hi = 1, unit] = sp;
+      if (k === '@tip' || k === '@grain') { body.appendChild(sourceChips(b, k === '@tip' ? 'tip' : 'grain', () => { refresh(); draw(); })); continue; }
+      if (k === '@curve') { body.appendChild(curveEditor(b, refresh)); continue; }
+      if (k === '@tipview') { body.appendChild(tipView(b)); continue; }
+      if (sp[2] === 't') { const r = h('div', 'tg', `<span>${label}</span>`), sw = h('div', 'sw' + (b.p[k] ? ' on' : '')); sw.onclick = () => { b.p[k] = b.p[k] ? 0 : 1; sw.classList.toggle('on', !!b.p[k]); refresh(); scheduleBrushSave(); }; r.appendChild(sw); body.appendChild(r); continue; }
+      body.appendChild(rowSlider(b, k, label, lo, hi, refresh, unit));
+    }
+    refresh();
+  }
+  draw(); pop.classList.add('on');
+}
+function rowSlider(b, k, label, lo, hi, refresh, unit, onEnd) {
+  const r = h('div', 'row'); r.innerHTML = `<div class="l"><span>${label}</span><span class="v"></span></div><div class="tr"><div class="tf"></div>${lo < 0 ? '<div class="tz"></div>' : ''}</div>`;
+  const tf = r.querySelector('.tf'), v = r.querySelector('.v'), tr = r.querySelector('.tr');
+  const upd = () => { if (typeof b.p[k] !== 'number') b.p[k] = DEF[k] || 0; const x = b.p[k], u = (x - lo) / (hi - lo);
+    if (lo < 0) { const z = -lo / (hi - lo); tf.style.left = Math.min(u, z) * 100 + '%'; tf.style.width = Math.abs(u - z) * 100 + '%'; } else { tf.style.left = 0; tf.style.width = u * 100 + '%'; }
+    v.textContent = unit === 'deg' ? Math.round(x) + '°' : unit === 'mm' ? fmtMm(x) : unit === 'int' ? String(Math.round(x)) : (lo < 0 && x > 0 ? '+' : '') + Math.round(x * 100) + '%'; };
+  upd();
+  let id = null, sx = 0, sv = 0, lastTap = 0, moved = false;
+  r.addEventListener('pointerdown', e => { id = e.pointerId; sx = e.clientX; sv = b.p[k]; moved = false; });
+  r.addEventListener('pointermove', e => { if (e.pointerId !== id) return; const dx = e.clientX - sx; if (!moved && Math.abs(dx) < 4) return; if (!moved) { moved = true; try { r.setPointerCapture(id); } catch (_) {} }
+    b.p[k] = clamp(sv + dx / tr.clientWidth * (hi - lo), lo, hi); if (unit === 'int') b.p[k] = Math.round(b.p[k]); else if (unit === 'mm') b.p[k] = Math.round(b.p[k] * 2) / 2; upd(); refresh(); });
+  r.addEventListener('pointerup', e => { if (e.pointerId !== id) return; id = null;
+    if (!moved) { const now = performance.now(); if (now - lastTap < 320) { b.p[k] = b.base[k] !== undefined ? b.base[k] : DEF[k]; upd(); refresh(); } else { const tb = tr.getBoundingClientRect(); if (e.clientY > tb.top - 14) { b.p[k] = clamp(lo + (e.clientX - tb.left) / tb.width * (hi - lo), lo, hi); if (unit === 'int') b.p[k] = Math.round(b.p[k]); upd(); refresh(); } } lastTap = now; }
+    if (onEnd) onEnd(); else scheduleBrushSave(); });
+  r.addEventListener('pointercancel', () => { id = null; });
+  return r;
+}
+function sourceChips(b, kind, after) {
+  const box = h('div'); const opts = kind === 'tip' ? ['orig', 'hard', 'medium', 'soft', 'oval', 'slim', 'pencil', 'bristle', 'square'] : ['orig', 'none', 'paper', 'canvas', 'charcoal', 'wood', 'noise'];
+  const names = { orig: 'Original', none: 'None' };
+  const ch = h('div', 'chips');
+  for (const o of opts) { const c = h('button', 'chip' + ((b.p[kind] || 'orig') === o ? ' on' : ''), names[o] || o[0].toUpperCase() + o.slice(1)); c.onclick = () => { b.p[kind] = o; if (kind === 'grain' && o !== 'none' && o !== 'orig' && !b.p.grainDepth) b.p.grainDepth = .8; after(); scheduleBrushSave(); }; ch.appendChild(c); }
+  box.appendChild(ch); return box;
+}
+function curveEditor(b, refresh) {
+  const box = h('div'); const cv = h('canvas', 'cv'); box.appendChild(cv);
+  box.appendChild(h('div', 'hint', 'Drag points to shape the pressure response. Tap to add a point, double-tap one to remove it.'));
+  const draw = () => {
+    const w = cv.width = Math.round(cv.clientWidth * dpr) || 600, hh = cv.height = Math.round(cv.clientHeight * dpr) || 300, x = cv.getContext('2d'), P = b.p.pCurve, m = 14 * dpr;
+    x.clearRect(0, 0, w, hh); x.strokeStyle = 'rgba(255,255,255,.08)'; x.lineWidth = 1;
+    for (let i = 1; i < 4; i++) { x.beginPath(); x.moveTo(m + (w - 2 * m) * i / 4, m); x.lineTo(m + (w - 2 * m) * i / 4, hh - m); x.moveTo(m, m + (hh - 2 * m) * i / 4); x.lineTo(w - m, m + (hh - 2 * m) * i / 4); x.stroke(); }
+    x.strokeStyle = '#fff'; x.lineWidth = 2 * dpr; x.beginPath();
+    for (let i = 0; i <= 100; i++) { const t = i / 100, y = curveEval(P, t); const X = m + t * (w - 2 * m), Y = hh - m - y * (hh - 2 * m); i ? x.lineTo(X, Y) : x.moveTo(X, Y); } x.stroke();
+    x.fillStyle = '#fff'; for (const p of P) { x.beginPath(); x.arc(m + p[0] * (w - 2 * m), hh - m - p[1] * (hh - 2 * m), 5 * dpr, 0, TAU); x.fill(); }
+  };
+  requestAnimationFrame(draw);
+  let drag = -1, lastTap = 0;
+  const pos = e => { const r = cv.getBoundingClientRect(), m = 14; return [clamp((e.clientX - r.left - m) / (r.width - 2 * m), 0, 1), clamp(1 - (e.clientY - r.top - m) / (r.height - 2 * m), 0, 1)]; };
+  cv.addEventListener('pointerdown', e => { e.stopPropagation(); cv.setPointerCapture(e.pointerId); const [x, y] = pos(e), P = b.p.pCurve; const r = cv.getBoundingClientRect();
+    let best = -1, bd = 1e9; P.forEach((p, i) => { const d = Math.hypot((p[0] - x) * r.width, (p[1] - y) * r.height); if (d < bd) { bd = d; best = i; } });
+    const now = performance.now();
+    if (bd < 22) { if (now - lastTap < 320 && best > 0 && best < P.length - 1) { P.splice(best, 1); drag = -1; } else drag = best; }
+    else { P.push([x, y]); P.sort((a, c) => a[0] - c[0]); drag = P.findIndex(p => p[0] === x && p[1] === y); }
+    lastTap = now; draw(); refresh(); });
+  cv.addEventListener('pointermove', e => { if (drag < 0) return; const [x, y] = pos(e), P = b.p.pCurve; const lo = drag === 0 ? 0 : P[drag - 1][0] + .01, hi = drag === P.length - 1 ? 1 : P[drag + 1][0] - .01;
+    P[drag] = [drag === 0 ? 0 : drag === P.length - 1 ? 1 : clamp(x, lo, hi), y]; draw(); refresh(); });
+  const end = () => { if (drag >= 0) scheduleBrushSave(); drag = -1; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  return box;
+}
+
+// --- colour
+function rgb2hsv([r, g, b]) { const M = Math.max(r, g, b), m = Math.min(r, g, b), d = M - m; let hh = 0; if (d) { hh = M === r ? ((g - b) / d) % 6 : M === g ? (b - r) / d + 2 : (r - g) / d + 4; hh /= 6; if (hh < 0) hh += 1; } return [hh, M ? d / M : 0, M]; }
+function hsv2rgb(hh, s, v) { const f = n => { const k = (n + hh * 6) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)]; }
+function buildColor(el) {
+  let [H, S, V] = rgb2hsv(st.color);
+  const sv = h('canvas'); sv.id = 'sv'; const hue = h('canvas'); hue.id = 'hue'; const sws = h('div', 'sws'); const hx = h('div', 'hexr', '<input id="hex" spellcheck="false" autocomplete="off">');
+  const bl = h('div', 'tabs'); bl.style.margin = '10px 14px 2px';
+  for (const [v, t] of [['normal', 'Opaque'], ['multiply', 'Multiply (mixes like ink)']]) { const b = h('button', st.blend === v ? 'on' : '', t); b.onclick = () => { st.blend = v; bl.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); syncBlend(); scheduleUISave(); }; bl.appendChild(b); }
+  el.append(bl, sv, hue, sws, hx);
+  const inp = hx.querySelector('input');
+  const paint = () => {
+    const w = sv.width = Math.round(sv.clientWidth * dpr), hh = sv.height = Math.round(sv.clientHeight * dpr), x = sv.getContext('2d');
+    x.fillStyle = cssColor(hsv2rgb(H, 1, 1)); x.fillRect(0, 0, w, hh);
+    let g = x.createLinearGradient(0, 0, w, 0); g.addColorStop(0, '#fff'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, w, hh);
+    g = x.createLinearGradient(0, 0, 0, hh); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, '#000'); x.fillStyle = g; x.fillRect(0, 0, w, hh);
+    x.strokeStyle = V > .5 && S < .5 ? '#000' : '#fff'; x.lineWidth = 2 * dpr; x.beginPath(); x.arc(S * w, (1 - V) * hh, 8 * dpr, 0, TAU); x.stroke();
+    const W = hue.width = Math.round(hue.clientWidth * dpr), HH = hue.height = Math.round(hue.clientHeight * dpr), y = hue.getContext('2d');
+    const gg = y.createLinearGradient(0, 0, W, 0); for (let i = 0; i <= 6; i++) gg.addColorStop(i / 6, cssColor(hsv2rgb(i / 6, 1, 1))); y.fillStyle = gg; y.fillRect(0, 0, W, HH);
+    y.strokeStyle = '#fff'; y.lineWidth = 3 * dpr; y.strokeRect(H * W - 3 * dpr, 1.5 * dpr, 6 * dpr, HH - 3 * dpr);
+    inp.value = toHex(st.color);
+  };
+  const apply = () => { setColor(hsv2rgb(H, S, V)); paint(); };
+  const drag = (cvs, fn) => { let on = false; cvs.addEventListener('pointerdown', e => { on = true; cvs.setPointerCapture(e.pointerId); fn(e); }); cvs.addEventListener('pointermove', e => on && fn(e)); const off = () => { if (on) pushRecent(st.color); on = false; renderSw(); }; cvs.addEventListener('pointerup', off); cvs.addEventListener('pointercancel', off); };
+  drag(sv, e => { const r = sv.getBoundingClientRect(); S = clamp((e.clientX - r.left) / r.width, 0, 1); V = clamp(1 - (e.clientY - r.top) / r.height, 0, 1); apply(); });
+  drag(hue, e => { const r = hue.getBoundingClientRect(); H = clamp((e.clientX - r.left) / r.width, 0, .9999); apply(); });
+  inp.addEventListener('change', () => { const c = fromHex(inp.value.trim()); if (c) { setColor(c); [H, S, V] = rgb2hsv(c); pushRecent(c); paint(); renderSw(); } });
+  const renderSw = () => { sws.innerHTML = ''; for (const hx of st.recent) { const i = h('i'); i.style.background = hx; i.onclick = () => { const c = fromHex(hx); setColor(c); [H, S, V] = rgb2hsv(c); paint(); }; sws.appendChild(i); } };
+  renderSw(); requestAnimationFrame(paint);
+}
+
+// --- paper
+function buildPaper(el) {
+  const cur = st.doc.paper; let name = cur.name, land = cur.wmm > cur.hmm, armed = false; const cw = r2(cur.wmm), ch = r2(cur.hmm);
+  const head = h('div', 'ph'); const back = h('button', 'link', '‹ Menu'); back.onclick = () => { pop.innerHTML = ''; buildMenu(pop); };
+  head.append(back, h('span', 't', 'Paper'), h('span', 'link', '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;')); el.appendChild(head);
+  const sizes = h('div', 'chips'), ori = h('div', 'chips'), custom = h('div', 'hexr'), info = h('div', 'hint'), go = h('button', 'mi');
+  el.append(sizes, ori, custom, info, go);
+  custom.innerHTML = '<input id="pw" inputmode="decimal"><span style="color:var(--mut)">×</span><input id="ph" inputmode="decimal"><span style="color:var(--mut)">mm</span>';
+  const pw = custom.querySelector('#pw'), ph = custom.querySelector('#ph');
+  const dims = () => { if (name === 'Custom') return [clamp(+pw.value || 0, 20, 1000), clamp(+ph.value || 0, 20, 1000)]; const p = PAPERS.find(q => q[0] === name); const a = Math.min(p[1], p[2]), b = Math.max(p[1], p[2]); return land ? [b, a] : [a, b]; };
+  const render = () => {
+    sizes.innerHTML = ''; for (const [n] of PAPERS) { const c = h('button', 'chip' + (n === name ? ' on' : ''), n); c.onclick = () => { name = n; render(); }; sizes.appendChild(c); }
+    ori.innerHTML = ''; if (name !== 'Custom') for (const [lbl, v] of [['Portrait', false], ['Landscape', true]]) { const c = h('button', 'chip' + (land === v ? ' on' : ''), lbl); c.onclick = () => { land = v; render(); }; ori.appendChild(c); }
+    custom.style.display = name === 'Custom' ? 'flex' : 'none'; if (name === 'Custom' && !pw.value) { pw.value = cw; ph.value = ch; }
+    const [w, hh] = dims(), ppm = makePaper(name, w, hh).ppm;
+    info.innerHTML = `${r2(w)} × ${r2(hh)} mm · ${r2(ppm)} px/mm (${Math.round(ppm * 25.4)} dpi)` + (st.doc.strokes.length ? '<br>A new canvas clears the current drawing. Export it first if you need it.' : '');
+    go.innerHTML = `<span>New canvas</span><span class="s">${armed ? 'Tap again to clear drawing' : ''}</span>`;
+  };
+  pw.oninput = ph.oninput = render;
+  go.onclick = () => { if (st.doc.strokes.length && !armed) { armed = true; render(); return; }
+    const [w, hh] = dims(); closePop(); setupDoc(makePaper(name, w, hh)); st.doc.strokes = []; st.doc.params = {}; st.history = []; st.redo = []; recomposite(); fitView(); scheduleSave(); toast(`${name} · ${r2(w)} × ${r2(hh)} mm`); };
+  render();
+}
+// --- layers
+const EYE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>';
+function refreshLayers() { if (popKind === 'layers') { const sc = pop.scrollTop; pop.innerHTML = ''; buildLayers(pop); pop.scrollTop = sc; } }
+function buildLayers(el) {
+  const L = st.doc.layers, head = h('div', 'ph', '<span>Layers</span>'), add = h('button', 'link', '+ New');
+  add.disabled = L.length >= MAX_LAYERS; if (add.disabled) add.style.opacity = .3;
+  add.onclick = () => { if (L.length >= MAX_LAYERS) return; const before = snapshot(); const id = newLayerId(), ai = layerIndex(st.active);
+    const n = Math.max(0, ...L.map(l => +((l.name.match(/^Layer (\d+)$/) || [])[1] || 0))) + 1;
+    L.splice(ai + 1, 0, { id, name: 'Layer ' + n, visible: true, opacity: 1 }); st.active = id; ensureLayerTex(id); recomposite(); commitSnap(before); };
+  const addImg = h('button', 'link', '+ Image'); addImg.style.marginLeft = 'auto'; addImg.style.marginRight = '14px'; addImg.onclick = () => $('#imgFile').click();
+  if (L.length >= MAX_LAYERS) addImg.style.opacity = .3;
+  head.append(addImg, add); el.appendChild(head);
+  const counts = {}; for (const s of st.doc.strokes) counts[s.layer] = (counts[s.layer] || 0) + 1;
+  for (let i = L.length - 1; i >= 0; i--) {
+    const l = L[i], on = l.id === st.active, row = h('div', 'ly' + (on ? ' on' : ''));
+    const eye = h('button', 'eye' + (l.visible ? '' : ' off'), EYE);
+    eye.onclick = ev => { ev.stopPropagation(); const before = snapshot(); l.visible = !l.visible; recomposite(); commitSnap(before); };
+    const nm = on ? h('input', 'nm') : h('span', 'nm', l.name.replace(/</g, '&lt;')); if (on) { nm.value = l.name; nm.onchange = () => { const v = nm.value.trim(); if (!v || v === l.name) return; const before = snapshot(); l.name = v.slice(0, 40); commitSnap(before); }; }
+    row.append(eye, nm, h('span', 'ct', (l.image ? 'image' + (counts[l.id] ? ' + ' : '') : '') + (counts[l.id] ? String(counts[l.id]) : l.image ? '' : '0')));
+    row.onclick = ev => { if (ev.target === nm && on) return; if (!on) { st.active = l.id; recomposite(); refreshLayers(); } };
+    el.appendChild(row);
+    if (on) {
+      const x = h('div', 'lyx'); let before = snapshot();
+      x.appendChild(rowSlider({ p: l, base: { opacity: 1 } }, 'opacity', 'Opacity', 0, 1, () => { st.dirty = true; }, null, () => { commitSnap(before); before = snapshot(); }));
+      const acts = h('div', 'acts'); const btn = (t, fn, dis, cls) => { const b = h('button', cls || '', t); b.disabled = !!dis; b.onclick = fn; acts.appendChild(b); };
+      const move = d => { const before = snapshot(), j = i + d; [L[i], L[j]] = [L[j], L[i]]; recomposite(); commitSnap(before); };
+      btn('Move up', () => move(1), i === L.length - 1);
+      btn('Move down', () => move(-1), i === 0);
+      btn('Duplicate', () => { const before = snapshot(), id = newLayerId(); L.splice(i + 1, 0, { ...l, id, name: (l.name + ' copy').slice(0, 40) });
+        for (const s of st.doc.strokes.filter(s => s.layer === l.id)) st.doc.strokes.push({ ...s, layer: id });
+        st.active = id; rebuildLayer(id); recomposite(); commitSnap(before); }, L.length >= MAX_LAYERS);
+      btn('Merge down', () => { const before = snapshot(), below = L[i - 1];
+        const mine = st.doc.strokes.filter(s => s.layer === l.id).map(s => ({ ...s, layer: below.id, op: s.op * l.opacity }));
+        st.doc.strokes = [...st.doc.strokes.filter(s => s.layer !== l.id), ...mine]; L.splice(i, 1); st.active = below.id;
+        const t = layerTex.get(l.id); if (t) { freeTarget(t); layerTex.delete(l.id); } rebuildLayer(below.id); recomposite(); commitSnap(before); }, i === 0);
+      if (l.image) btn('Move / resize image', () => startImageEdit(l.id));
+      btn('Clear', () => { const before = snapshot(); st.doc.strokes = st.doc.strokes.filter(s => s.layer !== l.id); l.image = null; rebuildLayer(l.id); commitSnap(before); }, !counts[l.id] && !l.image);
+      btn('Delete', () => { const before = snapshot(); st.doc.strokes = st.doc.strokes.filter(s => s.layer !== l.id); L.splice(i, 1);
+        st.active = (L[i - 1] || L[i] || L[0]).id; const t = layerTex.get(l.id); if (t) { freeTarget(t); layerTex.delete(l.id); } recomposite(); commitSnap(before); }, L.length < 2, 'dz');
+      x.appendChild(acts); el.appendChild(x);
+    }
+  }
+  el.appendChild(h('div', 'hint', 'Tap a layer to draw on it. The lasso and eraser work on the selected layer only. Images show in the PNG export but not in the stroke data or SVG; hide a reference layer to leave it out of the PNG.'));
+}
+// --- guides
+function buildGuides(el) {
+  const g = st.guides, head = h('div', 'ph'), back = h('button', 'link', '‹ Menu'); back.onclick = () => { pop.innerHTML = ''; buildMenu(pop); };
+  head.append(back, h('span', 't', 'Guides'), h('span', 'link', '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;')); el.appendChild(head);
+  const body = h('div'); el.appendChild(body);
+  const save = () => { st.ovDirty = true; scheduleUISave(); };
+  const chips = (opts, key, after) => { const c = h('div', 'chips'); for (const [v, lbl] of opts) { const b = h('button', 'chip' + (g[key] === v ? ' on' : ''), lbl); b.onclick = () => { g[key] = v; if (after) after(v); save(); draw(); }; c.appendChild(b); } return c; };
+  function draw() {
+    body.innerHTML = '';
+    body.appendChild(h('div', 'sect', 'Guide'));
+    body.appendChild(chips([['none', 'None'], ['grid', 'Grid'], ['dots', 'Dots'], ['ruled', 'Ruled'], ['writing', 'Writing'], ['thirds', 'Thirds']], 'kind', v => { if (v === 'writing' && g.spacing < 6) g.spacing = 8; }));
+    if (['grid', 'dots', 'ruled', 'writing'].includes(g.kind)) body.appendChild(rowSlider({ p: g, base: GUIDE_DEF }, 'spacing', g.kind === 'writing' ? 'Letter height' : 'Spacing', 2, 40, save, 'mm', save));
+    body.appendChild(h('div', 'sect', 'Symmetry'));
+    body.appendChild(chips([['off', 'Off'], ['vertical', 'Vertical'], ['horizontal', 'Horizontal'], ['quadrant', 'Quadrant'], ['radial', 'Radial']], 'sym'));
+    if (g.sym === 'radial') body.appendChild(rowSlider({ p: g, base: GUIDE_DEF }, 'segments', 'Segments', 2, 24, save, 'int', save));
+    body.appendChild(h('div', 'hint', g.sym !== 'off' ? 'Mirrored strokes are real strokes: they are saved, undone together, and exported like any other stroke. The axis sits at the centre of the paper.' : 'Guides are visual only and are never exported.'));
+  }
+  draw();
+}
+// --- menu
+function buildMenu(el) {
+  const item = (label, sub, fn, cls) => { const b = h('button', 'mi' + (cls ? ' ' + cls : ''), `<span>${label}</span><span class="s">${sub || ''}</span>`); b.onclick = fn; el.appendChild(b); return b; };
+  const n = st.doc.strokes.length;
+  const pp = st.doc.paper;
+  item('Paper', `${pp.name} · ${r2(pp.wmm)} × ${r2(pp.hmm)} mm`, () => { pop.innerHTML = ''; buildPaper(pop); });
+  const gk = { none: '', grid: 'Grid', dots: 'Dots', ruled: 'Ruled', writing: 'Writing', thirds: 'Thirds' }[st.guides.kind], sy = st.guides.sym !== 'off' ? st.guides.sym[0].toUpperCase() + st.guides.sym.slice(1) + ' symmetry' : '';
+  item('Guides', [gk, sy].filter(Boolean).join(' · ') || 'Off', () => { pop.innerHTML = ''; buildGuides(pop); });
+  el.appendChild(h('div', 'sep'));
+  item('Export stroke data', '.json', () => { closePop(); exportJSON(); });
+  item('Export centrelines', '.svg', () => { closePop(); exportSVG(); });
+  item('Export image', '.png', () => { closePop(); exportPNG(); });
+  el.appendChild(h('div', 'sep'));
+  item('Import brushes', '.brush · .brushset', () => { closePop(); $('#file').click(); });
+  let armed = false; const clr = item('Clear all layers', n ? n + ' strokes' : '', () => { if (!armed) { armed = true; clr.querySelector('.s').textContent = 'Tap again'; return; } closePop(); clearCanvas(); }, 'dz');
+  el.appendChild(h('div', 'sep'));
+  const L = st.lastStats;
+  el.appendChild(h('div', 'stat', (L ? `Last stroke · ${L.n} samples · ${L.hz} Hz · ${L.inp}<br>${L.per} samples per event · coalesced events ${L.api ? 'supported' : 'not supported'}<br>` : '') + `Paper ${pp.name} · ${r2(pp.wmm)} × ${r2(pp.hmm)} mm · ${r2(pp.ppm)} px/mm`));
+  el.appendChild(h('div', 'hint', 'Two-finger tap undo · three-finger tap redo · pinch to zoom and rotate · with Pencil, one finger pans and touch-and-hold picks a colour · lasso: draw a loop round strokes, then drag, scale, stretch or rotate.'));
+}
+
+/* =============================================================== export */
+const fmtMm = v => (v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : Math.round(v)) + ' mm';
+const r2 = v => Math.round(v * 100) / 100, r4 = v => Math.round(v * 10000) / 10000;
+const r3 = v => Math.round(v * 1000) / 1000;
+// smoothed path of a stroke in mm: [x, y, pressure, altitude, azimuth, t]
+function smoothedMm(s) {
+  const e = st.doc.params[s.k], P = e ? e.P : DEF, ppm = st.doc.paper.ppm;
+  return StrokeBuilder.smoothed(P, s.size, s.seed, s.pts, ppm).map(q => [r3(q[0] / ppm), r3(q[1] / ppm), r4(q[2]), r4(q[3]), r4(q[4]), Math.round(q[5] * 10) / 10]);
+}
+const visibleStrokes = () => { const vis = new Set(st.doc.layers.filter(l => l.visible).map(l => l.id)); const order = new Map(st.doc.layers.map((l, i) => [l.id, i])); return st.doc.strokes.filter(s => vis.has(s.layer)).sort((a, b) => order.get(a.layer) - order.get(b.layer)); };
+const layerName = id => (st.doc.layers.find(l => l.id === id) || {}).name || '';
+function strokesPayload() {
+  const S = visibleStrokes(), t0 = S.length ? S[0].wall : 0, pp = st.doc.paper;
+  return {
+    paper: { name: pp.name, width: r2(pp.wmm), height: r2(pp.hmm) },
+    units: 'mm',
+    layers: st.doc.layers.filter(l => l.visible).map(l => l.image ? { name: l.name, opacity: r2(l.opacity), image: true } : { name: l.name, opacity: r2(l.opacity) }),
+    fields: ['x', 'y', 'pressure', 'altitude', 'azimuth', 't'],
+    strokes: S.map(s => { const e = st.doc.params[s.k], b = e && Brushes.byId[e.brush];
+      return { start: s.wall - t0, layer: layerName(s.layer), tool: s.erase ? 'erase' : 'paint', input: s.inp, brush: b ? b.name : '', size: r3(s.size / pp.ppm), color: toHex(s.color), opacity: r2(s.op), blend: s.mul ? 'multiply' : 'normal', points: smoothedMm(s) }; })
+  };
+}
+function stamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; }
+let dlNS; const dlReady = (async () => { try { if (window.claude && window.claude.use) dlNS = await window.claude.use('downloads'); } catch (e) { dlNS = null; } })();
+async function deliver(blob, name) {
+  // 1) the host's download capability (inside Claude) 2) share sheet 3) plain download 4) clipboard for text
+  if (dlNS === undefined) await Promise.race([dlReady, new Promise(r => setTimeout(r, 1500))]);
+  if (dlNS) {
+    try { await dlNS.save({ filename: name, data: blob }); return; }
+    catch (e) { if (e && (e.code === 'declined' || e.code === 'rate_limited')) return; if (e && e.code === 'too_large') { toast('File too large to save here'); return; } }
+  }
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare && navigator.maxTouchPoints > 1 && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); } catch (e) {}
+  if (/json|svg/.test(blob.type)) { try { await navigator.clipboard.writeText(await blob.text()); toast('Also copied to clipboard'); } catch (e) {} }
+}
+function exportJSON() {
+  if (!visibleStrokes().length) { toast('Nothing drawn on visible layers'); return; }
+  const P = strokesPayload();
+  // one stroke per line keeps big files readable and diffable
+  const body = '{"paper":' + JSON.stringify(P.paper) + ',"units":"mm","layers":' + JSON.stringify(P.layers) + ',"fields":' + JSON.stringify(P.fields) + ',"strokes":[\n' + P.strokes.map(s => JSON.stringify(s)).join(',\n') + '\n]}\n';
+  deliver(new Blob([body], { type: 'application/json' }), `strokes-${stamp()}.json`);
+}
+function exportSVG() {
+  const S = visibleStrokes().filter(s => !s.erase); if (!S.length) { toast('Nothing drawn on visible layers'); return; }
+  const pp = st.doc.paper, W = r2(pp.wmm), H = r2(pp.hmm), esc = t => t.replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  let out = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}" fill="none" stroke-linecap="round" stroke-linejoin="round">\n`;
+  for (const l of st.doc.layers) { const mine = S.filter(s => s.layer === l.id); if (!mine.length) continue;
+    out += `<g inkscape:groupmode="layer" inkscape:label="${esc(l.name)}" id="${esc(l.name.replace(/\s+/g, '-'))}">\n`;
+    for (const s of mine) { const p = smoothedMm(s).map(q => q[0] + ',' + q[1]); if (p.length === 1) p.push(p[0]);
+      out += `<polyline${s.mul ? ' style="mix-blend-mode:multiply"' : ''} stroke="${toHex(s.color)}" stroke-width="${r3(s.size / pp.ppm)}" points="${p.join(' ')}"/>\n`; }
+    out += '</g>\n'; }
+  deliver(new Blob([out + '</svg>\n'], { type: 'image/svg+xml' }), `centrelines-${stamp()}.svg`);
+}
+function exportPNG() {
+  const w = st.doc.w, hh = st.doc.h, all = target(w, hh, false), t = target(w, hh, false);
+  compositeLayers(all, st.doc.layers);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo); gl.viewport(0, 0, w, hh); gl.useProgram(E.flat.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, all.tex); gl.uniform1i(E.flat.u.uL, 0); gl.uniform3fv(E.flat.u.uPaper, st.paper); gl.uniform1i(E.flat.u.uMode, 0);
+  gl.bindVertexArray(E.vaoQ); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null);
+  const px = new Uint8Array(w * hh * 4); gl.readPixels(0, 0, w, hh, gl.RGBA, gl.UNSIGNED_BYTE, px); freeTarget(t); freeTarget(all);
+  const c = document.createElement('canvas'); c.width = w; c.height = hh; c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer), w, hh), 0, 0);
+  c.toBlob(b => deliver(b, `drawing-${stamp()}.png`), 'image/png');
+}
+
+/* ============================================================= storage */
+const DB = {
+  db: null,
+  open() { return new Promise(res => { try { const r = indexedDB.open('stroke-canvas', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { this.db = r.result; res(); }; r.onerror = () => res(); } catch (e) { res(); } }); },
+  get(k) { return new Promise(res => { if (!this.db) return res(null); try { const q = this.db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); } catch (e) { res(null); } }); },
+  set(k, v) { return new Promise(res => { if (!this.db) return res(); try { const tx = this.db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = res; } catch (e) { res(); } }); }
+};
+const debounce = (fn, ms) => { let t; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; };
+const scheduleSave = debounce(() => {
+  const sn = snapshot();
+  DB.set('doc2', { paper: st.doc.paper, strokes: sn.strokes, layers: sn.layers, active: sn.active, params: st.doc.params });
+}, 700);
+const scheduleBrushSave = debounce(() => {
+  const tweaks = {}; for (const b of Brushes.list) tweaks[b.id] = b.p;
+  const imported = Brushes.list.filter(b => b.group === 'Imported').map(b => ({ id: b.id, name: b.name, base: b.base,
+    tip: b.origTip.canvas ? { url: b.origTip.canvas.toDataURL('image/png') } : b.origTip,
+    grain: b.origGrain ? (b.origGrain.canvas ? { url: b.origGrain.canvas.toDataURL('image/png') } : b.origGrain) : null }));
+  DB.set('brushes2', { tweaks, imported });
+}, 600);
+const scheduleUISave = debounce(() => DB.set('ui', { brushId: st.brushId, color: st.color, recent: st.recent, guides: st.guides, blend: st.blend }), 500);
+
+/* ============================================================== import */
+async function importFiles(files) {
+  let n = 0, firstId = null;
+  for (const f of files) {
+    try {
+      const found = await parseBrushArchives(await f.arrayBuffer());
+      for (const fb of found) {
+        const id = 'imp:' + slug(fb.name) + '-' + hashStr(fb.name + JSON.stringify(fb.P)).slice(0, 5);
+        addBrush({ id, name: fb.name, group: 'Imported', origTip: fb.tip, origGrain: fb.grain, base: fb.P, p: JSON.parse(JSON.stringify(fb.P)) });
+        for (const k of [...gpuTex.keys()]) if (k.startsWith('b:' + id + ':')) { gl.deleteTexture(gpuTex.get(k)); gpuTex.delete(k); }
+        firstId = firstId || id; n++;
+      }
+    } catch (e) { console.warn(e); toast(`Couldn't read ${f.name}`); }
+  }
+  if (n) { st.brushId = firstId; syncSliders(); scheduleBrushSave(); scheduleUISave(); toast(`Imported ${n} brush${n > 1 ? 'es' : ''}`); popKind = null; openPop('lib', buildLibrary); }
+  else toast('No Procreate brushes found in that file');
+}
+async function importImage(file) {
+  if (st.doc.layers.length >= MAX_LAYERS) { toast(`Up to ${MAX_LAYERS} layers`); return; }
+  try {
+    const key = 'img:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    let blob = file;
+    const e = await loadImageTex(key, blob);
+    if (e.w * e.h > 0 && (file.size > 12e6)) { // keep stored copies modest
+      const c = document.createElement('canvas'), bmp = await createImageBitmap(file), k = Math.min(1, IMG_MAX / Math.max(bmp.width, bmp.height));
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      blob = await new Promise(r => c.toBlob(r, /png|gif|webp/.test(file.type) ? 'image/png' : 'image/jpeg', .92));
+    }
+    await DB.set(key, blob);
+    const fit = Math.min(st.doc.w * .8 / e.w, st.doc.h * .8 / e.h);
+    const before = snapshot(), id = newLayerId(), ai = layerIndex(st.active);
+    const name = (file.name || 'Image').replace(/\.[a-z0-9]+$/i, '').slice(0, 40) || 'Image';
+    st.doc.layers.splice(ai + 1, 0, { id, name, visible: true, opacity: 1, image: { key, w: e.w, h: e.h, cx: st.doc.w / 2, cy: st.doc.h / 2, sx: fit, sy: fit, rot: 0 } });
+    st.active = id; rebuildLayer(id); recomposite(); commitSnap(before);
+    startImageEdit(id); toast('Place the image, then tap Done');
+  } catch (err) { console.warn(err); toast("Couldn't open that image"); }
+}
+$('#imgFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importImage(f); });
+$('#file').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; if (f.length) importFiles(f); });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { e.preventDefault(); const f = [...(e.dataTransfer.files || [])]; const im = f.filter(x => /^image\//.test(x.type)), br = f.filter(x => !/^image\//.test(x.type)); im.forEach(importImage); if (br.length) importFiles(br); });
+
+/* ================================================================ boot */
+const BUNDLED = [["Hard_Oval_Brush.brush", "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"], ["Lineart_v3.brush", "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"], ["Sketchy_Flat-liner.brush", "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"], ["Sketchy_Liner.brush", "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"], ["Sketchy_Triliner.brush", "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"], ["Painterly_Brush_v2.brush", "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"]];
+async function loadBundled() {
+  for (const [file, b64] of BUNDLED) {
+    try { const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      for (const fb of await parseBrushArchives(u8.buffer))
+        addBrush({ id: 'lib:' + slug(fb.name), name: fb.name, group: 'Library', origTip: fb.tip, origGrain: fb.grain, base: fb.P, p: JSON.parse(JSON.stringify(fb.P)) });
+    } catch (e) { console.warn('bundled', file, e); }
+  }
+}
+async function boot() {
+  if (!gl) return;
+  try { initGL(); } catch (e) { document.body.insertAdjacentHTML('beforeend', '<div class="err">Graphics init failed: ' + e.message + '</div>'); return; }
+  resize(); coreBrushes();
+  await Promise.all([DB.open(), loadBundled()]);
+  const [doc, br, ui] = await Promise.all([DB.get('doc2'), DB.get('brushes2'), DB.get('ui')]);
+  if (br) {
+    for (const ib of br.imported || []) {
+      try { const tip = ib.tip && ib.tip.url ? { canvas: await canvasFromDataURL(ib.tip.url) } : ib.tip || { proc: 'hard' };
+        const grain = ib.grain ? (ib.grain.url ? { canvas: await canvasFromDataURL(ib.grain.url) } : ib.grain) : null;
+        addBrush({ id: ib.id, name: ib.name, group: 'Imported', origTip: tip, origGrain: grain, base: ib.base, p: JSON.parse(JSON.stringify(ib.base)) }); } catch (e) { console.warn(e); }
+    }
+    for (const id in br.tweaks || {}) if (Brushes.byId[id]) Brushes.byId[id].p = Object.assign(JSON.parse(JSON.stringify(Brushes.byId[id].base)), br.tweaks[id]);
+  }
+  for (const b of Brushes.list) for (const k in DEF) { if (b.base[k] === undefined) b.base[k] = JSON.parse(JSON.stringify(DEF[k])); if (b.p[k] === undefined) b.p[k] = JSON.parse(JSON.stringify(b.base[k])); }
+  if (ui) { if (Brushes.byId[ui.brushId]) st.brushId = ui.brushId; if (ui.color) st.color = ui.color; st.recent = ui.recent || []; if (ui.guides) st.guides = Object.assign({}, GUIDE_DEF, ui.guides); if (ui.blend) st.blend = ui.blend; }
+  if (doc && doc.paper) {
+    setupDoc(doc.paper, doc.layers, doc.active); st.doc.strokes = doc.strokes || []; st.doc.params = doc.params || {};
+    for (const l of st.doc.layers) if (l.image) { try { const b = await DB.get(l.image.key); if (b) await loadImageTex(l.image.key, b); } catch (e) { console.warn(e); } }
+    const ids = new Set(st.doc.layers.map(l => l.id)); for (const s of st.doc.strokes) if (!ids.has(s.layer)) s.layer = st.doc.layers[0].id;
+    rebuildAll();
+  } else { setupDoc(innerWidth >= innerHeight ? makePaper('A4', 297, 210) : makePaper('A4', 210, 297)); recomposite(); }
+  if (!st.recent.length) st.recent = ['#1f1f21', '#f4f1ea', '#2b4c7e', '#b23a2e', '#d9a441', '#3f6b4f', '#7a5c99', '#8a8a8a'];
+  fitView(); setColor(st.color); syncBlend(); setMode('paint'); syncSliders();
+  addEventListener('resize', () => { resize(); fitView(); });
+  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); }); canvas.addEventListener('webglcontextrestored', () => location.reload());
+  requestAnimationFrame(frame);
+  window.__app = { st, Brushes, StrokeBuilder, strokesPayload, importFiles, undo, redo, rebuildAll, commitSel, setTool, setMode, selMatrix, toScreen };
+}
+boot();
+</script>
+</body>
+</html>
